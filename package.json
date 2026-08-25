@@ -1,8 +1,16 @@
 {
   "name": "home-ai",
-  "version": "1.0.0",
   "private": true,
+  "version": "0.1.0",
   "type": "module",
-  "scripts": { "start": "node src/server.js", "test": "node --test" },
-  "engines": { "node": ">=20" }
+  "scripts": {
+    "dev": "node scripts/dev-server.mjs",
+    "start": "node scripts/dev-server.mjs",
+    "build": "node scripts/build.mjs",
+    "lint": "node scripts/check.mjs",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
 }
