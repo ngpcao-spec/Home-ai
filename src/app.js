@@ -1,4 +1,6 @@
 import { createMockDiagnostic } from './diagnostic/mock-diagnostic.js';
+import { findBestTechnicians, getMatchReasons } from './technicians/matching.js';
+import { createMockTechnicianRepository, defaultMvpLocation } from './technicians/repository.js';
 
 export const serviceCategories = [
   { id: 'electricity', label: 'Điện', technician: 'Thợ điện dân dụng', icon: 'bolt', prompt: 'Tôi cần sửa điện trong nhà' },
@@ -16,6 +18,34 @@ const icons = {
 
 function icon(name) {
   return `<svg aria-hidden="true" viewBox="0 0 24 24">${icons[name]}</svg>`;
+}
+
+const formatPrice = (price) => new Intl.NumberFormat('vi-VN').format(price);
+export const createSelectionMessage = (name) => `Bạn đã chọn ${name}`;
+
+export function createTechnicianCardsMarkup(technicians) {
+  return technicians.map((technician) => {
+    const reasons = getMatchReasons(technician).map((reason) => `<li>${reason}</li>`).join('');
+    return `<article class="technician-card" data-technician-card="${technician.id}">
+      <div class="technician-heading">
+        <span class="technician-avatar" aria-hidden="true">${technician.initials}</span>
+        <div><h3>${technician.name}</h3>${technician.verified ? '<span class="verified-badge">✓ Đã xác minh</span>' : ''}</div>
+      </div>
+      <p class="technician-description">${technician.shortDescription}</p>
+      <div class="technician-facts">
+        <span><strong>⭐ ${technician.rating}</strong> (${technician.reviewCount} đánh giá)</span>
+        <span>${technician.distanceKm} km</span><span>Khoảng ${technician.estimatedArrivalMinutes} phút</span>
+        <span>Từ <strong>${formatPrice(technician.priceFrom)}đ</strong></span>
+        <span>${technician.completedJobs} việc đã hoàn thành</span>
+        <span class="availability">● ${technician.availability}</span>
+      </div>
+      <div class="match-reasons"><strong>Vì sao HOME AI đề xuất thợ này?</strong><ul>${reasons}</ul></div>
+      <div class="technician-actions">
+        <button class="profile-button" type="button" data-view-profile="${technician.id}">Xem hồ sơ</button>
+        <button class="choose-button" type="button" data-choose-technician="${technician.id}">Chọn thợ</button>
+      </div>
+    </article>`;
+  }).join('');
 }
 
 export function createHomeAiMarkup() {
@@ -36,7 +66,7 @@ export function createHomeAiMarkup() {
         </a>
         <button class="location-pill" type="button" data-location>
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
-          <span data-location-label>Hồ Chí Minh</span>
+          <span data-location-label>Nha Trang, Khánh Hòa</span>
           <svg class="chevron" aria-hidden="true" viewBox="0 0 24 24"><path d="m8 10 4 4 4-4"/></svg>
         </button>
       </header>
@@ -77,6 +107,14 @@ export function createHomeAiMarkup() {
               </div>
             </div>
           </section>
+          <section class="technician-results" data-technician-results hidden aria-live="polite">
+            <div class="technician-results-heading">
+              <div><p>THỢ PHÙ HỢP GẦN BẠN</p><h2>Đề xuất dành cho bạn</h2></div>
+              <span>Nha Trang, Khánh Hòa</span>
+            </div>
+            <div class="technician-list" data-technician-list></div>
+            <p class="selection-status" data-selection-status role="status"></p>
+          </section>
         </section>
 
         <section class="services" aria-labelledby="services-title">
@@ -102,6 +140,7 @@ export function initialiseHomePage(
   root,
   geolocation = globalThis.navigator?.geolocation,
   diagnostic = createMockDiagnostic(),
+  technicianRepository = createMockTechnicianRepository(),
 ) {
   root.innerHTML = createHomeAiMarkup();
   const input = root.querySelector('#service-request');
@@ -109,6 +148,8 @@ export function initialiseHomePage(
   const resultCard = root.querySelector('[data-diagnostic-result]');
   const form = root.querySelector('[data-request-form]');
   let selectedCategory;
+  let diagnosedCategory;
+  let selectedTechnician;
 
   root.querySelectorAll('[data-prompt]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -136,6 +177,7 @@ export function initialiseHomePage(
     try {
       const diagnosis = await diagnostic.analyse({ description, preferredCategory: selectedCategory });
       const category = serviceCategories.find(({ id }) => id === diagnosis.categoryId) ?? serviceCategories[3];
+      diagnosedCategory = category.id;
       root.querySelector('[data-result-summary]').textContent = diagnosis.summary;
       root.querySelector('[data-result-category]').textContent = category.label;
       root.querySelector('[data-result-technician]').textContent = category.technician;
@@ -154,8 +196,27 @@ export function initialiseHomePage(
     input.focus();
   });
 
-  root.querySelector('[data-find-technician]').addEventListener('click', () => {
-    status.textContent = 'HOME AI đang tìm thợ phù hợp gần bạn...';
+  root.querySelector('[data-find-technician]').addEventListener('click', async () => {
+    const results = root.querySelector('[data-technician-results]');
+    status.textContent = 'Đang tìm thợ phù hợp gần bạn...';
+    results.hidden = true;
+    const technicians = await technicianRepository.list({ location: defaultMvpLocation });
+    const matches = findBestTechnicians(technicians, diagnosedCategory);
+    root.querySelector('[data-technician-list]').innerHTML = createTechnicianCardsMarkup(matches);
+    status.textContent = '';
+    results.hidden = false;
+    results.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  });
+
+  root.querySelector('[data-technician-list]').addEventListener('click', (event) => {
+    const button = event.target.closest?.('[data-choose-technician]');
+    if (!button) return;
+    selectedTechnician = button.dataset.chooseTechnician;
+    const card = button.closest('[data-technician-card]');
+    const name = card.querySelector('h3').textContent;
+    root.querySelector('[data-selection-status]').textContent = createSelectionMessage(name);
+    root.querySelectorAll('[data-technician-card]').forEach((item) => item.classList.toggle('is-chosen', item === card));
+    void selectedTechnician;
   });
 
   root.querySelector('[data-location]').addEventListener('click', () => {
