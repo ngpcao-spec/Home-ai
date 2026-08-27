@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { createHomeAiMarkup, serviceCategories } from '../src/app.js';
+import { createBookingTechnicianMarkup, createHomeAiMarkup, getEstimatedPriceRange, serviceCategories } from '../src/app.js';
+import { mockTechnicians } from '../src/technicians/mock-technicians.js';
 
 describe('HOME AI C04 marketplace home page', () => {
   it('renders the Vietnamese service intake entry point', () => {
@@ -27,5 +28,19 @@ describe('HOME AI C04 marketplace home page', () => {
     const markup = createHomeAiMarkup();
 
     assert.doesNotMatch(markup, /assistant domestique intelligent|bases web|Node\.js|Fondations incluses/i);
+  });
+
+  it('renders the complete Vietnamese booking and confirmation flow', () => {
+    const markup = createHomeAiMarkup();
+
+    ['Địa chỉ sửa chữa', 'Sử dụng vị trí hiện tại', 'Bạn muốn thợ đến khi nào?', 'Càng sớm càng tốt', 'Đặt lịch', 'Giá dự kiến', 'Gửi yêu cầu', 'Thợ đã nhận yêu cầu!', 'Theo dõi thợ', 'Hủy yêu cầu'].forEach((text) => assert.match(markup, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))));
+  });
+
+  it('builds a local technician summary and deterministic VND estimate', () => {
+    const technician = mockTechnicians[0];
+    const markup = createBookingTechnicianMarkup(technician);
+
+    assert.deepEqual(getEstimatedPriceRange(technician.priceFrom), { from: 150000, to: 350000 });
+    ['Nguyễn Văn Minh', '⭐ 4.9', '1.2 km', '150.000đ – 350.000đ', 'Đang sẵn sàng'].forEach((text) => assert.match(markup, new RegExp(text.replace('.', '\\.'))));
   });
 });
