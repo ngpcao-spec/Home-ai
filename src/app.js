@@ -1,8 +1,10 @@
+import { createMockDiagnostic } from './diagnostic/mock-diagnostic.js';
+
 export const serviceCategories = [
-  { id: 'electricity', label: 'Điện', icon: 'bolt', prompt: 'Tôi cần sửa điện trong nhà' },
-  { id: 'plumbing', label: 'Nước', icon: 'drop', prompt: 'Tôi cần sửa đường nước' },
-  { id: 'air-conditioning', label: 'Điều hòa', icon: 'snow', prompt: 'Điều hòa nhà tôi cần kiểm tra' },
-  { id: 'appliances', label: 'Điện gia dụng', icon: 'plug', prompt: 'Tôi cần sửa thiết bị điện gia dụng' },
+  { id: 'electricity', label: 'Điện', technician: 'Thợ điện dân dụng', icon: 'bolt', prompt: 'Tôi cần sửa điện trong nhà' },
+  { id: 'plumbing', label: 'Nước', technician: 'Thợ sửa ống nước', icon: 'drop', prompt: 'Tôi cần sửa đường nước' },
+  { id: 'air-conditioning', label: 'Điều hòa', technician: 'Thợ kỹ thuật điều hòa', icon: 'snow', prompt: 'Điều hòa nhà tôi cần kiểm tra' },
+  { id: 'appliances', label: 'Điện gia dụng', technician: 'Thợ sửa điện gia dụng', icon: 'plug', prompt: 'Tôi cần sửa thiết bị điện gia dụng' },
 ];
 
 const icons = {
@@ -18,7 +20,7 @@ function icon(name) {
 
 export function createHomeAiMarkup() {
   const categories = serviceCategories.map((category) => `
-    <button class="category-card" type="button" data-prompt="${category.prompt}">
+    <button class="category-card" type="button" data-category="${category.id}" data-prompt="${category.prompt}" aria-pressed="false">
       <span class="category-icon category-icon--${category.id}">${icon(category.icon)}</span>
       <span>${category.label}</span>
     </button>`).join('');
@@ -59,6 +61,22 @@ export function createHomeAiMarkup() {
             </div>
           </form>
           <p class="form-status" data-form-status aria-live="polite"></p>
+          <section class="diagnostic-result" data-diagnostic-result hidden aria-live="polite">
+            <div class="result-check" aria-hidden="true">✓</div>
+            <div class="result-content">
+              <p class="result-eyebrow">AI đã hiểu vấn đề của bạn</p>
+              <dl>
+                <div><dt>Vấn đề:</dt><dd data-result-summary></dd></div>
+                <div><dt>Dịch vụ phù hợp:</dt><dd data-result-category></dd></div>
+                <div><dt>Thợ được đề xuất:</dt><dd data-result-technician></dd></div>
+              </dl>
+              <p class="result-note">HOME AI đề xuất tìm một chuyên gia phù hợp với vấn đề này.</p>
+              <div class="result-actions">
+                <button class="find-button" type="button" data-find-technician>Tìm thợ phù hợp</button>
+                <button class="edit-button" type="button" data-edit-description>Chỉnh sửa mô tả</button>
+              </div>
+            </div>
+          </section>
         </section>
 
         <section class="services" aria-labelledby="services-title">
@@ -80,22 +98,64 @@ export function createHomeAiMarkup() {
     </div>`;
 }
 
-export function initialiseHomePage(root, geolocation = globalThis.navigator?.geolocation) {
+export function initialiseHomePage(
+  root,
+  geolocation = globalThis.navigator?.geolocation,
+  diagnostic = createMockDiagnostic(),
+) {
   root.innerHTML = createHomeAiMarkup();
   const input = root.querySelector('#service-request');
   const status = root.querySelector('[data-form-status]');
+  const resultCard = root.querySelector('[data-diagnostic-result]');
+  const form = root.querySelector('[data-request-form]');
+  let selectedCategory;
 
   root.querySelectorAll('[data-prompt]').forEach((button) => {
     button.addEventListener('click', () => {
       input.value = button.dataset.prompt;
+      selectedCategory = button.dataset.category;
       input.focus();
-      root.querySelectorAll('[data-prompt]').forEach((item) => item.classList.toggle('is-selected', item === button));
+      root.querySelectorAll('[data-prompt]').forEach((item) => {
+        const isSelected = item === button;
+        item.classList.toggle('is-selected', isSelected);
+        item.setAttribute('aria-pressed', String(isSelected));
+      });
     });
   });
 
-  root.querySelector('[data-request-form]').addEventListener('submit', (event) => {
+  form.addEventListener('submit', async (event) => {
     event.preventDefault();
-    status.textContent = 'HOME AI đã nhận yêu cầu. Cuộc trò chuyện sẽ bắt đầu ngay!';
+    const description = input.value.trim();
+    if (!description) return;
+
+    const submitButton = form.querySelector('[type="submit"]');
+    submitButton.disabled = true;
+    resultCard.hidden = true;
+    status.textContent = 'AI đang phân tích vấn đề của bạn...';
+
+    try {
+      const diagnosis = await diagnostic.analyse({ description, preferredCategory: selectedCategory });
+      const category = serviceCategories.find(({ id }) => id === diagnosis.categoryId) ?? serviceCategories[3];
+      root.querySelector('[data-result-summary]').textContent = diagnosis.summary;
+      root.querySelector('[data-result-category]').textContent = category.label;
+      root.querySelector('[data-result-technician]').textContent = category.technician;
+      status.textContent = '';
+      resultCard.hidden = false;
+      resultCard.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+    } catch {
+      status.textContent = 'Không thể phân tích lúc này. Vui lòng thử lại.';
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
+
+  root.querySelector('[data-edit-description]').addEventListener('click', () => {
+    resultCard.hidden = true;
+    input.focus();
+  });
+
+  root.querySelector('[data-find-technician]').addEventListener('click', () => {
+    status.textContent = 'HOME AI đang tìm thợ phù hợp gần bạn...';
   });
 
   root.querySelector('[data-location]').addEventListener('click', () => {

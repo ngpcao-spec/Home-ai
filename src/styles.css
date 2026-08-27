@@ -47,8 +47,24 @@ h1 em { color: var(--green); font-style: normal; }
 .attach-button svg { width: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; }
 .start-button { display: flex; min-height: 42px; align-items: center; gap: 16px; padding: 0 12px 0 20px; border: 0; border-radius: 12px; color: white; background: var(--green); box-shadow: 0 8px 20px rgb(8 123 97 / 23%); font-size: 13px; font-weight: 750; }
 .start-button:hover { background: var(--dark-green); }
+.start-button:disabled { cursor: wait; opacity: .7; }
 .start-button svg { width: 18px; fill: none; stroke: currentColor; stroke-width: 2; }
 .form-status { min-height: 20px; margin: 11px auto 0; color: var(--green); font-size: 12px; font-weight: 650; }
+.diagnostic-result { display: flex; width: min(100%, 610px); gap: 14px; margin: 7px auto 0; padding: 20px; border: 1px solid #cfe8dc; border-radius: 20px; background: white; box-shadow: 0 15px 38px rgb(22 74 62 / 10%); text-align: left; }
+.diagnostic-result[hidden] { display: none; }
+.result-check { display: grid; width: 32px; height: 32px; flex: 0 0 auto; place-items: center; border-radius: 50%; color: white; background: var(--green); font-weight: 800; }
+.result-content { min-width: 0; flex: 1; }
+.result-eyebrow { margin: 4px 0 13px; color: #153b34; font-size: 16px; font-weight: 800; }
+.diagnostic-result dl { margin: 0; }
+.diagnostic-result dl div { margin-top: 9px; }
+.diagnostic-result dt { color: #71847f; font-size: 11px; font-weight: 650; }
+.diagnostic-result dd { margin: 2px 0 0; color: #23443d; font-size: 13px; font-weight: 750; line-height: 1.4; overflow-wrap: anywhere; }
+.result-note { margin: 15px 0; color: #687c77; font-size: 12px; line-height: 1.5; }
+.result-actions { display: flex; flex-wrap: wrap; gap: 9px; }
+.find-button, .edit-button { min-height: 40px; padding: 0 16px; border-radius: 11px; font-size: 12px; font-weight: 750; }
+.find-button { border: 0; color: white; background: var(--green); }
+.find-button:hover { background: var(--dark-green); }
+.edit-button { border: 1px solid #cdded8; color: var(--dark-green); background: white; }
 
 .services { max-width: 780px; margin: 12px auto 0; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; margin-bottom: 17px; }
