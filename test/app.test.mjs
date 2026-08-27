@@ -11,6 +11,9 @@ describe('HOME AI C04 marketplace home page', () => {
     assert.match(markup, /Bạn cần sửa gì/);
     assert.match(markup, /Bắt đầu với AI/);
     assert.match(markup, /data-location/);
+    assert.match(markup, /AI đã hiểu vấn đề của bạn/);
+    assert.match(markup, /Tìm thợ phù hợp/);
+    assert.match(markup, /Chỉnh sửa mô tả/);
   });
 
   it('renders every MVP category', () => {
