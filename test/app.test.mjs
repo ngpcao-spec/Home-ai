@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { createBookingTechnicianMarkup, createHomeAiMarkup, getEstimatedPriceRange, serviceCategories } from '../src/app.js';
+import { createBookingTechnicianMarkup, createHomeAiMarkup, createMissionMarkup, getEstimatedPriceRange, serviceCategories } from '../src/app.js';
 import { mockTechnicians } from '../src/technicians/mock-technicians.js';
 
 describe('HOME AI C04 marketplace home page', () => {
@@ -42,5 +42,12 @@ describe('HOME AI C04 marketplace home page', () => {
 
     assert.deepEqual(getEstimatedPriceRange(technician.priceFrom), { from: 150000, to: 350000 });
     ['Nguyễn Văn Minh', '⭐ 4.9', '1.2 km', '150.000đ – 350.000đ', 'Đang sẵn sàng'].forEach((text) => assert.match(markup, new RegExp(text.replace('.', '\\.'))));
+  });
+
+  it('renders the complete Vietnamese mission tracking surface', () => {
+    const markup = createMissionMarkup();
+
+    ['Hành trình của thợ', 'Đã nhận yêu cầu', 'Đang di chuyển', 'Đã đến nơi', 'Đang sửa chữa', 'Hoàn thành', 'Chuyển sang bước tiếp theo'].forEach((text) => assert.match(markup, new RegExp(text)));
+    assert.match(markup, /data-mission-stage/);
   });
 });

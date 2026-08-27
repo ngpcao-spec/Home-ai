@@ -1,6 +1,16 @@
 import { createMockDiagnostic } from './diagnostic/mock-diagnostic.js';
 import { findBestTechnicians, getMatchReasons } from './technicians/matching.js';
 import { createMockTechnicianRepository, defaultMvpLocation } from './technicians/repository.js';
+import {
+  advanceMission,
+  confirmCompletion,
+  createMissionState,
+  decideSupplement,
+  getAcceptedSupplement,
+  missionStatuses,
+  requestSupplement,
+  submitReview,
+} from './mission/tracker.js';
 
 export const serviceCategories = [
   { id: 'electricity', label: 'Điện', technician: 'Thợ điện dân dụng', icon: 'bolt', prompt: 'Tôi cần sửa điện trong nhà' },
@@ -59,6 +69,17 @@ export function createTechnicianCardsMarkup(technicians) {
       </div>
     </article>`;
   }).join('');
+}
+
+export function createMissionMarkup() {
+  return `<section class="mission-tracker" data-mission-tracker hidden aria-labelledby="mission-title">
+    <div class="mission-heading"><div><p>THEO DÕI NHIỆM VỤ</p><h2 id="mission-title">Hành trình của thợ</h2></div><span data-mission-status-badge></span></div>
+    <article class="mission-technician"><span class="technician-avatar" data-mission-initials></span><div><h3 data-mission-technician></h3><p>⭐ <span data-mission-rating></span></p></div></article>
+    <dl class="mission-facts"><div><dt>Vấn đề</dt><dd data-mission-problem></dd></div><div><dt>Địa chỉ</dt><dd data-mission-address></dd></div><div><dt>Giá tham khảo</dt><dd data-mission-price></dd></div><div><dt>Dự kiến đến</dt><dd data-mission-arrival></dd></div></dl>
+    <ol class="mission-timeline" data-mission-timeline>${missionStatuses.map((status, index) => `<li data-mission-step="${index}"><span>${index + 1}</span><strong>${status.label}</strong></li>`).join('')}</ol>
+    <div class="mission-stage" data-mission-stage aria-live="polite"></div>
+    <button class="demo-next" type="button" data-mission-next>Chuyển sang bước tiếp theo</button>
+  </section>`;
 }
 
 export function createHomeAiMarkup() {
@@ -141,6 +162,7 @@ export function createHomeAiMarkup() {
             </form>
           </section>
           <section class="booking-confirmation" data-booking-confirmation hidden aria-live="polite"><div class="confirmation-check">✓</div><p>YÊU CẦU ĐÃ ĐƯỢC XÁC NHẬN</p><h2>Thợ đã nhận yêu cầu!</h2><dl><div><dt>Thợ</dt><dd data-confirmation-technician></dd></div><div><dt>Thời gian dự kiến đến</dt><dd data-confirmation-arrival></dd></div><div><dt>Địa chỉ</dt><dd data-confirmation-address></dd></div><div><dt>Vấn đề</dt><dd data-confirmation-problem></dd></div><div><dt>Giá tham khảo</dt><dd data-confirmation-estimate></dd></div></dl><div class="confirmation-actions"><button type="button" data-track-technician>Theo dõi thợ</button><button type="button" data-cancel-request>Hủy yêu cầu</button></div><p data-confirmation-status role="status"></p></section>
+          ${createMissionMarkup()}
         </section>
 
         <section class="services" aria-labelledby="services-title">
@@ -179,6 +201,8 @@ export function initialiseHomePage(
   let selectedTechnician;
   let currentDiagnosis;
   let matchedTechnicians = [];
+  let missionState = createMissionState();
+  let repairStartedAt = '';
 
   root.querySelectorAll('[data-prompt]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -307,7 +331,51 @@ export function initialiseHomePage(
       confirmation.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
     }, 700);
   });
-  root.querySelector('[data-track-technician]').addEventListener('click', () => { root.querySelector('[data-confirmation-status]').textContent = 'Thợ đang trên đường đến địa chỉ của bạn.'; });
+  const mission = root.querySelector('[data-mission-tracker]');
+  const renderMission = () => {
+    const status = missionStatuses[missionState.statusIndex];
+    mission.querySelector('[data-mission-status-badge]').textContent = status.label;
+    mission.querySelectorAll('[data-mission-step]').forEach((step, index) => {
+      step.classList.toggle('is-active', index === missionState.statusIndex);
+      step.classList.toggle('is-done', index < missionState.statusIndex);
+    });
+    const stage = mission.querySelector('[data-mission-stage]');
+    const acceptedExtra = getAcceptedSupplement(missionState);
+    const stageMarkup = {
+      accepted: '<h3>Thợ đã nhận yêu cầu</h3><p>Thợ đang chuẩn bị dụng cụ cho nhiệm vụ.</p>',
+      travelling: '<h3>Thợ đang trên đường</h3><div class="travel-stats"><strong>Còn khoảng 18 phút</strong><span>Khoảng cách 3,2 km</span></div><div class="mock-map" role="img" aria-label="Bản đồ mô phỏng vị trí của thợ"><span>Vị trí của bạn</span><i></i><strong>Thợ</strong></div>',
+      arrived: '<h3>Thợ đã đến địa chỉ của bạn</h3><p>Hãy kiểm tra đúng thợ trước khi bắt đầu.</p><button type="button" data-start-repair>Bắt đầu sửa chữa</button>',
+      repairing: `<h3>Đang sửa chữa</h3><dl><div><dt>Giờ bắt đầu</dt><dd>${repairStartedAt || 'Vừa bắt đầu'}</dd></div><div><dt>Thời lượng dự kiến</dt><dd>45 phút</dd></div></dl>${missionState.supplement.requested ? `<div class="supplement"><strong>Thợ đề nghị chi phí bổ sung</strong><p>${formatPrice(missionState.supplement.amount)}đ · ${missionState.supplement.reason}</p>${missionState.supplement.decision === 'pending' ? '<div><button type="button" data-extra-decision="accepted">Đồng ý</button><button type="button" data-extra-decision="declined">Từ chối</button></div>' : `<p class="decision">${missionState.supplement.decision === 'accepted' ? 'Bạn đã đồng ý khoản bổ sung.' : 'Bạn đã từ chối khoản bổ sung.'}</p>`}</div>` : '<button type="button" data-request-extra>Thợ đề nghị chi phí bổ sung</button>'}`,
+      completed: missionState.completionConfirmed ? `<div class="review"><h3>Đánh giá dịch vụ</h3><p>Chọn từ 1 đến 5 sao</p><div class="stars" role="group" aria-label="Chọn số sao">${[1, 2, 3, 4, 5].map((rating) => `<button type="button" data-rating="${rating}" aria-label="${rating} sao" class="${missionState.rating >= rating ? 'is-selected' : ''}">★</button>`).join('')}</div><label>Nhận xét (không bắt buộc)<textarea data-review-comment rows="3" placeholder="Chia sẻ trải nghiệm của bạn..."></textarea></label><button type="button" data-send-review ${missionState.rating ? '' : 'disabled'}>Gửi đánh giá</button>${missionState.reviewSent ? '<p class="review-thanks">Cảm ơn bạn đã gửi đánh giá!</p>' : ''}</div>` : `<h3>Nhiệm vụ đã hoàn thành</h3><dl class="final-summary"><div><dt>Thợ</dt><dd>${selectedTechnician.name}</dd></div><div><dt>Vấn đề</dt><dd>${currentDiagnosis.summary}</dd></div><div><dt>Thời lượng</dt><dd>45 phút</dd></div><div><dt>Giá ban đầu</dt><dd>${formatPrice(selectedTechnician.priceFrom)}đ</dd></div><div><dt>Phụ phí đã đồng ý</dt><dd>${formatPrice(acceptedExtra)}đ</dd></div><div><dt>Tổng dự kiến</dt><dd>${formatPrice(selectedTechnician.priceFrom + acceptedExtra)}đ</dd></div></dl><button type="button" data-confirm-completion>Xác nhận hoàn thành</button>`,
+    };
+    stage.innerHTML = stageMarkup[status.id];
+    mission.querySelector('[data-mission-next]').hidden = status.id === 'completed' || status.id === 'arrived';
+  };
+  root.querySelector('[data-track-technician]').addEventListener('click', () => {
+    missionState = createMissionState();
+    mission.querySelector('[data-mission-initials]').textContent = selectedTechnician.initials;
+    mission.querySelector('[data-mission-technician]').textContent = selectedTechnician.name;
+    mission.querySelector('[data-mission-rating]').textContent = selectedTechnician.rating;
+    mission.querySelector('[data-mission-problem]').textContent = currentDiagnosis.summary;
+    mission.querySelector('[data-mission-address]').textContent = bookingForm.elements.address.value;
+    mission.querySelector('[data-mission-price]').textContent = bookingPanel.querySelector('[data-booking-estimate]').textContent;
+    mission.querySelector('[data-mission-arrival]').textContent = `Khoảng ${selectedTechnician.estimatedArrivalMinutes} phút`;
+    mission.hidden = false;
+    renderMission();
+    mission.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  });
+  mission.addEventListener('click', (event) => {
+    if (event.target.closest('[data-mission-next]')) missionState = advanceMission(missionState);
+    if (event.target.closest('[data-start-repair]')) { repairStartedAt = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(new Date()); missionState = advanceMission(missionState); }
+    if (event.target.closest('[data-request-extra]')) missionState = requestSupplement(missionState);
+    const decision = event.target.closest('[data-extra-decision]')?.dataset.extraDecision;
+    if (decision) missionState = decideSupplement(missionState, decision);
+    if (event.target.closest('[data-confirm-completion]')) missionState = confirmCompletion(missionState);
+    const rating = Number(event.target.closest('[data-rating]')?.dataset.rating);
+    if (rating) missionState = { ...missionState, rating };
+    if (event.target.closest('[data-send-review]')) missionState = submitReview(missionState, missionState.rating);
+    renderMission();
+  });
   root.querySelector('[data-cancel-request]').addEventListener('click', () => { root.querySelector('[data-confirmation-status]').textContent = 'Yêu cầu đã được hủy.'; });
 
   root.querySelector('[data-location]').addEventListener('click', () => {
