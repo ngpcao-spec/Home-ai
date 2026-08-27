@@ -22,6 +22,19 @@ function icon(name) {
 
 const formatPrice = (price) => new Intl.NumberFormat('vi-VN').format(price);
 export const createSelectionMessage = (name) => `Bạn đã chọn ${name}`;
+export const getEstimatedPriceRange = (priceFrom) => ({ from: priceFrom, to: priceFrom + 200000 });
+
+export function createBookingTechnicianMarkup(technician) {
+  const estimate = getEstimatedPriceRange(technician.priceFrom);
+  return `<div class="booking-technician-heading">
+    <span class="technician-avatar" aria-hidden="true">${technician.initials}</span>
+    <div><h3>${technician.name}</h3><p>⭐ ${technician.rating} · ${technician.distanceKm} km</p></div>
+  </div>
+  <dl class="booking-technician-facts">
+    <div><dt>Giá tham khảo</dt><dd>${formatPrice(estimate.from)}đ – ${formatPrice(estimate.to)}đ</dd></div>
+    <div><dt>Khả dụng</dt><dd>${technician.availability}</dd></div>
+  </dl>`;
+}
 
 export function createTechnicianCardsMarkup(technicians) {
   return technicians.map((technician) => {
@@ -115,6 +128,19 @@ export function createHomeAiMarkup() {
             <div class="technician-list" data-technician-list></div>
             <p class="selection-status" data-selection-status role="status"></p>
           </section>
+          <section class="booking-panel" data-booking-panel hidden aria-labelledby="booking-title">
+            <div class="booking-title-row"><div><p>ĐẶT LỊCH SỬA CHỮA</p><h2 id="booking-title">Xác nhận yêu cầu</h2></div><button type="button" data-close-booking aria-label="Đóng đặt lịch">×</button></div>
+            <div class="booking-technician" data-booking-technician></div>
+            <p class="diagnosed-problem"><span>Vấn đề đã chẩn đoán</span><strong data-booking-problem></strong></p>
+            <form data-booking-form>
+              <fieldset><legend>Địa chỉ sửa chữa</legend><label class="sr-only" for="repair-address">Địa chỉ sửa chữa</label><input id="repair-address" name="address" value="Nha Trang, Khánh Hòa" required /><button class="location-button" type="button" data-use-current-location>Sử dụng vị trí hiện tại</button><p class="field-help" data-location-status></p></fieldset>
+              <fieldset><legend>Bạn muốn thợ đến khi nào?</legend><div class="schedule-options"><label><input type="radio" name="schedule" value="asap" checked /> Càng sớm càng tốt</label><label><input type="radio" name="schedule" value="scheduled" /> Đặt lịch</label></div><div class="date-time-fields" data-date-time hidden><label>Ngày<input type="date" name="date" /></label><label>Giờ<input type="time" name="time" /></label></div></fieldset>
+              <div class="price-estimate"><span>Giá dự kiến</span><strong data-booking-estimate></strong><p>Giá cuối cùng sẽ được xác nhận sau khi thợ kiểm tra.</p></div>
+              <div class="booking-summary"><h3>Tóm tắt yêu cầu</h3><dl><div><dt>Vấn đề</dt><dd data-summary-problem></dd></div><div><dt>Dịch vụ</dt><dd data-summary-service></dd></div><div><dt>Thợ</dt><dd data-summary-technician></dd></div><div><dt>Địa chỉ</dt><dd data-summary-address></dd></div><div><dt>Thời gian</dt><dd data-summary-schedule></dd></div><div><dt>Ước tính</dt><dd data-summary-estimate></dd></div></dl></div>
+              <button class="submit-booking" type="submit">Gửi yêu cầu</button><p class="booking-status" data-booking-status role="status" aria-live="polite"></p>
+            </form>
+          </section>
+          <section class="booking-confirmation" data-booking-confirmation hidden aria-live="polite"><div class="confirmation-check">✓</div><p>YÊU CẦU ĐÃ ĐƯỢC XÁC NHẬN</p><h2>Thợ đã nhận yêu cầu!</h2><dl><div><dt>Thợ</dt><dd data-confirmation-technician></dd></div><div><dt>Thời gian dự kiến đến</dt><dd data-confirmation-arrival></dd></div><div><dt>Địa chỉ</dt><dd data-confirmation-address></dd></div><div><dt>Vấn đề</dt><dd data-confirmation-problem></dd></div><div><dt>Giá tham khảo</dt><dd data-confirmation-estimate></dd></div></dl><div class="confirmation-actions"><button type="button" data-track-technician>Theo dõi thợ</button><button type="button" data-cancel-request>Hủy yêu cầu</button></div><p data-confirmation-status role="status"></p></section>
         </section>
 
         <section class="services" aria-labelledby="services-title">
@@ -141,6 +167,7 @@ export function initialiseHomePage(
   geolocation = globalThis.navigator?.geolocation,
   diagnostic = createMockDiagnostic(),
   technicianRepository = createMockTechnicianRepository(),
+  scheduleTask = globalThis.setTimeout,
 ) {
   root.innerHTML = createHomeAiMarkup();
   const input = root.querySelector('#service-request');
@@ -150,6 +177,8 @@ export function initialiseHomePage(
   let selectedCategory;
   let diagnosedCategory;
   let selectedTechnician;
+  let currentDiagnosis;
+  let matchedTechnicians = [];
 
   root.querySelectorAll('[data-prompt]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -178,6 +207,7 @@ export function initialiseHomePage(
       const diagnosis = await diagnostic.analyse({ description, preferredCategory: selectedCategory });
       const category = serviceCategories.find(({ id }) => id === diagnosis.categoryId) ?? serviceCategories[3];
       diagnosedCategory = category.id;
+      currentDiagnosis = { ...diagnosis, service: category.label };
       root.querySelector('[data-result-summary]').textContent = diagnosis.summary;
       root.querySelector('[data-result-category]').textContent = category.label;
       root.querySelector('[data-result-technician]').textContent = category.technician;
@@ -201,8 +231,8 @@ export function initialiseHomePage(
     status.textContent = 'Đang tìm thợ phù hợp gần bạn...';
     results.hidden = true;
     const technicians = await technicianRepository.list({ location: defaultMvpLocation });
-    const matches = findBestTechnicians(technicians, diagnosedCategory);
-    root.querySelector('[data-technician-list]').innerHTML = createTechnicianCardsMarkup(matches);
+    matchedTechnicians = findBestTechnicians(technicians, diagnosedCategory);
+    root.querySelector('[data-technician-list]').innerHTML = createTechnicianCardsMarkup(matchedTechnicians);
     status.textContent = '';
     results.hidden = false;
     results.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
@@ -211,13 +241,74 @@ export function initialiseHomePage(
   root.querySelector('[data-technician-list]').addEventListener('click', (event) => {
     const button = event.target.closest?.('[data-choose-technician]');
     if (!button) return;
-    selectedTechnician = button.dataset.chooseTechnician;
+    selectedTechnician = matchedTechnicians.find(({ id }) => id === button.dataset.chooseTechnician);
     const card = button.closest('[data-technician-card]');
     const name = card.querySelector('h3').textContent;
     root.querySelector('[data-selection-status]').textContent = createSelectionMessage(name);
     root.querySelectorAll('[data-technician-card]').forEach((item) => item.classList.toggle('is-chosen', item === card));
-    void selectedTechnician;
+    const panel = root.querySelector('[data-booking-panel]');
+    const estimate = getEstimatedPriceRange(selectedTechnician.priceFrom);
+    const estimateLabel = `${formatPrice(estimate.from)}đ – ${formatPrice(estimate.to)}đ`;
+    panel.querySelector('[data-booking-technician]').innerHTML = createBookingTechnicianMarkup(selectedTechnician);
+    panel.querySelector('[data-booking-problem]').textContent = currentDiagnosis.summary;
+    panel.querySelector('[data-booking-estimate]').textContent = estimateLabel;
+    panel.querySelector('[data-summary-problem]').textContent = currentDiagnosis.summary;
+    panel.querySelector('[data-summary-service]').textContent = currentDiagnosis.service;
+    panel.querySelector('[data-summary-technician]').textContent = selectedTechnician.name;
+    panel.querySelector('[data-summary-estimate]').textContent = estimateLabel;
+    panel.querySelector('[data-summary-address]').textContent = panel.querySelector('[name="address"]').value;
+    panel.querySelector('[data-summary-schedule]').textContent = 'Càng sớm càng tốt';
+    panel.hidden = false;
+    root.querySelector('[data-booking-confirmation]').hidden = true;
+    panel.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   });
+
+  const bookingPanel = root.querySelector('[data-booking-panel]');
+  const bookingForm = root.querySelector('[data-booking-form]');
+  const updateSummary = () => {
+    const scheduled = bookingForm.elements.schedule.value === 'scheduled';
+    const date = bookingForm.elements.date.value;
+    const time = bookingForm.elements.time.value;
+    bookingPanel.querySelector('[data-summary-address]').textContent = bookingForm.elements.address.value || 'Chưa nhập địa chỉ';
+    bookingPanel.querySelector('[data-summary-schedule]').textContent = scheduled ? (date && time ? `${date}, ${time}` : 'Chọn ngày và giờ') : 'Càng sớm càng tốt';
+  };
+  bookingForm.addEventListener('input', updateSummary);
+  bookingForm.addEventListener('change', (event) => {
+    if (event.target.name !== 'schedule') return;
+    const scheduled = event.target.value === 'scheduled';
+    bookingPanel.querySelector('[data-date-time]').hidden = !scheduled;
+    bookingForm.elements.date.required = scheduled;
+    bookingForm.elements.time.required = scheduled;
+    updateSummary();
+  });
+  root.querySelector('[data-use-current-location]').addEventListener('click', () => {
+    bookingForm.elements.address.value = 'Vị trí hiện tại, Nha Trang, Khánh Hòa';
+    root.querySelector('[data-location-status]').textContent = 'Đã mô phỏng vị trí hiện tại.';
+    updateSummary();
+  });
+  root.querySelector('[data-close-booking]').addEventListener('click', () => { bookingPanel.hidden = true; });
+  bookingForm.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const submit = bookingForm.querySelector('[type="submit"]');
+    submit.disabled = true;
+    root.querySelector('[data-booking-status]').textContent = 'Đang gửi yêu cầu đến thợ...';
+    scheduleTask(() => {
+      const confirmation = root.querySelector('[data-booking-confirmation]');
+      const estimate = bookingPanel.querySelector('[data-booking-estimate]').textContent;
+      confirmation.querySelector('[data-confirmation-technician]').textContent = selectedTechnician.name;
+      confirmation.querySelector('[data-confirmation-arrival]').textContent = `Khoảng ${selectedTechnician.estimatedArrivalMinutes} phút`;
+      confirmation.querySelector('[data-confirmation-address]').textContent = bookingForm.elements.address.value;
+      confirmation.querySelector('[data-confirmation-problem]').textContent = currentDiagnosis.summary;
+      confirmation.querySelector('[data-confirmation-estimate]').textContent = estimate;
+      bookingPanel.hidden = true;
+      confirmation.hidden = false;
+      submit.disabled = false;
+      root.querySelector('[data-booking-status]').textContent = '';
+      confirmation.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    }, 700);
+  });
+  root.querySelector('[data-track-technician]').addEventListener('click', () => { root.querySelector('[data-confirmation-status]').textContent = 'Thợ đang trên đường đến địa chỉ của bạn.'; });
+  root.querySelector('[data-cancel-request]').addEventListener('click', () => { root.querySelector('[data-confirmation-status]').textContent = 'Yêu cầu đã được hủy.'; });
 
   root.querySelector('[data-location]').addEventListener('click', () => {
     const label = root.querySelector('[data-location-label]');
