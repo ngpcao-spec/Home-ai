@@ -1,28 +1,36 @@
-// Giao diện dữ liệu độc lập với nhà cung cấp bản đồ. Một provider thật sau này chỉ
-// cần trả về cùng cấu trúc marker; tọa độ GPS, realtime và ETA thuộc backend.
-export const mockCustomerLocation = {
+export const nhaTrangFallbackLocation = Object.freeze({
   latitude: 12.2388,
   longitude: 109.1967,
+  accuracy: null,
+  source: 'fallback',
+  updatedAt: null,
   label: 'Vị trí của bạn',
-};
+});
+
+export const mockCustomerLocation = nhaTrangFallbackLocation;
 
 const markerPositions = [
   { left: 27, top: 31 }, { left: 72, top: 25 }, { left: 67, top: 65 },
   { left: 19, top: 70 }, { left: 82, top: 47 }, { left: 39, top: 18 },
 ];
 
+// MapProvider contract: render, setClientLocation, setProviders, moveProvider,
+// setRoute, center and fitBounds. Business code never imports Google Maps.
 export function createMockMapProvider() {
   return {
     id: 'mock-local',
-    customer: mockCustomerLocation,
+    customer: { ...nhaTrangFallbackLocation },
     getMarkerPosition(technician, index) {
       const seed = [...technician.id].reduce((total, character) => total + character.charCodeAt(0), index);
       return markerPositions[seed % markerPositions.length];
     },
+    render(container, state) { container.innerHTML = createMapMarkup({ provider: this, ...state }); },
+    setClientLocation(location) { this.customer = { ...location, label: 'Vị trí của bạn' }; },
+    setProviders() {}, moveProvider() {}, setRoute() {}, center() {}, fitBounds() {},
   };
 }
 
-export function createMapMarkup({ provider = createMockMapProvider(), technicians = [], selectedId, radiusKm = 2, searching = true }) {
+export function createMapMarkup({ provider = createMockMapProvider(), technicians = [], selectedId, radiusKm = 2, searching = true, route = [] }) {
   const markers = technicians.map((technician, index) => {
     const position = provider.getMarkerPosition(technician, index);
     const selected = technician.id === selectedId;
@@ -30,12 +38,22 @@ export function createMapMarkup({ provider = createMockMapProvider(), technician
       <span>${technician.initials}</span><small>${technician.estimatedArrivalMinutes} phút</small>
     </button>`;
   }).join('');
-
+  const routeMarkup = route.length ? '<div class="mock-route" aria-hidden="true"></div>' : '';
   return `<div class="local-map" data-map-provider="${provider.id}" role="img" aria-label="Bản đồ mô phỏng thợ tại Nha Trang">
     <div class="map-block map-block--one"></div><div class="map-block map-block--two"></div><div class="map-block map-block--three"></div>
     <div class="search-radius${searching ? ' is-searching' : ''}" style="--radius:${Math.min(radiusKm, 10)}" aria-hidden="true"></div>
-    <div class="map-marker map-marker--customer"><span>⌂</span><strong>${provider.customer.label}</strong></div>
-    ${markers}
-    <div class="map-location-label">Nha Trang · Khánh Hòa</div>
+    ${routeMarkup}<div class="map-marker map-marker--customer"><span>⌂</span><strong>${provider.customer.label}</strong></div>
+    ${markers}<div class="map-location-label">Nha Trang · Khánh Hòa <small>Chế độ bản đồ demo</small></div>
   </div>`;
+}
+
+export function getMapsApiKey(config = globalThis.__HOME_AI_CONFIG__) {
+  return config?.VITE_GOOGLE_MAPS_API_KEY?.trim() || '';
+}
+
+export async function createMapProvider(options = {}) {
+  const apiKey = options.apiKey ?? getMapsApiKey(options.config);
+  if (!apiKey || typeof document === 'undefined') return createMockMapProvider();
+  const { createGoogleMapsProvider } = await import('./google-maps-provider.js');
+  return createGoogleMapsProvider({ apiKey, document: options.document ?? document });
 }

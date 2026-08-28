@@ -15,6 +15,7 @@ Copier `.env.example` dans `.env` puis charger les variables dans l'environnemen
 | `OPENAI_API_KEY` | vide | Clé requise uniquement en mode OpenAI |
 | `LLM_TIMEOUT_MS` | `10000` | Timeout réseau en millisecondes |
 | `RESPONSE_MODE` | `hybrid` | Repli déterministe en cas d'échec LLM |
+| `VITE_GOOGLE_MAPS_API_KEY` | vide | Clé navigateur Google Maps optionnelle |
 
 Le provider OpenAI emploie `POST https://api.openai.com/v1/responses`, demande un JSON
 strict au planner, extrait le texte de façon défensive et normalise les erreurs. Le planner
@@ -49,6 +50,20 @@ LLM_PROVIDER=openai LLM_MODEL=gpt-5.6 OPENAI_API_KEY='<secret>' npm start
 ```
 
 Les tests utilisent exclusivement un `fetch` stubé et n'effectuent aucun appel OpenAI réel :
+
+## Carte, géolocalisation et confidentialité
+
+Le build lit `VITE_GOOGLE_MAPS_API_KEY`. Sans cette variable, HOME AI utilise automatiquement
+la carte de démonstration et toutes les étapes restent disponibles. La clé Maps JavaScript est
+visible par nature dans le navigateur : elle doit être **restreinte aux HTTP referrers du site**
+dans Google Cloud et limitée à **Maps JavaScript API**. Ne jamais placer une clé OpenAI, une clé
+Routes serveur ou un autre secret dans une variable `VITE_*`.
+
+La géolocalisation est demandée au lancement de la recherche. Un refus, une indisponibilité ou
+un délai dépassé active le fallback Nha Trang. Les positions de démonstration périmées (plus de
+5 minutes) sont exclues du matching. Avant attribution, Google Maps décale volontairement les
+marqueurs de thợ ; après attribution, seul le thợ choisi est suivi précisément. L'utilisateur
+peut désactiver l'autorisation GPS dans les réglages du navigateur à tout moment.
 
 ```sh
 npm test
