@@ -1,7 +1,10 @@
 import { createMockDiagnostic } from './diagnostic/mock-diagnostic.js';
 import { getMatchReasons } from './technicians/matching.js';
 import { createMockTechnicianRepository, defaultMvpLocation } from './technicians/repository.js';
-import { createMapMarkup, createMockMapProvider } from './map/map-provider.js';
+import { createMapProvider } from './map/map-provider.js';
+import { getClientLocation } from './location/client-location.js';
+import { createMockRoutingProvider } from './routing/routing-provider.js';
+import { createMockProviderLocationStream } from './tracking/location-stream.js';
 import { createSearchPlan, getNextTechnician, prototypeSearchTiming } from './search/map-search.js';
 import { createNoTechnicianMarkup, createTechnicianSheetMarkup } from './search/technician-sheet.js';
 import {
@@ -192,6 +195,8 @@ export function initialiseHomePage(
   technicianRepository = createMockTechnicianRepository(),
   scheduleTask = globalThis.setTimeout,
   searchTiming = prototypeSearchTiming,
+  mapProviderFactory = createMapProvider,
+  routingProvider = createMockRoutingProvider(),
 ) {
   root.innerHTML = createHomeAiMarkup();
   const input = root.querySelector('#service-request');
@@ -204,9 +209,18 @@ export function initialiseHomePage(
   let currentDiagnosis;
   let matchedTechnicians = [];
   let currentRadiusKm = 2;
-  const mapProvider = createMockMapProvider();
+  let mapProvider;
+  let clientLocation;
+  let stopLocationStream;
+  const mapProviderReady = Promise.resolve(mapProviderFactory()).then((provider) => { mapProvider = provider; return provider; });
+  const renderMap = async (stage, state) => {
+    const provider = await mapProviderReady;
+    provider.setClientLocation(clientLocation);
+    await provider.render(stage, { ...state, clientLocation });
+  };
   let missionState = createMissionState();
   let repairStartedAt = '';
+  let trackingRoute;
 
   root.querySelectorAll('[data-prompt]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -263,6 +277,8 @@ export function initialiseHomePage(
     search.querySelector('[data-search-progress]').hidden = false;
     search.querySelector('#map-search-title').textContent = 'Đang tìm thợ gần bạn...';
     status.textContent = '';
+    clientLocation = await getClientLocation(geolocation);
+    root.querySelector('[data-location-label]').textContent = clientLocation.source === 'browser' ? 'Vị trí hiện tại' : 'Nha Trang, Khánh Hòa';
     const technicians = await technicianRepository.list({ location: defaultMvpLocation });
     const plan = createSearchPlan(technicians, diagnosedCategory);
     matchedTechnicians = plan.compatible;
@@ -272,7 +288,7 @@ export function initialiseHomePage(
     const techniciansInRadius = (radiusKm) => matchedTechnicians.filter(({ distanceKm }) => distanceKm <= radiusKm);
     const renderSearchingMap = (radiusKm, techniciansToShow, selectedId) => {
       currentRadiusKm = radiusKm;
-      stage.innerHTML = createMapMarkup({ provider: mapProvider, technicians: techniciansToShow, selectedId, radiusKm, searching: true });
+      void renderMap(stage, { technicians: techniciansToShow, selectedId, radiusKm, searching: true });
       search.querySelector('[data-search-radius]').textContent = `Bán kính ${radiusKm} km`;
     };
 
@@ -304,13 +320,13 @@ export function initialiseHomePage(
       progress.hidden = true;
       if (!plan.selected) {
         currentRadiusKm = plan.phases.at(-1)?.radiusKm ?? 5;
-        stage.innerHTML = createMapMarkup({ provider: mapProvider, radiusKm: currentRadiusKm, searching: false });
+        void renderMap(stage, { radiusKm: currentRadiusKm, searching: false });
         search.querySelector('#map-search-title').textContent = 'Không tìm thấy thợ';
         sheet.innerHTML = createNoTechnicianMarkup();
         return;
       }
       selectedTechnician = plan.selected;
-      stage.innerHTML = createMapMarkup({ provider: mapProvider, technicians: matchedTechnicians, selectedId: selectedTechnician.id, radiusKm: currentRadiusKm, searching: false });
+      void renderMap(stage, { technicians: matchedTechnicians, selectedId: selectedTechnician.id, radiusKm: currentRadiusKm, searching: false });
       search.querySelector('#map-search-title').textContent = 'Đã tìm thấy thợ phù hợp';
       sheet.innerHTML = createTechnicianSheetMarkup(selectedTechnician);
     }, searchTiming.completeMs);
@@ -339,12 +355,12 @@ export function initialiseHomePage(
     if (event.target.closest?.('[data-choose-map-technician]')) openBooking();
     if (event.target.closest?.('[data-next-technician]')) {
       selectedTechnician = getNextTechnician(matchedTechnicians, selectedTechnician.id);
-      root.querySelector('[data-map-stage]').innerHTML = createMapMarkup({ provider: mapProvider, technicians: matchedTechnicians, selectedId: selectedTechnician.id, radiusKm: currentRadiusKm, searching: false });
+      void renderMap(root.querySelector('[data-map-stage]'), { technicians: matchedTechnicians, selectedId: selectedTechnician.id, radiusKm: currentRadiusKm, searching: false });
       root.querySelector('[data-technician-sheet]').innerHTML = createTechnicianSheetMarkup(selectedTechnician);
     }
     if (event.target.closest?.('[data-map-technician]')) {
       selectedTechnician = matchedTechnicians.find(({ id }) => id === event.target.closest('[data-map-technician]').dataset.mapTechnician);
-      root.querySelector('[data-map-stage]').innerHTML = createMapMarkup({ provider: mapProvider, technicians: matchedTechnicians, selectedId: selectedTechnician.id, radiusKm: currentRadiusKm, searching: false });
+      void renderMap(root.querySelector('[data-map-stage]'), { technicians: matchedTechnicians, selectedId: selectedTechnician.id, radiusKm: currentRadiusKm, searching: false });
       root.querySelector('[data-technician-sheet]').innerHTML = createTechnicianSheetMarkup(selectedTechnician);
     }
     if (event.target.closest?.('[data-retry-search]')) root.querySelector('[data-find-technician]').click();
@@ -410,13 +426,25 @@ export function initialiseHomePage(
     const acceptedExtra = getAcceptedSupplement(missionState);
     const stageMarkup = {
       accepted: '<h3>Thợ đã nhận yêu cầu</h3><p>Thợ đang chuẩn bị dụng cụ cho nhiệm vụ.</p>',
-      travelling: '<h3>Thợ đang trên đường</h3><div class="travel-stats"><strong>Còn khoảng 18 phút</strong><span>Khoảng cách 3,2 km</span></div><div class="mock-map" role="img" aria-label="Bản đồ mô phỏng vị trí của thợ"><span>Vị trí của bạn</span><i></i><strong>Thợ</strong></div>',
+      travelling: '<h3>Thợ đang di chuyển</h3><div class="travel-stats"><strong data-tracking-eta>Đang tính ETA...</strong><span data-tracking-distance>Đang tính khoảng cách...</span></div><div class="tracking-map" data-tracking-map aria-label="Bản đồ theo dõi thợ"></div>',
       arrived: '<h3>Thợ đã đến địa chỉ của bạn</h3><p>Hãy kiểm tra đúng thợ trước khi bắt đầu.</p><button type="button" data-start-repair>Bắt đầu sửa chữa</button>',
       repairing: `<h3>Đang sửa chữa</h3><dl><div><dt>Giờ bắt đầu</dt><dd>${repairStartedAt || 'Vừa bắt đầu'}</dd></div><div><dt>Thời lượng dự kiến</dt><dd>45 phút</dd></div></dl>${missionState.supplement.requested ? `<div class="supplement"><strong>Thợ đề nghị chi phí bổ sung</strong><p>${formatPrice(missionState.supplement.amount)}đ · ${missionState.supplement.reason}</p>${missionState.supplement.decision === 'pending' ? '<div><button type="button" data-extra-decision="accepted">Đồng ý</button><button type="button" data-extra-decision="declined">Từ chối</button></div>' : `<p class="decision">${missionState.supplement.decision === 'accepted' ? 'Bạn đã đồng ý khoản bổ sung.' : 'Bạn đã từ chối khoản bổ sung.'}</p>`}</div>` : '<button type="button" data-request-extra>Thợ đề nghị chi phí bổ sung</button>'}`,
       completed: missionState.completionConfirmed ? `<div class="review"><h3>Đánh giá dịch vụ</h3><p>Chọn từ 1 đến 5 sao</p><div class="stars" role="group" aria-label="Chọn số sao">${[1, 2, 3, 4, 5].map((rating) => `<button type="button" data-rating="${rating}" aria-label="${rating} sao" class="${missionState.rating >= rating ? 'is-selected' : ''}">★</button>`).join('')}</div><label>Nhận xét (không bắt buộc)<textarea data-review-comment rows="3" placeholder="Chia sẻ trải nghiệm của bạn..."></textarea></label><button type="button" data-send-review ${missionState.rating ? '' : 'disabled'}>Gửi đánh giá</button>${missionState.reviewSent ? '<p class="review-thanks">Cảm ơn bạn đã gửi đánh giá!</p>' : ''}</div>` : `<h3>Nhiệm vụ đã hoàn thành</h3><dl class="final-summary"><div><dt>Thợ</dt><dd>${selectedTechnician.name}</dd></div><div><dt>Vấn đề</dt><dd>${currentDiagnosis.summary}</dd></div><div><dt>Thời lượng</dt><dd>45 phút</dd></div><div><dt>Giá ban đầu</dt><dd>${formatPrice(selectedTechnician.priceFrom)}đ</dd></div><div><dt>Phụ phí đã đồng ý</dt><dd>${formatPrice(acceptedExtra)}đ</dd></div><div><dt>Tổng dự kiến</dt><dd>${formatPrice(selectedTechnician.priceFrom + acceptedExtra)}đ</dd></div></dl><button type="button" data-confirm-completion>Xác nhận hoàn thành</button>`,
     };
     stage.innerHTML = stageMarkup[status.id];
     mission.querySelector('[data-mission-next]').hidden = status.id === 'completed' || status.id === 'arrived';
+  };
+  const startTrackingMap = async () => {
+    if (missionStatuses[missionState.statusIndex].id !== 'travelling') return;
+    trackingRoute ??= await routingProvider.route(selectedTechnician, clientLocation);
+    const trackingMap = mission.querySelector('[data-tracking-map]');
+    await renderMap(trackingMap, { technicians: [selectedTechnician], selectedId: selectedTechnician.id, searching: false, route: trackingRoute.points });
+    stopLocationStream?.();
+    stopLocationStream = createMockProviderLocationStream({ providerId: selectedTechnician.id, route: trackingRoute.points, durationMinutes: trackingRoute.durationMinutes }).subscribe((position) => {
+      mapProvider.moveProvider(selectedTechnician.id, position);
+      mission.querySelector('[data-tracking-eta]').textContent = position.etaMinutes ? `Còn khoảng ${position.etaMinutes} phút` : 'Thợ đã đến';
+      mission.querySelector('[data-tracking-distance]').textContent = `Còn ${position.remainingDistanceKm.toFixed(1)} km`;
+    });
   };
   root.querySelector('[data-track-technician]').addEventListener('click', () => {
     missionState = createMissionState();
@@ -442,6 +470,7 @@ export function initialiseHomePage(
     if (rating) missionState = { ...missionState, rating };
     if (event.target.closest('[data-send-review]')) missionState = submitReview(missionState, missionState.rating);
     renderMission();
+    void startTrackingMap();
   });
   root.querySelector('[data-cancel-request]').addEventListener('click', () => { root.querySelector('[data-confirmation-status]').textContent = 'Yêu cầu đã được hủy.'; });
 
