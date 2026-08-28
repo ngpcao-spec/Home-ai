@@ -2,6 +2,23 @@ import { rankTechnicians } from '../technicians/matching.js';
 
 export const searchRadiiKm = Object.freeze([2, 5, 10]);
 
+// C08 uses these delays only to make the prototype search understandable. When
+// realtime matching is connected, inject realtimeSearchTiming so backend
+// results are rendered immediately instead of retaining an artificial wait.
+export const prototypeSearchTiming = Object.freeze({
+  expandRadiusMs: 1500,
+  compareMs: 3000,
+  highlightBestMs: 3900,
+  completeMs: 4800,
+});
+
+export const realtimeSearchTiming = Object.freeze({
+  expandRadiusMs: 0,
+  compareMs: 0,
+  highlightBestMs: 0,
+  completeMs: 0,
+});
+
 export const isTechnicianAvailable = ({ availability }) =>
   availability === 'Đang sẵn sàng' || availability === 'Có thể nhận việc hôm nay';
 
