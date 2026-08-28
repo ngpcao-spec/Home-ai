@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 
 import { createHomeAiMarkup } from '../src/app.js';
 import { createMapMarkup } from '../src/map/map-provider.js';
-import { createSearchPlan, getNextTechnician } from '../src/search/map-search.js';
+import { createSearchPlan, getNextTechnician, prototypeSearchTiming, realtimeSearchTiming } from '../src/search/map-search.js';
 import { createNoTechnicianMarkup, createTechnicianSheetMarkup } from '../src/search/technician-sheet.js';
 import { mockTechnicians } from '../src/technicians/mock-technicians.js';
 
@@ -31,6 +31,12 @@ describe('C08/C09 — tìm thợ trên bản đồ', () => {
     assert.deepEqual(plan.phases.map(({ radiusKm }) => radiusKm), [2, 5]);
     assert.equal(plan.phases[0].technicians.length, 0);
     assert.equal(plan.phases[1].technicians.length, 1);
+  });
+
+  it('cadence la simulation C08 sur environ cinq secondes et permet de supprimer le délai', () => {
+    assert.deepEqual(Object.values(prototypeSearchTiming), [1500, 3000, 3900, 4800]);
+    assert.ok(prototypeSearchTiming.completeMs >= 4500 && prototypeSearchTiming.completeMs <= 5000);
+    assert.deepEqual(Object.values(realtimeSearchTiming), [0, 0, 0, 0]);
   });
 
   it('chọn người đứng đầu ranking và chuyển tuần tự sang thợ kế tiếp', () => {
