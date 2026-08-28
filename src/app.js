@@ -1,6 +1,9 @@
 import { createMockDiagnostic } from './diagnostic/mock-diagnostic.js';
-import { findBestTechnicians, getMatchReasons } from './technicians/matching.js';
+import { getMatchReasons } from './technicians/matching.js';
 import { createMockTechnicianRepository, defaultMvpLocation } from './technicians/repository.js';
+import { createMapMarkup, createMockMapProvider } from './map/map-provider.js';
+import { createSearchPlan, getNextTechnician } from './search/map-search.js';
+import { createNoTechnicianMarkup, createTechnicianSheetMarkup } from './search/technician-sheet.js';
 import {
   advanceMission,
   confirmCompletion,
@@ -141,13 +144,11 @@ export function createHomeAiMarkup() {
               </div>
             </div>
           </section>
-          <section class="technician-results" data-technician-results hidden aria-live="polite">
-            <div class="technician-results-heading">
-              <div><p>THỢ PHÙ HỢP GẦN BẠN</p><h2>Đề xuất dành cho bạn</h2></div>
-              <span>Nha Trang, Khánh Hòa</span>
-            </div>
-            <div class="technician-list" data-technician-list></div>
-            <p class="selection-status" data-selection-status role="status"></p>
+          <section class="map-search" data-map-search hidden aria-live="polite" aria-labelledby="map-search-title">
+            <div class="map-search-heading"><div><p>TÌM THỢ QUANH BẠN</p><h2 id="map-search-title">Đang tìm thợ gần bạn...</h2></div><span data-search-radius>Bán kính 2 km</span></div>
+            <div class="map-stage" data-map-stage></div>
+            <div class="search-progress" data-search-progress role="status"><span class="search-spinner" aria-hidden="true"></span><strong data-search-message>Đang tìm thợ gần bạn...</strong><small data-search-stats>Đang kiểm tra trong bán kính 2 km</small></div>
+            <div data-technician-sheet></div>
           </section>
           <section class="booking-panel" data-booking-panel hidden aria-labelledby="booking-title">
             <div class="booking-title-row"><div><p>ĐẶT LỊCH SỬA CHỮA</p><h2 id="booking-title">Xác nhận yêu cầu</h2></div><button type="button" data-close-booking aria-label="Đóng đặt lịch">×</button></div>
@@ -201,6 +202,8 @@ export function initialiseHomePage(
   let selectedTechnician;
   let currentDiagnosis;
   let matchedTechnicians = [];
+  let currentRadiusKm = 2;
+  const mapProvider = createMockMapProvider();
   let missionState = createMissionState();
   let repairStartedAt = '';
 
@@ -251,25 +254,48 @@ export function initialiseHomePage(
   });
 
   root.querySelector('[data-find-technician]').addEventListener('click', async () => {
-    const results = root.querySelector('[data-technician-results]');
-    status.textContent = 'Đang tìm thợ phù hợp gần bạn...';
-    results.hidden = true;
-    const technicians = await technicianRepository.list({ location: defaultMvpLocation });
-    matchedTechnicians = findBestTechnicians(technicians, diagnosedCategory);
-    root.querySelector('[data-technician-list]').innerHTML = createTechnicianCardsMarkup(matchedTechnicians);
+    const search = root.querySelector('[data-map-search]');
+    const stage = search.querySelector('[data-map-stage]');
+    const sheet = search.querySelector('[data-technician-sheet]');
+    search.hidden = false;
+    sheet.innerHTML = '';
+    search.querySelector('[data-search-progress]').hidden = false;
+    search.querySelector('#map-search-title').textContent = 'Đang tìm thợ gần bạn...';
     status.textContent = '';
-    results.hidden = false;
-    results.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    const technicians = await technicianRepository.list({ location: defaultMvpLocation });
+    const plan = createSearchPlan(technicians, diagnosedCategory);
+    matchedTechnicians = plan.compatible;
+    const showPhase = (index) => {
+      const phase = plan.phases[index];
+      currentRadiusKm = phase.radiusKm;
+      stage.innerHTML = createMapMarkup({ provider: mapProvider, technicians: phase.technicians, radiusKm: currentRadiusKm, searching: true });
+      search.querySelector('[data-search-radius]').textContent = `Bán kính ${currentRadiusKm} km`;
+      const expanding = index > 0;
+      search.querySelector('[data-search-message]').textContent = expanding ? 'Đang mở rộng phạm vi tìm kiếm...' : 'Đang tìm thợ gần bạn...';
+      const provisional = phase.technicians[0];
+      search.querySelector('[data-search-stats]').textContent = phase.technicians.length
+        ? `Đã tìm thấy ${phase.technicians.length} thợ phù hợp trong bán kính ${currentRadiusKm} km · ETA tốt nhất ${provisional.estimatedArrivalMinutes} phút`
+        : `Chưa tìm thấy thợ trong bán kính ${currentRadiusKm} km`;
+      if (index < plan.phases.length - 1) return scheduleTask(() => showPhase(index + 1), 650);
+      scheduleTask(() => {
+        search.querySelector('[data-search-progress]').hidden = true;
+        if (!plan.selected) {
+          stage.innerHTML = createMapMarkup({ provider: mapProvider, radiusKm: currentRadiusKm, searching: false });
+          search.querySelector('#map-search-title').textContent = 'Không tìm thấy thợ';
+          sheet.innerHTML = createNoTechnicianMarkup();
+          return;
+        }
+        selectedTechnician = plan.selected;
+        stage.innerHTML = createMapMarkup({ provider: mapProvider, technicians: matchedTechnicians, selectedId: selectedTechnician.id, radiusKm: currentRadiusKm, searching: false });
+        search.querySelector('#map-search-title').textContent = 'Đã tìm thấy thợ phù hợp';
+        sheet.innerHTML = createTechnicianSheetMarkup(selectedTechnician);
+      }, 700);
+    };
+    showPhase(0);
+    search.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   });
 
-  root.querySelector('[data-technician-list]').addEventListener('click', (event) => {
-    const button = event.target.closest?.('[data-choose-technician]');
-    if (!button) return;
-    selectedTechnician = matchedTechnicians.find(({ id }) => id === button.dataset.chooseTechnician);
-    const card = button.closest('[data-technician-card]');
-    const name = card.querySelector('h3').textContent;
-    root.querySelector('[data-selection-status]').textContent = createSelectionMessage(name);
-    root.querySelectorAll('[data-technician-card]').forEach((item) => item.classList.toggle('is-chosen', item === card));
+  const openBooking = () => {
     const panel = root.querySelector('[data-booking-panel]');
     const estimate = getEstimatedPriceRange(selectedTechnician.priceFrom);
     const estimateLabel = `${formatPrice(estimate.from)}đ – ${formatPrice(estimate.to)}đ`;
@@ -285,6 +311,25 @@ export function initialiseHomePage(
     panel.hidden = false;
     root.querySelector('[data-booking-confirmation]').hidden = true;
     panel.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  };
+
+  root.querySelector('[data-map-search]').addEventListener('click', (event) => {
+    if (event.target.closest?.('[data-choose-map-technician]')) openBooking();
+    if (event.target.closest?.('[data-next-technician]')) {
+      selectedTechnician = getNextTechnician(matchedTechnicians, selectedTechnician.id);
+      root.querySelector('[data-map-stage]').innerHTML = createMapMarkup({ provider: mapProvider, technicians: matchedTechnicians, selectedId: selectedTechnician.id, radiusKm: currentRadiusKm, searching: false });
+      root.querySelector('[data-technician-sheet]').innerHTML = createTechnicianSheetMarkup(selectedTechnician);
+    }
+    if (event.target.closest?.('[data-map-technician]')) {
+      selectedTechnician = matchedTechnicians.find(({ id }) => id === event.target.closest('[data-map-technician]').dataset.mapTechnician);
+      root.querySelector('[data-map-stage]').innerHTML = createMapMarkup({ provider: mapProvider, technicians: matchedTechnicians, selectedId: selectedTechnician.id, radiusKm: currentRadiusKm, searching: false });
+      root.querySelector('[data-technician-sheet]').innerHTML = createTechnicianSheetMarkup(selectedTechnician);
+    }
+    if (event.target.closest?.('[data-retry-search]')) root.querySelector('[data-find-technician]').click();
+    if (event.target.closest?.('[data-book-later]')) {
+      root.querySelector('[data-map-search]').hidden = true;
+      input.focus();
+    }
   });
 
   const bookingPanel = root.querySelector('[data-booking-panel]');
