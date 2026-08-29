@@ -1,3 +1,5 @@
+import { amazonLocationFailure, logAmazonLocationDiagnostic } from '../location/amazon-location-diagnostics.js';
+
 const MAPLIBRE_VERSION = '5.6.2';
 let loader;
 
@@ -27,11 +29,17 @@ export function createAmazonLocationMapProvider({ apiKey, region = 'ap-southeast
   const provider = {
     id: 'amazon-location', customer: null, style,
     async render(container, view = {}) {
-      const maplibregl = await loadMapLibre(documentObject);
-      if (!state.map || state.map.getContainer() !== container) {
-        state.map = new maplibregl.Map({ container, style, center: point(view.clientLocation ?? this.customer), zoom: 14 });
-        state.map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
-        await new Promise((resolve, reject) => { state.map.once('load', resolve); state.map.once('error', reject); });
+      try {
+        const maplibregl = await loadMapLibre(documentObject);
+        if (!state.map || state.map.getContainer() !== container) {
+          state.map = new maplibregl.Map({ container, style, center: point(view.clientLocation ?? this.customer), zoom: 14 });
+          state.map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+          await new Promise((resolve, reject) => { state.map.once('load', resolve); state.map.once('error', ({ error } = {}) => reject(error ?? new Error('MapLoadError'))); });
+          logAmazonLocationDiagnostic('map', true, { status: 200 });
+        }
+      } catch (error) {
+        logAmazonLocationDiagnostic('map', false, amazonLocationFailure(error, 'MapInitializationError'));
+        throw error;
       }
       this.setClientLocation(view.clientLocation ?? this.customer);
       this.setProviders(view.technicians ?? [], { selectedId: view.selectedId });

@@ -1,26 +1,41 @@
+import { amazonLocationFailure, logAmazonLocationDiagnostic } from '../location/amazon-location-diagnostics.js';
+
 const toRad = (value) => value * Math.PI / 180;
 export function straightLineDistanceKm(a, b) { const dLat = toRad(b.latitude - a.latitude); const dLng = toRad(b.longitude - a.longitude); const value = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.latitude)) * Math.cos(toRad(b.latitude)) * Math.sin(dLng / 2) ** 2; return 6371 * 2 * Math.atan2(Math.sqrt(value), Math.sqrt(1 - value)); }
 const position = ({ longitude, latitude }) => [longitude, latitude];
 
 export function mapRouteMatrixResponse(response, technicians) {
-  const routes = response.RouteMatrix?.[0] ?? response.routeMatrix?.[0] ?? [];
+  const matrix = response.RouteMatrix ?? response.routeMatrix ?? [];
   return technicians.map((technician, index) => {
-    const result = routes[index];
+    // The service returns one row per Origin and one column per Destination.
+    const result = matrix[index]?.[0];
     if (!result || result.Status && result.Status !== 'Ok') return { ...technician, routeError: true };
     return { ...technician, distanceKm: result.Distance, estimatedArrivalMinutes: Math.ceil(result.Duration / 60), routeDistanceKm: result.Distance, routeDurationSeconds: result.Duration };
   });
 }
 
 export function createAmazonRouteService({ apiKey, region = 'ap-southeast-1', fetch: fetchObject = globalThis.fetch, travelMode = 'Car' }) {
-  const request = async (path, body) => {
+  const request = async (operation, path, body) => {
     const response = await fetchObject(`https://routes.geo.${region}.amazonaws.com/v2/${path}?key=${encodeURIComponent(apiKey)}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-    if (!response.ok) throw new Error(`Amazon Location request failed (${response.status})`);
-    return response.json();
+    if (!response.ok) {
+      let awsErrorCode = response.headers?.get?.('x-amzn-errortype')?.split(':')[0];
+      if (!awsErrorCode) {
+        try { awsErrorCode = (await response.clone().json()).code; } catch { /* Non-JSON AWS/proxy response. */ }
+      }
+      const error = new Error(`Amazon Location ${operation} request failed (${response.status})`);
+      error.status = response.status;
+      error.awsErrorCode = awsErrorCode || 'HttpError';
+      logAmazonLocationDiagnostic('routing', false, amazonLocationFailure(error));
+      throw error;
+    }
+    const data = await response.json();
+    logAmazonLocationDiagnostic('routing', true, { status: response.status });
+    return data;
   };
   return {
     id: 'amazon-location-routes', travelMode,
-    async matrix(technicians, client) { return mapRouteMatrixResponse(await request('route-matrix', { Origins: technicians.map((item) => ({ Position: position(item) })), Destinations: [{ Position: position(client) }], TravelMode: travelMode }), technicians); },
-    async route(origin, destination) { const data = await request('routes', { Origin: position(origin), Destination: position(destination), TravelMode: travelMode }); const points = data.Legs?.flatMap((leg) => leg.Geometry?.LineString ?? []).map(([longitude, latitude]) => ({ longitude, latitude })) ?? []; return { distanceKm: data.Summary?.Distance, durationMinutes: Math.ceil(data.Summary?.Duration / 60), points, source: 'amazon-location' }; },
+    async matrix(technicians, client) { return mapRouteMatrixResponse(await request('CalculateRouteMatrix', 'route-matrix', { Origins: technicians.map((item) => ({ Position: position(item) })), Destinations: [{ Position: position(client) }], TravelMode: travelMode }), technicians); },
+    async route(origin, destination) { const data = await request('CalculateRoutes', 'routes', { Origin: position(origin), Destination: position(destination), TravelMode: travelMode }); const points = data.Legs?.flatMap((leg) => leg.Geometry?.LineString ?? []).map(([longitude, latitude]) => ({ longitude, latitude })) ?? []; return { distanceKm: data.Summary?.Distance, durationMinutes: Math.ceil(data.Summary?.Duration / 60), points, source: 'amazon-location' }; },
   };
 }
 
