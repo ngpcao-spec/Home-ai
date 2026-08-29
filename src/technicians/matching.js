@@ -9,7 +9,7 @@ export function isLocationFresh(technician, now = Date.now(), maxAgeMs = DEFAULT
 
 export function isEligibleTechnician(technician, categoryId, { now = Date.now(), maxLocationAgeMs = DEFAULT_LOCATION_MAX_AGE_MS } = {}) {
   return technician.category === categoryId
-    && technician.verified !== false
+    && (technician.kycVerified ?? technician.verified) === true
     && technician.online !== false
     && technician.available !== false
     && (technician.serviceRadiusKm == null || technician.distanceKm <= technician.serviceRadiusKm)
@@ -22,6 +22,7 @@ export function rankTechnicians(technicians, categoryId, options) {
     (a.estimatedArrivalMinutes ?? Infinity) - (b.estimatedArrivalMinutes ?? Infinity)
     || a.distanceKm - b.distanceKm
     || b.rating - a.rating
+    || (b.reliabilityScore ?? 0) - (a.reliabilityScore ?? 0)
     || b.completedJobs - a.completedJobs
     || Number(isImmediatelyAvailable(b)) - Number(isImmediatelyAvailable(a))
     || a.id.localeCompare(b.id));

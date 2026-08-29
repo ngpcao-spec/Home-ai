@@ -15,7 +15,7 @@ Copier `.env.example` dans `.env` puis charger les variables dans l'environnemen
 | `OPENAI_API_KEY` | vide | Clé requise uniquement en mode OpenAI |
 | `LLM_TIMEOUT_MS` | `10000` | Timeout réseau en millisecondes |
 | `RESPONSE_MODE` | `hybrid` | Repli déterministe en cas d'échec LLM |
-| `VITE_GOOGLE_MAPS_API_KEY` | vide | Clé navigateur Google Maps optionnelle |
+| `AMAZON_LOCATION_API_KEY` | vide | Clé navigateur Amazon Location, restreinte par referrer |
 
 Le provider OpenAI emploie `POST https://api.openai.com/v1/responses`, demande un JSON
 strict au planner, extrait le texte de façon défensive et normalise les erreurs. Le planner
@@ -51,22 +51,36 @@ LLM_PROVIDER=openai LLM_MODEL=gpt-5.6 OPENAI_API_KEY='<secret>' npm start
 
 Les tests utilisent exclusivement un `fetch` stubé et n'effectuent aucun appel OpenAI réel :
 
-## Carte, géolocalisation et confidentialité
+## Amazon Location Service, géolocalisation et confidentialité
 
-Le build lit `VITE_GOOGLE_MAPS_API_KEY`. Sans cette variable, HOME AI utilise automatiquement
-la carte de démonstration et toutes les étapes restent disponibles. La clé Maps JavaScript est
-visible par nature dans le navigateur : elle doit être **restreinte aux HTTP referrers du site**
-dans Google Cloud et limitée à **Maps JavaScript API**. Ne jamais placer une clé OpenAI, une clé
-Routes serveur ou un autre secret dans une variable `VITE_*`.
+L'écran dispatch utilise **MapLibre GL JS**, le style Amazon Location Standard v2 et les API
+Amazon Location Routes v2 dans `ap-southeast-1`. La matrice fournit distance routière et ETA
+pour le classement déterministe; `CalculateRoutes` fournit ensuite la géométrie affichée.
+Le mode de transport est injectable (`Car` actuellement) afin d'ajouter `Scooter` ultérieurement.
+
+GitHub Pages injecte `AMAZON_LOCATION_API_KEY` depuis le secret GitHub du même nom dans
+`dist/src/runtime-config.js`. `dist/` est ignoré : aucune valeur réelle ne doit entrer dans Git.
+La clé navigateur reste visible aux visiteurs et doit donc rester restreinte au referrer
+`https://ngpcao-spec.github.io/Home-ai/*` et aux seules actions Amazon Location nécessaires.
+**Ne jamais commiter, afficher ou journaliser une clé API.** Sans clé, l'interface affiche un
+message de configuration plutôt qu'un faux fond de carte.
+
+Pour le développement local, copiez `.env.example` vers `.env`, laissez la valeur vide pour
+tester l'erreur conviviale, ou injectez temporairement la clé restreinte dans le shell :
+`AMAZON_LOCATION_API_KEY='<placeholder-ou-clé-locale>' npm run build`. Le fichier généré reste
+dans `dist/`, qui n'est jamais commité. Tous les chemins HTML sont relatifs et restent compatibles
+avec le préfixe GitHub Pages `/Home-ai/`.
 
 La géolocalisation est demandée au lancement de la recherche. Un refus, une indisponibilité ou
-un délai dépassé active le fallback Nha Trang. Les positions de démonstration périmées (plus de
-5 minutes) sont exclues du matching. Avant attribution, Google Maps décale volontairement les
-marqueurs de thợ ; après attribution, seul le thợ choisi est suivi précisément. L'utilisateur
-peut désactiver l'autorisation GPS dans les réglages du navigateur à tout moment.
+un délai dépassé active le fallback Nha Trang et l'interface l'indique explicitement. Les
+positions de démonstration périmées (plus de 5 minutes) sont exclues du matching. Après
+attribution, le flux de suivi simulé met à jour le marqueur MapLibre par une interface injectable,
+prête à recevoir ultérieurement les positions GPS du backend.
 
 ```sh
 npm test
+```
+
 Home-ai est une base d'application web moderne, prête à évoluer vers une interface d'assistant domestique intelligent.
 
 ## Stack initiale

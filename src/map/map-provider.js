@@ -47,13 +47,20 @@ export function createMapMarkup({ provider = createMockMapProvider(), technician
   </div>`;
 }
 
-export function getMapsApiKey(config = globalThis.__HOME_AI_CONFIG__) {
-  return config?.VITE_GOOGLE_MAPS_API_KEY?.trim() || '';
+export function getAmazonLocationApiKey(config = globalThis.__HOME_AI_CONFIG__) {
+  return config?.AMAZON_LOCATION_API_KEY?.trim() || '';
 }
 
+export const getMapsApiKey = getAmazonLocationApiKey;
+
 export async function createMapProvider(options = {}) {
-  const apiKey = options.apiKey ?? getMapsApiKey(options.config);
-  if (!apiKey || typeof document === 'undefined') return createMockMapProvider();
-  const { createGoogleMapsProvider } = await import('./google-maps-provider.js');
-  return createGoogleMapsProvider({ apiKey, document: options.document ?? document });
+  const apiKey = options.apiKey ?? getAmazonLocationApiKey(options.config);
+  if (!apiKey && typeof document !== 'undefined') return {
+    id: 'amazon-location-unconfigured',
+    setClientLocation() {}, setProviders() {}, moveProvider() {}, setRoute() {}, center() {}, fitBounds() {},
+    render(container) { container.innerHTML = '<div class="map-error" role="alert"><strong>Chưa cấu hình bản đồ</strong><span>Thiếu Amazon Location API key. Vui lòng liên hệ quản trị viên hoặc thử lại sau.</span></div>'; },
+  };
+  if (!apiKey) return createMockMapProvider();
+  const { createAmazonLocationMapProvider } = await import('./amazon-location-map-provider.js');
+  return createAmazonLocationMapProvider({ apiKey, region: options.region, document: options.document ?? document });
 }
