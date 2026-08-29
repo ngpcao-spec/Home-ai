@@ -35,6 +35,8 @@ jobs:
 
       - name: Build static site
         run: npm run build
+        env:
+          AMAZON_LOCATION_API_KEY: ${{ secrets.AMAZON_LOCATION_API_KEY }}
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

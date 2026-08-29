@@ -8,8 +8,8 @@ import { createMockRoutingProvider } from '../src/routing/routing-provider.js';
 import { createMockProviderLocationStream } from '../src/tracking/location-stream.js';
 
 describe('architecture cartographique V1.2', () => {
-  it('sélectionne Google par configuration et Mock sans clé', async () => {
-    assert.equal(getMapsApiKey({ VITE_GOOGLE_MAPS_API_KEY: ' public-key ' }), 'public-key');
+  it('sélectionne Amazon Location par configuration et Mock sans clé côté tests', async () => {
+    assert.equal(getMapsApiKey({ AMAZON_LOCATION_API_KEY: ' public-key ' }), 'public-key');
     assert.equal((await createMapProvider({ config: {} })).id, 'mock-local');
     assert.equal(createMockMapProvider().id, 'mock-local');
   });
