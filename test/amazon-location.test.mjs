@@ -10,7 +10,7 @@ const technicians = [
 
 describe('Amazon Location v2 dispatch', () => {
   it('mappe la matrice réelle sans inventer les valeurs', () => {
-    const mapped = mapRouteMatrixResponse({ RouteMatrix: [[{ Status: 'Ok', Distance: 3.25, Duration: 721 }], [{ Status: 'NoRoute' }]] }, technicians);
+    const mapped = mapRouteMatrixResponse({ RouteMatrix: [[{ Distance: 3250, Duration: 721 }], [{ Error: 'NoRoute' }]] }, technicians);
     assert.equal(mapped[0].distanceKm, 3.25);
     assert.equal(mapped[0].estimatedArrivalMinutes, 13);
     assert.equal(mapped[1].routeError, true);

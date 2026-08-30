@@ -9,8 +9,9 @@ export function mapRouteMatrixResponse(response, technicians) {
   return technicians.map((technician, index) => {
     // The service returns one row per Origin and one column per Destination.
     const result = matrix[index]?.[0];
-    if (!result || result.Status && result.Status !== 'Ok') return { ...technician, routeError: true };
-    return { ...technician, distanceKm: result.Distance, estimatedArrivalMinutes: Math.ceil(result.Duration / 60), routeDistanceKm: result.Distance, routeDurationSeconds: result.Duration };
+    if (!result || result.Error || result.Status && result.Status !== 'Ok') return { ...technician, routeError: true };
+    const distanceKm = result.Distance / 1000;
+    return { ...technician, distanceKm, estimatedArrivalMinutes: Math.ceil(result.Duration / 60), routeDistanceKm: distanceKm, routeDurationSeconds: result.Duration };
   });
 }
 
