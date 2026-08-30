@@ -23,7 +23,7 @@ describe('ghép thợ cục bộ', () => {
   });
 
   it('loại thợ chưa xác minh rồi ưu tiên ETA/khoảng cách và đánh giá', () => {
-    const base = { category: 'electricity', reviewCount: 1, estimatedArrivalMinutes: 1, completedJobs: 1, priceFrom: 1, location: '', shortDescription: '', initials: 'T' };
+    const base = { category: 'electricity', online: true, available: true, reviewCount: 1, estimatedArrivalMinutes: 1, completedJobs: 1, priceFrom: 1, location: '', shortDescription: '', initials: 'T' };
     const data = [
       { ...base, id: 'unverified', verified: false, availability: 'Đang sẵn sàng', distanceKm: 0.1, rating: 5 },
       { ...base, id: 'later', verified: true, availability: 'Có thể nhận việc hôm nay', distanceKm: 0.2, rating: 5 },

@@ -33,16 +33,22 @@ describe('Amazon Location v2 dispatch', () => {
       return { ok: true, status: 200, json: async () => calls.length === 1 ? { RouteMatrix: [[{ Status: 'Ok', Distance: 1, Duration: 60 }], [{ Status: 'Ok', Distance: 2, Duration: 120 }]] } : { Legs: [], Summary: { Distance: 1, Duration: 60 } } };
     } });
     await service.matrix(technicians.map((item, index) => ({ ...item, longitude: 109.1 + index, latitude: 12.2 + index })), { longitude: 109.1967, latitude: 12.2388 });
-    await service.route({ longitude: 109.1, latitude: 12.2 }, { longitude: 109.1967, latitude: 12.2388 });
+    const route = await service.route({ longitude: 109.1, latitude: 12.2 }, { longitude: 109.1967, latitude: 12.2388 });
     assert.equal(new URL(calls[0].url).pathname, '/v2/route-matrix');
     assert.deepEqual(calls[0].body.Origins[0].Position, [109.1, 12.2]);
     assert.deepEqual(calls[0].body.Destinations[0].Position, [109.1967, 12.2388]);
     assert.equal(new URL(calls[1].url).pathname, '/v2/routes');
+    assert.equal(route.distanceKm, 0.001);
   });
 
   it('retourne un échec de routage au lieu d’un faux ETA', async () => {
     const service = createAmazonRouteService({ apiKey: 'placeholder', fetch: async () => ({ ok: false, status: 503 }) });
     await assert.rejects(service.matrix(technicians, { longitude: 109.1967, latitude: 12.2388 }), /503/);
+  });
+
+  it('interrompt proprement une requête RouteMatrix trop longue', async () => {
+    const service = createAmazonRouteService({ apiKey: 'placeholder', timeoutMs: 1, fetch: (_url, { signal }) => new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(Object.assign(new Error(), { name: 'AbortError' })))) });
+    await assert.rejects(service.matrix(technicians, { longitude: 109.1967, latitude: 12.2388 }), /timed out/);
   });
 
   it('utilise un adaptateur sans réseau lorsque la clé manque', () => {

@@ -7,13 +7,22 @@ export function isLocationFresh(technician, now = Date.now(), maxAgeMs = DEFAULT
   return Number.isFinite(timestamp) && now - timestamp <= maxAgeMs;
 }
 
-export function isEligibleTechnician(technician, categoryId, { now = Date.now(), maxLocationAgeMs = DEFAULT_LOCATION_MAX_AGE_MS } = {}) {
+export function isRouteMatrixCandidate(technician, categoryId, { now = Date.now(), maxLocationAgeMs = DEFAULT_LOCATION_MAX_AGE_MS } = {}) {
   return technician.category === categoryId
     && (technician.kycVerified ?? technician.verified) === true
-    && technician.online !== false
-    && technician.available !== false
-    && (technician.serviceRadiusKm == null || technician.distanceKm <= technician.serviceRadiusKm)
+    && technician.online === true
+    && technician.available === true
     && isLocationFresh(technician, now, maxLocationAgeMs);
+}
+
+export function getRouteMatrixCandidates(technicians, categoryId, options) {
+  return technicians.filter((technician) => isRouteMatrixCandidate(technician, categoryId, options));
+}
+
+export function isEligibleTechnician(technician, categoryId, options) {
+  return isRouteMatrixCandidate(technician, categoryId, options)
+    && Number.isFinite(technician.distanceKm)
+    && (technician.serviceRadiusKm == null || technician.distanceKm <= technician.serviceRadiusKm);
 }
 
 // Deterministic only: filtering and ranking never involve the diagnostic LLM.

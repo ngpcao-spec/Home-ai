@@ -1,11 +1,11 @@
 import { createMockDiagnostic } from './diagnostic/mock-diagnostic.js';
-import { getMatchReasons } from './technicians/matching.js';
+import { getMatchReasons, getRouteMatrixCandidates } from './technicians/matching.js';
 import { createMockTechnicianRepository, defaultMvpLocation } from './technicians/repository.js';
 import { createMapProvider } from './map/map-provider.js';
 import { getClientLocation } from './location/client-location.js';
 import { createRouteService } from './routing/routing-provider.js';
 import { createMockProviderLocationStream } from './tracking/location-stream.js';
-import { createSearchPlan, getNextTechnician, prototypeSearchTiming } from './search/map-search.js';
+import { createSearchPlan, getNextTechnician, prototypeSearchTiming, searchRadiiKm } from './search/map-search.js';
 import { createNoTechnicianMarkup, createTechnicianSheetMarkup } from './search/technician-sheet.js';
 import {
   advanceMission,
@@ -212,6 +212,7 @@ export function initialiseHomePage(
   let mapProvider;
   let clientLocation;
   let stopLocationStream;
+  let searchGeneration = 0;
   const mapProviderReady = Promise.resolve(mapProviderFactory()).then((provider) => { mapProvider = provider; return provider; });
   const renderMap = async (stage, state) => {
     const provider = await mapProviderReady;
@@ -269,6 +270,8 @@ export function initialiseHomePage(
   });
 
   root.querySelector('[data-find-technician]').addEventListener('click', async () => {
+    const generation = ++searchGeneration;
+    const scheduleSearchTask = (task, delay) => scheduleTask(() => { if (generation === searchGeneration) task(); }, delay);
     const search = root.querySelector('[data-map-search]');
     const stage = search.querySelector('[data-map-stage]');
     const sheet = search.querySelector('[data-technician-sheet]');
@@ -280,14 +283,15 @@ export function initialiseHomePage(
     clientLocation = await getClientLocation(geolocation);
     root.querySelector('[data-location-label]').textContent = clientLocation.source === 'browser' ? 'Vị trí hiện tại' : 'Đang dùng vị trí mặc định · Nha Trang';
     const technicians = await technicianRepository.list({ location: defaultMvpLocation });
+    const routingCandidates = getRouteMatrixCandidates(technicians, diagnosedCategory);
     try {
-      await renderMap(stage, { technicians: [], radiusKm: 2, searching: true });
+      await renderMap(stage, { technicians: routingCandidates, radiusKm: 2, searching: true });
     } catch {
       stage.innerHTML = '<div class="map-error" role="alert"><strong>Không thể tải bản đồ Amazon Location</strong><span>Kiểm tra trạng thái HTTP và mã lỗi AWS trong console trình duyệt.</span></div>';
     }
     let routedTechnicians;
     try {
-      routedTechnicians = await routingProvider.matrix(technicians, clientLocation);
+      routedTechnicians = routingCandidates.length ? await routingProvider.matrix(routingCandidates, clientLocation) : [];
     } catch {
       search.querySelector('[data-search-progress]').hidden = true;
       search.querySelector('#map-search-title').textContent = 'Không thể tính tuyến đường';
@@ -300,37 +304,39 @@ export function initialiseHomePage(
     const message = search.querySelector('[data-search-message]');
     const stats = search.querySelector('[data-search-stats]');
     const techniciansInRadius = (radiusKm) => matchedTechnicians.filter(({ distanceKm }) => distanceKm <= radiusKm);
-    const expandedRadiusKm = plan.phases.at(-1)?.radiusKm ?? 10;
     const renderSearchingMap = (radiusKm, techniciansToShow, selectedId) => {
       currentRadiusKm = radiusKm;
       void renderMap(stage, { technicians: techniciansToShow, selectedId, radiusKm, searching: true });
       search.querySelector('[data-search-radius]').textContent = `Bán kính ${radiusKm} km`;
     };
 
-    renderSearchingMap(2, techniciansInRadius(2));
+    const renderPhase = ({ radiusKm, technicians: visibleTechnicians }) => {
+      renderSearchingMap(radiusKm, visibleTechnicians);
+      message.textContent = radiusKm === 2 ? 'Đang tìm thợ gần bạn...' : 'Đang mở rộng phạm vi tìm kiếm...';
+      stats.textContent = `Đã tìm thấy ${visibleTechnicians.length} thợ phù hợp trong bán kính ${radiusKm} km`;
+    };
+
+    renderPhase(plan.phases[0] ?? { radiusKm: 2, technicians: [] });
     message.textContent = 'Đang tìm thợ gần bạn...';
     stats.textContent = 'Đang kiểm tra trong bán kính 2 km';
 
-    scheduleTask(() => {
-      const visibleTechnicians = techniciansInRadius(expandedRadiusKm);
-      renderSearchingMap(expandedRadiusKm, visibleTechnicians);
-      message.textContent = 'Đang mở rộng phạm vi tìm kiếm...';
-      stats.textContent = `Đã tìm thấy ${visibleTechnicians.length} thợ phù hợp trong bán kính ${expandedRadiusKm} km`;
-    }, searchTiming.expandRadiusMs);
+    if (plan.phases[1]) scheduleSearchTask(() => renderPhase(plan.phases[1]), searchTiming.expandTo5KmMs);
+    if (plan.phases[2]) scheduleSearchTask(() => renderPhase(plan.phases[2]), searchTiming.expandTo10KmMs);
 
-    scheduleTask(() => {
-      const visibleTechnicians = techniciansInRadius(expandedRadiusKm);
-      renderSearchingMap(expandedRadiusKm, visibleTechnicians);
+    scheduleSearchTask(() => {
+      const finalPhase = plan.phases.at(-1) ?? { radiusKm: 10, technicians: [] };
+      renderSearchingMap(finalPhase.radiusKm, finalPhase.technicians);
       message.textContent = 'HOME AI đang chọn thợ phù hợp nhất...';
-      stats.textContent = `${visibleTechnicians.length} thợ phù hợp đang được so sánh`;
+      stats.textContent = `${finalPhase.technicians.length} thợ phù hợp đang được so sánh`;
       progress.classList.add('is-comparing');
     }, searchTiming.compareMs);
 
-    scheduleTask(() => {
-      renderSearchingMap(expandedRadiusKm, techniciansInRadius(expandedRadiusKm), plan.selected?.id);
+    scheduleSearchTask(() => {
+      const finalRadiusKm = plan.phases.at(-1)?.radiusKm ?? 10;
+      renderSearchingMap(finalRadiusKm, techniciansInRadius(finalRadiusKm), plan.selected?.id);
     }, searchTiming.highlightBestMs);
 
-    scheduleTask(() => {
+    scheduleSearchTask(() => {
       progress.classList.remove('is-comparing');
       progress.hidden = true;
       if (!plan.selected) {
@@ -341,7 +347,7 @@ export function initialiseHomePage(
         return;
       }
       selectedTechnician = plan.selected;
-      void renderMap(stage, { technicians: matchedTechnicians, selectedId: selectedTechnician.id, radiusKm: currentRadiusKm, searching: false });
+      void renderMap(stage, { technicians: techniciansInRadius(currentRadiusKm), selectedId: selectedTechnician.id, radiusKm: currentRadiusKm, searching: false });
       search.querySelector('#map-search-title').textContent = 'Đã tìm thấy thợ phù hợp';
       sheet.innerHTML = createTechnicianSheetMarkup(selectedTechnician);
     }, searchTiming.completeMs);
@@ -379,7 +385,10 @@ export function initialiseHomePage(
     if (event.target.closest?.('[data-choose-map-technician]')) void openBooking();
     if (event.target.closest?.('[data-next-technician]')) {
       selectedTechnician = getNextTechnician(matchedTechnicians, selectedTechnician.id);
-      void renderMap(root.querySelector('[data-map-stage]'), { technicians: matchedTechnicians, selectedId: selectedTechnician.id, radiusKm: currentRadiusKm, searching: false });
+      currentRadiusKm = searchRadiiKm.find((radiusKm) => selectedTechnician.distanceKm <= radiusKm) ?? searchRadiiKm.at(-1);
+      const visibleTechnicians = matchedTechnicians.filter(({ distanceKm }) => distanceKm <= currentRadiusKm);
+      root.querySelector('[data-search-radius]').textContent = `Bán kính ${currentRadiusKm} km`;
+      void renderMap(root.querySelector('[data-map-stage]'), { technicians: visibleTechnicians, selectedId: selectedTechnician.id, radiusKm: currentRadiusKm, searching: false });
       root.querySelector('[data-technician-sheet]').innerHTML = createTechnicianSheetMarkup(selectedTechnician);
     }
     if (event.target.closest?.('[data-map-technician]')) {

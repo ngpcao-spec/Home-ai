@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createMapProvider, createMockMapProvider, getMapsApiKey, nhaTrangFallbackLocation } from '../src/map/map-provider.js';
 import { getClientLocation } from '../src/location/client-location.js';
-import { isLocationFresh, rankTechnicians } from '../src/technicians/matching.js';
+import { getRouteMatrixCandidates, isLocationFresh, rankTechnicians } from '../src/technicians/matching.js';
 import { mockTechnicians } from '../src/technicians/mock-technicians.js';
 import { createMockRoutingProvider } from '../src/routing/routing-provider.js';
 import { createMockProviderLocationStream } from '../src/tracking/location-stream.js';
@@ -24,6 +24,11 @@ describe('architecture cartographique V1.2', () => {
     assert.equal(isLocationFresh({ ...base, lastLocationAt: new Date(now - 301000).toISOString() }, now), false);
     const candidates = [base, { ...base, id: 'offline', online: false }, { ...base, id: 'busy', available: false }, { ...base, id: 'old', lastLocationAt: new Date(now - 301000).toISOString() }];
     assert.deepEqual(rankTechnicians(candidates, 'electricity', { now }).map(({ id }) => id), [base.id]);
+  });
+  it('n’envoie à RouteMatrix que les prestataires compatibles et actifs', () => {
+    const base = mockTechnicians[0];
+    const candidates = [base, { ...base, id: 'wrong-service', category: 'plumbing' }, { ...base, id: 'unverified', verified: false }, { ...base, id: 'offline', online: false }, { ...base, id: 'busy', available: false }];
+    assert.deepEqual(getRouteMatrixCandidates(candidates, 'electricity').map(({ id }) => id), [base.id]);
   });
   it('simule une route fluide avec ETA et distance décroissantes', async () => {
     const route = await createMockRoutingProvider().route(mockTechnicians[0], nhaTrangFallbackLocation);

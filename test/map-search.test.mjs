@@ -33,10 +33,18 @@ describe('C08/C09 — tìm thợ trên bản đồ', () => {
     assert.equal(plan.phases[1].technicians.length, 1);
   });
 
+  it('sélectionne le meilleur technicien dans le premier rayon qui aboutit', () => {
+    const near = { ...mockTechnicians[6], id: 'near', distanceKm: 1.8, estimatedArrivalMinutes: 12 };
+    const fasterButFar = { ...mockTechnicians[7], id: 'far-fast', distanceKm: 4.2, estimatedArrivalMinutes: 5 };
+    const plan = createSearchPlan([near, fasterButFar], 'air-conditioning');
+    assert.equal(plan.selected.id, 'near');
+    assert.deepEqual(plan.phases.map(({ radiusKm }) => radiusKm), [2]);
+  });
+
   it('cadence la simulation C08 sur environ cinq secondes et permet de supprimer le délai', () => {
-    assert.deepEqual(Object.values(prototypeSearchTiming), [1500, 3000, 3900, 4800]);
+    assert.deepEqual(Object.values(prototypeSearchTiming), [1500, 2800, 3500, 4100, 4800]);
     assert.ok(prototypeSearchTiming.completeMs >= 4500 && prototypeSearchTiming.completeMs <= 5000);
-    assert.deepEqual(Object.values(realtimeSearchTiming), [0, 0, 0, 0]);
+    assert.deepEqual(Object.values(realtimeSearchTiming), [0, 0, 0, 0, 0]);
   });
 
   it('chọn người đứng đầu ranking và chuyển tuần tự sang thợ kế tiếp', () => {
@@ -48,13 +56,13 @@ describe('C08/C09 — tìm thợ trên bản đồ', () => {
 
   it('cung cấp fiche kết quả, hành động đặt thợ và trạng thái không có thợ', () => {
     const sheet = createTechnicianSheetMarkup(mockTechnicians[6]);
-    ['Đã tìm thấy thợ phù hợp', 'Vì sao HOME AI đề xuất thợ này?', 'Chọn thợ này', 'Tìm thợ khác'].forEach((text) => assert.match(sheet, new RegExp(text)));
+    ['Đã tìm thấy thợ phù hợp', '203 đánh giá', 'Kỹ năng', 'km đường bộ', 'ETA khoảng', 'Vì sao HOME AI đề xuất thợ này?', 'Chọn thợ này', 'Tìm thợ khác'].forEach((text) => assert.match(sheet, new RegExp(text)));
     const empty = createNoTechnicianMarkup();
     ['Hiện chưa có thợ phù hợp gần bạn', 'Thử lại', 'Đặt lịch sau'].forEach((text) => assert.match(empty, new RegExp(text)));
   });
 
   it('gère le cas où aucun prestataire disponible ne se trouve à 10 km', () => {
-    const unavailable = mockTechnicians.map((technician) => ({ ...technician, availability: 'Không khả dụng' }));
+    const unavailable = mockTechnicians.map((technician) => ({ ...technician, available: false, availability: 'Không khả dụng' }));
     const plan = createSearchPlan(unavailable, 'air-conditioning');
     assert.equal(plan.selected, null);
     assert.deepEqual(plan.phases.map(({ radiusKm }) => radiusKm), [2, 5, 10]);

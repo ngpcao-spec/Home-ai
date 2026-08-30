@@ -15,9 +15,21 @@ export function mapRouteMatrixResponse(response, technicians) {
   });
 }
 
-export function createAmazonRouteService({ apiKey, region = 'ap-southeast-1', fetch: fetchObject = globalThis.fetch, travelMode = 'Car' }) {
+export function createAmazonRouteService({ apiKey, region = 'ap-southeast-1', fetch: fetchObject = globalThis.fetch, travelMode = 'Car', timeoutMs = 10000 }) {
   const request = async (operation, path, body) => {
-    const response = await fetchObject(`https://routes.geo.${region}.amazonaws.com/v2/${path}?key=${encodeURIComponent(apiKey)}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const controller = new AbortController();
+    const timeout = globalThis.setTimeout(() => controller.abort(), timeoutMs);
+    let response;
+    try {
+      response = await fetchObject(`https://routes.geo.${region}.amazonaws.com/v2/${path}?key=${encodeURIComponent(apiKey)}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body), signal: controller.signal });
+    } catch (cause) {
+      const error = new Error(cause?.name === 'AbortError' ? `Amazon Location ${operation} request timed out` : `Amazon Location ${operation} network request failed`);
+      error.awsErrorCode = cause?.name === 'AbortError' ? 'TimeoutError' : 'NetworkError';
+      logAmazonLocationDiagnostic('routing', false, amazonLocationFailure(error));
+      throw error;
+    } finally {
+      globalThis.clearTimeout(timeout);
+    }
     if (!response.ok) {
       let awsErrorCode = response.headers?.get?.('x-amzn-errortype')?.split(':')[0];
       if (!awsErrorCode) {
@@ -36,7 +48,7 @@ export function createAmazonRouteService({ apiKey, region = 'ap-southeast-1', fe
   return {
     id: 'amazon-location-routes', travelMode,
     async matrix(technicians, client) { return mapRouteMatrixResponse(await request('CalculateRouteMatrix', 'route-matrix', { Origins: technicians.map((item) => ({ Position: position(item) })), Destinations: [{ Position: position(client) }], TravelMode: travelMode }), technicians); },
-    async route(origin, destination) { const data = await request('CalculateRoutes', 'routes', { Origin: position(origin), Destination: position(destination), TravelMode: travelMode }); const points = data.Legs?.flatMap((leg) => leg.Geometry?.LineString ?? []).map(([longitude, latitude]) => ({ longitude, latitude })) ?? []; return { distanceKm: data.Summary?.Distance, durationMinutes: Math.ceil(data.Summary?.Duration / 60), points, source: 'amazon-location' }; },
+    async route(origin, destination) { const data = await request('CalculateRoutes', 'routes', { Origin: position(origin), Destination: position(destination), TravelMode: travelMode }); const points = data.Legs?.flatMap((leg) => leg.Geometry?.LineString ?? []).map(([longitude, latitude]) => ({ longitude, latitude })) ?? []; return { distanceKm: data.Summary?.Distance / 1000, durationMinutes: Math.ceil(data.Summary?.Duration / 60), points, source: 'amazon-location' }; },
   };
 }
 

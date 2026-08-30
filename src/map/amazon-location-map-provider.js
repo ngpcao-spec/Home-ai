@@ -49,7 +49,13 @@ export function createAmazonLocationMapProvider({ apiKey, region = 'ap-southeast
     setClientLocation(location) {
       if (!location || !state.map) return;
       this.customer = location;
-      if (!state.client) state.client = new globalThis.maplibregl.Marker({ color: '#ff7a4d' }).setLngLat(point(location)).setPopup(new globalThis.maplibregl.Popup().setText('Vị trí của bạn')).addTo(state.map);
+      if (!state.client) {
+        const element = documentObject.createElement('div');
+        element.className = 'amazon-client-marker';
+        element.setAttribute('aria-label', 'Vị trí của bạn');
+        element.textContent = '⌂';
+        state.client = new globalThis.maplibregl.Marker({ element }).setLngLat(point(location)).setPopup(new globalThis.maplibregl.Popup().setText('Vị trí của bạn')).addTo(state.map);
+      }
       else state.client.setLngLat(point(location));
     },
     setProviders(technicians, { selectedId } = {}) {
@@ -73,7 +79,12 @@ export function createAmazonLocationMapProvider({ apiKey, region = 'ap-southeast
       const circle = Array.from({ length: 65 }, (_, index) => { const angle = index * Math.PI * 2 / 64; return [this.customer.longitude + Math.cos(angle) * radiusKm / (111.32 * Math.cos(this.customer.latitude * Math.PI / 180)), this.customer.latitude + Math.sin(angle) * radiusKm / 110.574]; });
       const data = featureCollection([{ type: 'Feature', geometry: { type: 'Polygon', coordinates: [circle] }, properties: {} }]);
       if (!state.map.getSource('search-radius')) { state.map.addSource('search-radius', { type: 'geojson', data }); state.map.addLayer({ id: 'search-radius-fill', type: 'fill', source: 'search-radius', paint: { 'fill-color': '#087b61', 'fill-opacity': searching ? .13 : .06 } }); state.map.addLayer({ id: 'search-radius-line', type: 'line', source: 'search-radius', paint: { 'line-color': '#087b61', 'line-width': 2, 'line-opacity': .65 } }); }
-      else state.map.getSource('search-radius').setData(data);
+      else {
+        state.map.getSource('search-radius').setData(data);
+        state.map.setPaintProperty('search-radius-fill', 'fill-opacity', searching ? .13 : .06);
+      }
+      const bounds = circle.reduce((value, coordinate) => value.extend(coordinate), new globalThis.maplibregl.LngLatBounds(circle[0], circle[0]));
+      state.map.fitBounds(bounds, { padding: 45, maxZoom: 14, duration: searching ? 500 : 0 });
     },
     moveProvider(id, location) { state.markers.get(id)?.setLngLat(point(location)); },
     setRoute(points) {
