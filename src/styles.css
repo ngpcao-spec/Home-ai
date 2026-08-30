@@ -72,7 +72,7 @@ h1 em { color: var(--green); font-style: normal; }
 .map-search-heading h2 { margin: 0; font-size: 21px; }
 .map-search-heading > span { padding: 6px 10px; border-radius: 999px; color: var(--dark-green); background: var(--mint); font-size: 10px; font-weight: 750; }
 .map-stage { position: relative; }
-.map-stage:has(> .gm-style), .tracking-map:has(> .gm-style) { height: clamp(390px, 62vh, 610px); overflow: hidden; border-radius: 24px; }
+.map-stage:has(> .maplibregl-canvas-container), .map-stage.maplibregl-map { height: clamp(390px, 62vh, 610px); overflow: hidden; border-radius: 24px; }
 .tracking-map { height: 260px; margin-top: 13px; overflow: hidden; border-radius: 13px; background: #e9f1ed; }
 .tracking-map .local-map { height: 260px; border-radius: 13px; }
 .mock-route { position: absolute; z-index: 2; top: 49%; left: 21%; width: 58%; border-top: 4px dashed #087b61; transform: rotate(-13deg); }

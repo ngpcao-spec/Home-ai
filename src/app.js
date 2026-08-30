@@ -280,6 +280,11 @@ export function initialiseHomePage(
     clientLocation = await getClientLocation(geolocation);
     root.querySelector('[data-location-label]').textContent = clientLocation.source === 'browser' ? 'Vị trí hiện tại' : 'Đang dùng vị trí mặc định · Nha Trang';
     const technicians = await technicianRepository.list({ location: defaultMvpLocation });
+    try {
+      await renderMap(stage, { technicians: [], radiusKm: 2, searching: true });
+    } catch {
+      stage.innerHTML = '<div class="map-error" role="alert"><strong>Không thể tải bản đồ Amazon Location</strong><span>Kiểm tra trạng thái HTTP và mã lỗi AWS trong console trình duyệt.</span></div>';
+    }
     let routedTechnicians;
     try {
       routedTechnicians = await routingProvider.matrix(technicians, clientLocation);

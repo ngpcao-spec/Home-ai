@@ -34,7 +34,10 @@ jobs:
         run: npm ci
 
       - name: Build static site
-        run: npm run build
+        run: |
+          test -n "$AMAZON_LOCATION_API_KEY" || { echo "AMAZON_LOCATION_API_KEY is not configured" >&2; exit 1; }
+          npm run build
+          node -e "const fs=require('fs'); const bundle=fs.readFileSync('dist/src/runtime-config.js','utf8'); if (!bundle.includes(process.env.AMAZON_LOCATION_API_KEY)) process.exit(1); console.log('Amazon Location runtime configuration verified (value redacted).')"
         env:
           AMAZON_LOCATION_API_KEY: ${{ secrets.AMAZON_LOCATION_API_KEY }}
 
