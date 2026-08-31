@@ -271,9 +271,23 @@ h1 em { color: var(--green); font-style: normal; }
 .detail-block { margin-top: 15px; padding: 14px; border: 1px solid #dfeae6; border-radius: 14px; }
 .detail-block h2 { margin: 0 0 9px; color: #173d34; font-size: 13px; }
 .detail-block ul { display: grid; gap: 6px; margin: 0; padding-left: 18px; color: #36564e; font-size: 10px; }
-.profile-view > article { display: flex; align-items: center; gap: 13px; margin-top: 20px; padding: 18px; border: 1px solid #dce9e4; border-radius: 17px; background: white; }
-.profile-user-avatar { display: grid; width: 50px; height: 50px; place-items: center; border-radius: 50%; color: white; background: var(--green); font-weight: 850; }
-.profile-view article div { display: grid; gap: 4px; }.profile-view article strong { color: #173d34; }.profile-view article span { color: #71847f; font-size: 10px; }
+.customer-profile-heading { margin-bottom: 18px; }.customer-profile-heading p { margin-bottom: 5px !important; }
+.customer-profile-card { display: flex; align-items: center; gap: 14px; padding: 18px; border: 1px solid #dce9e4; border-radius: 18px; background: linear-gradient(135deg, #f1faf6, #fff); box-shadow: 0 8px 25px rgb(22 74 62 / 7%); }
+.customer-profile-avatar { display: grid; width: 58px; height: 58px; flex: 0 0 auto; place-items: center; border-radius: 50%; color: white; background: linear-gradient(145deg, #2f866f, #174d41); font-size: 17px; font-weight: 850; box-shadow: 0 7px 16px rgb(8 123 97 / 20%); }
+.customer-profile-card > div { display: grid; gap: 3px; }.customer-profile-card strong { color: #173d34; font-size: 16px; }.customer-profile-card span, .customer-profile-card small { color: #667c76; font-size: 10px; }
+.profile-section { margin-top: 14px; padding: 16px; border: 1px solid #dce9e4; border-radius: 17px; background: white; }
+.profile-section h2 { display: flex; align-items: center; gap: 9px; margin: 0 0 12px; color: #173d34; font-size: 14px; }
+.profile-section-icon { display: grid; width: 29px; height: 29px; flex: 0 0 auto; place-items: center; border-radius: 9px; color: var(--dark-green); background: var(--mint); font-size: 14px; font-style: normal; }
+.profile-section dl { margin: 0; }.profile-section dl div { display: flex; justify-content: space-between; gap: 15px; padding: 9px 0; border-top: 1px solid #edf2f0; font-size: 10px; }.profile-section dl div:first-child { border-top: 0; }.profile-section dt { color: #71847f; }.profile-section dd { margin: 0; color: #294a43; font-weight: 750; text-align: right; }
+.customer-address-list { display: grid; gap: 9px; }
+.customer-address-card { display: flex; align-items: start; justify-content: space-between; gap: 12px; padding: 12px; border: 1px solid #e2ece8; border-radius: 12px; background: #f9fcfa; }
+.customer-address-card > div:first-child { min-width: 0; }.customer-address-card strong { color: #173d34; font-size: 11px; }.customer-address-card strong + span { margin-left: 7px; padding: 3px 6px; border-radius: 999px; color: var(--dark-green); background: var(--mint); font-size: 8px; font-weight: 800; }.customer-address-card p { margin: 5px 0 0; color: #607770; font-size: 10px; line-height: 1.45; }
+.address-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: end; gap: 5px; }.address-actions button { min-height: 29px; padding: 0 8px; border: 1px solid #c9ddd6; border-radius: 8px; color: var(--dark-green); background: white; font-size: 8px; font-weight: 750; }.address-actions button:last-child { color: #a2492e; border-color: #e2c5ba; }
+.add-address { width: 100%; min-height: 40px; margin-top: 10px; border: 1px dashed #8fc6b5; border-radius: 10px; color: var(--dark-green); background: #f3faf7; font-size: 10px; font-weight: 800; }
+.empty-addresses { color: #71847f; font-size: 10px; text-align: center; }
+.address-form { display: grid; gap: 10px; margin-top: 11px; padding: 13px; border-radius: 12px; background: #f3faf7; }.address-form h3 { margin: 0; color: #173d34; font-size: 13px; }.address-form label { color: #536c66; font-size: 9px; font-weight: 700; }.address-form input:not([type="checkbox"]) { width: 100%; min-height: 40px; margin-top: 5px; padding: 0 10px; border: 1px solid #cbded7; border-radius: 9px; color: #294a43; background: white; }.default-address-option { display: flex; align-items: center; gap: 7px; }.default-address-option input { accent-color: var(--green); }.address-form > div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }.address-form button { min-height: 38px; border: 0; border-radius: 9px; color: white; background: var(--green); font-size: 9px; font-weight: 800; }.address-form button:last-child { border: 1px solid #cbded7; color: var(--dark-green); background: white; }
+.profile-action-status { min-height: 15px; margin: 7px 0 0; color: var(--green); font-size: 9px; font-weight: 700; text-align: center; }
+.profile-menu { display: grid; gap: 8px; margin-top: 14px; }.profile-menu > button { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 10px; width: 100%; min-height: 59px; padding: 10px 13px; border: 1px solid #dce9e4; border-radius: 14px; color: #294a43; background: white; text-align: left; }.profile-menu > button > span:nth-child(2) { display: grid; gap: 3px; }.profile-menu strong { color: #173d34; font-size: 11px; }.profile-menu small { color: #71847f; font-size: 9px; }.profile-menu em { color: #8aa09a; font-size: 20px; font-style: normal; }.profile-menu .logout-action strong { color: #a2492e; }.profile-menu .logout-action .profile-section-icon { color: #a2492e; background: #fff1eb; }
 .app-navigation { position: fixed; z-index: 20; right: 0; bottom: 0; left: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: min(100%, 520px); margin: auto; padding: 7px max(10px, env(safe-area-inset-right)) max(7px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); border: 1px solid #dce9e4; border-bottom: 0; border-radius: 18px 18px 0 0; background: rgb(255 255 255 / 96%); box-shadow: 0 -8px 30px rgb(22 74 62 / 10%); backdrop-filter: blur(10px); }
 .app-navigation button { display: grid; min-height: 49px; place-items: center; gap: 1px; padding: 3px; border: 0; border-radius: 11px; color: #78908a; background: transparent; font-size: 9px; font-weight: 750; }
 .app-navigation button span { font-size: 19px; line-height: 1; }
@@ -329,6 +343,8 @@ footer strong { color: #627872; }
   .history-card-heading { align-items: start; }
   .detail-facts, .detail-summary { grid-template-columns: 1fr; gap: 0; }
   .mission-detail-card { padding: 17px; }
+  .customer-address-card { flex-direction: column; }
+  .address-actions { width: 100%; justify-content: start; }
 }
 
 @media (max-width: 360px) {

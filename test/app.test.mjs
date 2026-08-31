@@ -56,4 +56,11 @@ describe('HOME AI C04 marketplace home page', () => {
     ['Accueil', 'Lịch sử', 'Hồ sơ'].forEach((text) => assert.match(markup, new RegExp(text)));
     ['home', 'history', 'mission-detail', 'profile'].forEach((view) => assert.match(markup, new RegExp(`data-app-view="${view}"`)));
   });
+
+  it('keeps the C20 profile surface model-driven and initially empty for rendering', () => {
+    const markup = createHomeAiMarkup();
+    assert.match(markup, /class="profile-view" data-app-view="profile"/);
+    assert.doesNotMatch(markup, /Phú Dũng/);
+    assert.doesNotMatch(markup, /Nguyễn Minh Anh/);
+  });
 });

@@ -18,6 +18,14 @@ import { createTrackingStageMarkup, updateInterventionQuotePresentation, updateT
 import { createSearchPlan, getNextTechnician, prototypeSearchTiming, searchRadiiKm } from './search/map-search.js';
 import { createNoTechnicianMarkup, createTechnicianSheetMarkup } from './search/technician-sheet.js';
 import {
+  addCustomerAddress,
+  createCustomerProfile,
+  deleteCustomerAddress,
+  setDefaultCustomerAddress,
+  updateCustomerAddress,
+} from './customer/profile.js';
+import { createCustomerProfileMarkup } from './customer/profile-view.js';
+import {
   advanceMission,
   confirmCompletion,
   createMissionState,
@@ -207,10 +215,7 @@ export function createHomeAiMarkup() {
 
         <section class="history-view" data-app-view="history" hidden aria-label="Lịch sử interventions"></section>
         <section class="mission-detail-view" data-app-view="mission-detail" hidden aria-label="Chi tiết chuyến"></section>
-        <section class="profile-view" data-app-view="profile" hidden aria-labelledby="profile-title">
-          <p class="quote-eyebrow">TÀI KHOẢN KHÁCH HÀNG</p><h1 id="profile-title">Hồ sơ</h1>
-          <article><span class="profile-user-avatar" aria-hidden="true">PD</span><div><strong>Phú Dũng</strong><span>Khách hàng HOME AI</span></div></article>
-        </section>
+        <section class="profile-view" data-app-view="profile" hidden aria-labelledby="profile-title"></section>
       </main>
 
       <footer><span>Đã phục vụ hơn <strong>10.000+</strong> gia đình Việt</span></footer>
@@ -255,6 +260,10 @@ export function initialiseHomePage(
     await provider.render(stage, { ...state, clientLocation });
   };
   let missionState = createMissionState();
+  let customerProfile = createCustomerProfile();
+  let addressFormOpen = false;
+  let editingAddressId;
+  let profileStatusMessage = '';
   let missionBookedAt;
   let trackingRoute;
   const trackingRoutes = createTrackingRouteSession(routingProvider);
@@ -266,8 +275,16 @@ export function initialiseHomePage(
     technician: selectedTechnician ?? {},
   });
   const getMissionHistory = () => getClientMissionHistory(getCurrentMissionRecord());
+  const renderCustomerProfile = () => {
+    root.querySelector('[data-app-view="profile"]').innerHTML = createCustomerProfileMarkup(customerProfile, {
+      addressFormOpen,
+      editingAddressId,
+      statusMessage: profileStatusMessage,
+    });
+  };
   const showAppView = (view, missionId) => {
     if (view === 'history') root.querySelector('[data-app-view="history"]').innerHTML = createMissionHistoryMarkup(getMissionHistory());
+    if (view === 'profile') renderCustomerProfile();
     if (view === 'mission-detail') {
       const selectedMission = getMissionHistory().find((item) => item.missionId === missionId);
       root.querySelector('[data-app-view="mission-detail"]').innerHTML = createMissionDetailMarkup(selectedMission);
@@ -671,6 +688,68 @@ export function initialiseHomePage(
   });
   root.querySelector('[data-app-view="mission-detail"]').addEventListener('click', (event) => {
     if (event.target.closest('[data-back-history]')) showAppView('history');
+  });
+  const profileView = root.querySelector('[data-app-view="profile"]');
+  profileView.addEventListener('click', (event) => {
+    if (event.target.closest('[data-profile-history]')) {
+      showAppView('history');
+      return;
+    }
+    if (event.target.closest('[data-add-address]')) {
+      addressFormOpen = true;
+      editingAddressId = undefined;
+      profileStatusMessage = '';
+      renderCustomerProfile();
+      return;
+    }
+    const editId = event.target.closest('[data-edit-address]')?.dataset.editAddress;
+    if (editId) {
+      addressFormOpen = true;
+      editingAddressId = editId;
+      profileStatusMessage = '';
+      renderCustomerProfile();
+      return;
+    }
+    if (event.target.closest('[data-cancel-address]')) {
+      addressFormOpen = false;
+      editingAddressId = undefined;
+      renderCustomerProfile();
+      return;
+    }
+    const defaultId = event.target.closest('[data-default-address]')?.dataset.defaultAddress;
+    if (defaultId) {
+      customerProfile = setDefaultCustomerAddress(customerProfile, defaultId);
+      profileStatusMessage = 'Đã cập nhật địa chỉ mặc định.';
+      renderCustomerProfile();
+      return;
+    }
+    const deleteId = event.target.closest('[data-delete-address]')?.dataset.deleteAddress;
+    if (deleteId) {
+      customerProfile = deleteCustomerAddress(customerProfile, deleteId);
+      profileStatusMessage = 'Đã xóa địa chỉ.';
+      renderCustomerProfile();
+      return;
+    }
+    if (event.target.closest('[data-profile-help]')) profileStatusMessage = 'Trung tâm trợ giúp sẽ được kết nối trong phiên bản tiếp theo.';
+    if (event.target.closest('[data-profile-terms]')) profileStatusMessage = 'Điều khoản và chính sách quyền riêng tư sẽ được mở tại đây.';
+    if (event.target.closest('[data-profile-logout]')) profileStatusMessage = 'Bản demo: chưa có hệ thống đăng nhập để đăng xuất.';
+    if (event.target.closest('[data-profile-help], [data-profile-terms], [data-profile-logout]')) renderCustomerProfile();
+  });
+  profileView.addEventListener('submit', (event) => {
+    if (!event.target.matches('[data-address-form]')) return;
+    event.preventDefault();
+    const address = {
+      label: event.target.elements.label.value,
+      address: event.target.elements.address.value,
+      isDefault: event.target.elements.isDefault.checked,
+    };
+    customerProfile = editingAddressId
+      ? updateCustomerAddress(customerProfile, editingAddressId, address)
+      : addCustomerAddress(customerProfile, address);
+    profileStatusMessage = editingAddressId ? 'Đã cập nhật địa chỉ.' : 'Đã thêm địa chỉ.';
+    addressFormOpen = false;
+    editingAddressId = undefined;
+    renderCustomerProfile();
   });
 
   root.querySelector('[data-location]').addEventListener('click', () => {
