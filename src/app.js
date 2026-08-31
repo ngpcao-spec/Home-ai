@@ -478,6 +478,7 @@ export function initialiseHomePage(
   const startTrackingMap = async () => {
     if (missionStatuses[missionState.statusIndex].id !== 'travelling') return;
     const stage = mission.querySelector('[data-mission-stage]');
+    let trackingPhase = 'route';
     stopLocationStream?.();
     stopLocationStream = undefined;
     stage.querySelector('.tracking-route-error')?.remove();
@@ -486,7 +487,9 @@ export function initialiseHomePage(
       trackingRoute = await trackingRoutes.get(selectedTechnician, clientLocation);
       if (!trackingRoute?.points || trackingRoute.points.length < 2) throw new Error('CalculateRoutes returned no route geometry');
       const trackingMap = mission.querySelector('[data-tracking-map]');
+      trackingPhase = 'map';
       await renderMap(trackingMap, { technicians: [selectedTechnician], selectedId: selectedTechnician.id, searching: false, route: trackingRoute.points });
+      trackingPhase = 'location-source';
       const source = providerLocationSourceFactory({ providerId: selectedTechnician.id, route: trackingRoute.points, durationMinutes: trackingRoute.durationMinutes, totalDistanceKm: trackingRoute.distanceKm });
       stopLocationStream = source.subscribe((position) => {
         mapProvider.moveProvider(selectedTechnician.id, position);
@@ -499,7 +502,8 @@ export function initialiseHomePage(
           mission.querySelector('[data-mission-next]').hidden = true;
         }
       });
-    } catch {
+    } catch (error) {
+      console.error('[HOME AI][C13]', { phase: trackingPhase, errorType: error?.awsErrorCode ?? error?.name ?? 'Error' });
       stage.insertAdjacentHTML('beforeend', '<p class="route-error tracking-route-error" role="alert">Không thể tải hành trình của thợ. Vui lòng thử lại.</p><button type="button" data-retry-tracking>Thử lại</button>');
     }
   };
