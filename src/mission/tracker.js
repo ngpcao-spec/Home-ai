@@ -9,6 +9,8 @@ export const missionStatuses = [
 export function createMissionState() {
   return {
     statusIndex: 0,
+    interventionPhase: 'idle',
+    quote: null,
     supplement: { amount: 120000, reason: 'Cần thay linh kiện bị hỏng', decision: 'pending', requested: false },
     completionConfirmed: false,
     rating: 0,
@@ -28,6 +30,25 @@ export function markMissionArrived(state) {
 export function startMissionRepair(state) {
   if (missionStatuses[state.statusIndex].id !== 'arrived') return state;
   return { ...state, statusIndex: missionStatuses.findIndex(({ id }) => id === 'in_progress') };
+}
+
+export function startMissionDiagnosis(state, quote) {
+  if (missionStatuses[state.statusIndex].id !== 'arrived' || !quote) return state;
+  return {
+    ...state,
+    statusIndex: missionStatuses.findIndex(({ id }) => id === 'in_progress'),
+    interventionPhase: 'quote_pending',
+    quote: { ...quote, decision: 'pending' },
+  };
+}
+
+export function decideRepairQuote(state, decision) {
+  if (state.interventionPhase !== 'quote_pending' || !['accepted', 'declined'].includes(decision)) return state;
+  return {
+    ...state,
+    interventionPhase: decision === 'accepted' ? 'repairing' : 'quote_declined',
+    quote: { ...state.quote, decision },
+  };
 }
 
 export function getMissionProgress(state) {

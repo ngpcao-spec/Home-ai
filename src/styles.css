@@ -178,6 +178,20 @@ h1 em { color: var(--green); font-style: normal; }
 .mission-stage .tracking-contact-actions button { border: 1px solid #bdd6ce; color: var(--dark-green); background: white; }
 .tracking-action-status { min-height: 17px; text-align: center; }
 .mission-stage .start-repair { width: 100%; margin-top: 7px; }
+.intervention-quote { display: grid; gap: 10px; margin-top: 12px; }
+.intervention-quote[hidden] { display: none; }
+.intervention-diagnosis, .repair-quote { padding: 13px; border: 1px solid #d9e8e3; border-radius: 13px; background: #fff; }
+.intervention-diagnosis h4, .quote-heading h4 { margin: 3px 0 6px; color: #173d34; font-size: 14px; }
+.quote-eyebrow { margin: 0 !important; color: var(--green) !important; font-size: 8px !important; font-weight: 850; letter-spacing: .12em; }
+.quote-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+.quote-heading > span { padding: 5px 8px; border-radius: 999px; color: var(--dark-green); background: var(--mint); font-size: 9px; font-weight: 800; }
+.repair-quote dl div:last-child { color: var(--dark-green); font-size: 12px; }
+.quote-note { color: #6d817b !important; font-size: 9px !important; }
+.quote-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 11px; }
+.mission-stage .quote-actions button:last-child { border: 1px solid #d8a492; color: #a2492e; background: white; }
+.quote-decision { margin-top: 10px !important; padding: 9px; border-radius: 9px; font-weight: 800; text-align: center; }
+.quote-decision--accepted { color: var(--dark-green) !important; background: var(--mint); }
+.quote-decision--declined { color: #9b432d !important; background: #fff1eb; }
 .tracking-route-error { margin-top: 10px !important; }
 
 .services { max-width: 780px; margin: 12px auto 0; }

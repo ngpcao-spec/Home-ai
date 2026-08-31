@@ -6,8 +6,11 @@ import {
   getProviderArrivalStatus,
 } from '../src/tracking/location-stream.js';
 import { createTrackingRouteSession } from '../src/tracking/route-session.js';
+import { createInterventionQuote } from '../src/mission/intervention-quote.js';
 import {
+  createInterventionQuoteMarkup,
   createTrackingStageMarkup,
+  updateInterventionQuotePresentation,
   updateInterventionPresentation,
   updateTrackingPresentation,
 } from '../src/tracking/tracking-sheet.js';
@@ -110,5 +113,44 @@ describe('suivi C13', () => {
     assert.equal(nodes.get('[data-tracking-message]').textContent, 'Thợ đang kiểm tra và sửa chữa thiết bị của bạn.');
     assert.equal(nodes.get('[data-tracking-metrics]').hidden, true);
     assert.equal(nodes.get('[data-start-repair]').hidden, true);
+  });
+
+  it('génère un devis C15 déterministe après le diagnostic', () => {
+    const quote = createInterventionQuote(
+      { summary: 'Ổ cắm điện bị hỏng' },
+      { category: 'electricity', priceFrom: 150000 },
+    );
+    assert.deepEqual(quote, {
+      diagnosis: 'Ổ cắm điện bị hỏng',
+      recommendedWork: 'Kiểm tra mạch điện, thay ổ cắm bị hỏng và kiểm tra an toàn sau sửa chữa.',
+      laborAmount: 150000,
+      partsAmount: 120000,
+      totalAmount: 270000,
+      estimatedMinutes: 45,
+      warrantyDays: 30,
+    });
+    const markup = createInterventionQuoteMarkup(quote);
+    ['KẾT QUẢ CHẨN ĐOÁN', 'BÁO GIÁ SỬA CHỮA', '270.000đ', 'Chấp nhận báo giá', 'Từ chối báo giá'].forEach((text) => assert.match(markup, new RegExp(text)));
+  });
+
+  it('présente distinctement attente, acceptation et refus sans retirer la fiche technicien', () => {
+    const nodes = new Map([
+      ['[data-tracking-status]', { textContent: '' }],
+      ['[data-tracking-message]', { textContent: '', hidden: true }],
+      ['[data-tracking-metrics]', { hidden: false }],
+      ['[data-start-repair]', { hidden: false }],
+      ['[data-intervention-quote]', { hidden: true, innerHTML: '' }],
+    ]);
+    const container = { querySelector: (selector) => nodes.get(selector) };
+    const quote = createInterventionQuote({ summary: '<script>test</script>' }, { category: 'electricity', priceFrom: 150000 });
+    const pending = { interventionPhase: 'quote_pending', quote };
+    assert.equal(updateInterventionQuotePresentation(container, pending), 'Chờ xác nhận báo giá');
+    assert.match(nodes.get('[data-intervention-quote]').innerHTML, /&lt;script&gt;test&lt;\/script&gt;/);
+    assert.doesNotMatch(nodes.get('[data-intervention-quote]').innerHTML, /<script>/);
+
+    assert.equal(updateInterventionQuotePresentation(container, { ...pending, interventionPhase: 'repairing' }), 'Đang sửa chữa');
+    assert.match(nodes.get('[data-intervention-quote]').innerHTML, /Bạn đã chấp nhận báo giá/);
+    assert.equal(updateInterventionQuotePresentation(container, { ...pending, interventionPhase: 'quote_declined' }), 'Đã từ chối báo giá');
+    assert.match(nodes.get('[data-intervention-quote]').innerHTML, /Việc sửa chữa chưa bắt đầu/);
   });
 });

@@ -5,12 +5,14 @@ import {
   advanceMission,
   confirmCompletion,
   createMissionState,
+  decideRepairQuote,
   decideSupplement,
   getAcceptedSupplement,
   getMissionProgress,
   markMissionArrived,
   missionStatuses,
   requestSupplement,
+  startMissionDiagnosis,
   startMissionRepair,
   submitReview,
 } from '../src/mission/tracker.js';
@@ -59,6 +61,32 @@ describe('suivi local de mission', () => {
     const inProgress = startMissionRepair(markMissionArrived(travelling));
     assert.equal(missionStatuses[inProgress.statusIndex].id, 'in_progress');
     assert.deepEqual(getMissionProgress(inProgress).map(({ progress }) => progress), ['done', 'done', 'done', 'active', 'pending']);
+  });
+
+  it('impose diagnostic et devis avant le démarrage réel de la réparation', () => {
+    const quote = { diagnosis: 'Ổ cắm hỏng', totalAmount: 270000 };
+    const travelling = advanceMission(createMissionState());
+    assert.equal(startMissionDiagnosis(travelling, quote), travelling);
+
+    const arrived = markMissionArrived(travelling);
+    const pending = startMissionDiagnosis(arrived, quote);
+    assert.equal(missionStatuses[pending.statusIndex].id, 'in_progress');
+    assert.equal(pending.interventionPhase, 'quote_pending');
+    assert.equal(pending.quote.decision, 'pending');
+    assert.equal(decideRepairQuote(createMissionState(), 'accepted').interventionPhase, 'idle');
+
+    const accepted = decideRepairQuote(pending, 'accepted');
+    assert.equal(accepted.interventionPhase, 'repairing');
+    assert.equal(accepted.quote.decision, 'accepted');
+  });
+
+  it('un refus de devis ne démarre jamais la réparation', () => {
+    const arrived = markMissionArrived(advanceMission(createMissionState()));
+    const pending = startMissionDiagnosis(arrived, { diagnosis: 'Thiết bị hỏng', totalAmount: 300000 });
+    const declined = decideRepairQuote(pending, 'declined');
+    assert.equal(declined.interventionPhase, 'quote_declined');
+    assert.equal(declined.quote.decision, 'declined');
+    assert.equal(decideRepairQuote(declined, 'accepted'), declined);
   });
 
   it('accepte uniquement une évaluation entière de 1 à 5 étoiles', () => {
