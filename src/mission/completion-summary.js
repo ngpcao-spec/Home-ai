@@ -32,3 +32,28 @@ export function createCompletionSummaryMarkup(completion, quoteHistory) {
     <p class="payment-preparation-status" data-payment-preparation-status role="status"></p>
   </section>`;
 }
+
+export function createPaidExternalMarkup(completion) {
+  return `<section class="paid-external" role="status">
+    <div class="completion-check" aria-hidden="true">✓</div>
+    <p class="quote-eyebrow">HOÀN THÀNH</p>
+    <h3>Đã thanh toán</h3>
+    <p>Kỹ thuật viên đã được thanh toán trực tiếp.</p>
+    <strong>${formatPrice(completion.finalAuthorizedAmount)}</strong>
+  </section>`;
+}
+
+export function createProviderReviewMarkup(technician, missionState) {
+  const stars = [1, 2, 3, 4, 5].map((rating) => `<button type="button" data-rating="${rating}" aria-label="${rating} sao" class="${missionState.rating >= rating ? 'is-selected' : ''}">★</button>`).join('');
+  return `<section class="provider-review" aria-labelledby="provider-review-title">
+    <p class="paid-badge">✓ Đã thanh toán · ${formatPrice(missionState.completion.finalAuthorizedAmount)}</p>
+    <span class="technician-avatar" aria-hidden="true">${escapeHtml(technician.initials)}</span>
+    <h3 id="provider-review-title">Đánh giá kỹ thuật viên</h3>
+    <p>${escapeHtml(technician.name)}</p>
+    <p>Trải nghiệm của bạn với kỹ thuật viên như thế nào?</p>
+    <div class="stars" role="group" aria-label="Chọn số sao">${stars}</div>
+    <label>Nhận xét (không bắt buộc)<textarea data-review-comment rows="3" placeholder="Chia sẻ trải nghiệm của bạn..."></textarea></label>
+    <button type="button" data-send-review ${missionState.rating ? '' : 'disabled'}>Gửi đánh giá</button>
+    ${missionState.reviewSent ? '<p class="review-thanks" role="status">Cảm ơn bạn đã gửi đánh giá!</p>' : ''}
+  </section>`;
+}

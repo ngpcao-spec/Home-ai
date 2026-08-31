@@ -5,6 +5,7 @@ import {
   advanceMission,
   confirmCompletion,
   completeMissionRepair,
+  completeExternalPayment,
   createMissionState,
   decideMissionSupplement,
   decideRepairQuote,
@@ -14,6 +15,7 @@ import {
   getMissionProgress,
   markMissionArrived,
   missionStatuses,
+  openProviderReview,
   requestSupplement,
   discoverMissionSupplement,
   startMissionDiagnosis,
@@ -177,6 +179,26 @@ describe('suivi local de mission', () => {
     assert.equal(completed.completion.finalAuthorizedAmount, 290000);
     assert.deepEqual(completed.completion.completedWork, ['Thay tụ điện máy nén', 'Kiểm tra hệ thống', 'Vệ sinh cơ bản']);
     assert.deepEqual(completed.quoteHistory.map(({ status }) => status), ['accepted', 'rejected']);
+  });
+
+  it('termine la mission avec un paiement externe sans modifier le montant final', () => {
+    const completion = Object.freeze({ finalAuthorizedAmount: 390000, currency: 'VND' });
+    const pendingPayment = {
+      ...createMissionState(),
+      statusIndex: 4,
+      missionStatus: 'completed_pending_payment',
+      completion,
+    };
+    const paid = completeExternalPayment(pendingPayment, { paidAt: '2026-08-31T12:00:00.000Z' });
+    assert.equal(paid.missionStatus, 'completed');
+    assert.equal(paid.paymentStatus, 'paid_external');
+    assert.equal(paid.paidAt, '2026-08-31T12:00:00.000Z');
+    assert.equal(paid.completion, completion);
+    assert.equal(paid.completion.finalAuthorizedAmount, 390000);
+    assert.equal(paid.reviewStage, 'payment_confirmed');
+    assert.equal(openProviderReview(paid).reviewStage, 'rating');
+    const initial = createMissionState();
+    assert.equal(completeExternalPayment(initial), initial);
   });
 
   it('accepte uniquement une évaluation entière de 1 à 5 étoiles', () => {

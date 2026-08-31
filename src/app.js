@@ -7,7 +7,7 @@ import { createRouteService } from './routing/routing-provider.js';
 import { createMockProviderLocationSource } from './tracking/location-stream.js';
 import { createTrackingRouteSession } from './tracking/route-session.js';
 import { createInterventionQuote } from './mission/intervention-quote.js';
-import { createCompletionSummaryMarkup } from './mission/completion-summary.js';
+import { createCompletionSummaryMarkup, createPaidExternalMarkup, createProviderReviewMarkup } from './mission/completion-summary.js';
 import { createTrackingStageMarkup, updateInterventionQuotePresentation, updateTrackingPresentation } from './tracking/tracking-sheet.js';
 import { createSearchPlan, getNextTechnician, prototypeSearchTiming, searchRadiiKm } from './search/map-search.js';
 import { createNoTechnicianMarkup, createTechnicianSheetMarkup } from './search/technician-sheet.js';
@@ -16,6 +16,7 @@ import {
   confirmCompletion,
   createMissionState,
   completeMissionRepair,
+  completeExternalPayment,
   decideRepairQuote,
   decideMissionSupplement,
   decideSupplement,
@@ -24,6 +25,7 @@ import {
   discoverMissionSupplement,
   markMissionArrived,
   missionStatuses,
+  openProviderReview,
   requestSupplement,
   startMissionDiagnosis,
   submitReview,
@@ -473,12 +475,17 @@ export function initialiseHomePage(
   const renderMission = () => {
     const status = renderMissionProgress();
     const stage = mission.querySelector('[data-mission-stage]');
+    const completedMarkup = missionState.reviewStage === 'rating'
+      ? createProviderReviewMarkup(selectedTechnician, missionState)
+      : missionState.paymentStatus === 'paid_external'
+        ? createPaidExternalMarkup(missionState.completion)
+        : createCompletionSummaryMarkup(missionState.completion, missionState.quoteHistory);
     const stageMarkup = {
       accepted: '<h3>Thợ đã nhận yêu cầu</h3><p>Thợ đang chuẩn bị dụng cụ cho nhiệm vụ.</p>',
       travelling: createTrackingStageMarkup(selectedTechnician),
       arrived: createTrackingStageMarkup(selectedTechnician),
       in_progress: createTrackingStageMarkup(selectedTechnician),
-      completed_pending_payment: createCompletionSummaryMarkup(missionState.completion, missionState.quoteHistory),
+      completed_pending_payment: completedMarkup,
     };
     stage.innerHTML = stageMarkup[status.id];
     if (status.id === 'in_progress' && missionState.quote) {
@@ -581,7 +588,12 @@ export function initialiseHomePage(
       return;
     }
     if (event.target.closest('[data-continue-payment]')) {
-      mission.querySelector('[data-payment-preparation-status]').textContent = 'Bản demo: màn hình thanh toán sẽ được mở ở bước tiếp theo.';
+      missionState = completeExternalPayment(missionState, { paidAt: new Date().toISOString() });
+      renderMission();
+      scheduleTask(() => {
+        missionState = openProviderReview(missionState);
+        renderMission();
+      }, 700);
       return;
     }
     if (event.target.closest('[data-request-extra]')) missionState = requestSupplement(missionState);

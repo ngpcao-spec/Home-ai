@@ -7,7 +7,7 @@ import {
 } from '../src/tracking/location-stream.js';
 import { createTrackingRouteSession } from '../src/tracking/route-session.js';
 import { createInterventionQuote } from '../src/mission/intervention-quote.js';
-import { createCompletionSummaryMarkup } from '../src/mission/completion-summary.js';
+import { createCompletionSummaryMarkup, createPaidExternalMarkup, createProviderReviewMarkup } from '../src/mission/completion-summary.js';
 import {
   createInterventionQuoteMarkup,
   createInterventionProgressMarkup,
@@ -187,6 +187,19 @@ describe('suivi C13', () => {
     ];
     const markup = createCompletionSummaryMarkup(completion, history);
     ['Sửa chữa hoàn tất', 'Kỹ thuật viên đã hoàn thành công việc.', 'Thay dây điện nguồn', 'Giá ban đầu đã chấp nhận', '290.000đ', 'Chi phí phát sinh đã chấp nhận', '+100.000đ', 'TỔNG THANH TOÁN', '390.000đ', 'Bảo hành', '30 ngày', 'Tiếp tục thanh toán', 'v1', 'v2'].forEach((text) => assert.match(markup, new RegExp(text.replace('+', '\\+'))));
+  });
+
+  it('affiche brièvement le paiement externe puis l’évaluation sans PSP', () => {
+    const completion = { finalAuthorizedAmount: 390000 };
+    const paidMarkup = createPaidExternalMarkup(completion);
+    assert.match(paidMarkup, /Đã thanh toán/);
+    assert.match(paidMarkup, /390\.000đ/);
+    const reviewMarkup = createProviderReviewMarkup(
+      { initials: 'ĐK', name: 'Đặng Minh Khoa' },
+      { completion, rating: 0, reviewSent: false },
+    );
+    ['Đã thanh toán', 'Đánh giá kỹ thuật viên', 'Đặng Minh Khoa', 'Gửi đánh giá'].forEach((text) => assert.match(reviewMarkup, new RegExp(text)));
+    assert.doesNotMatch(`${paidMarkup}${reviewMarkup}`, /stripe|paypal|wallet|card number|api key/i);
   });
 
   it('présente distinctement attente, acceptation et refus sans retirer la fiche technicien', () => {

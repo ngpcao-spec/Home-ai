@@ -9,6 +9,10 @@ export const missionStatuses = [
 export function createMissionState() {
   return {
     statusIndex: 0,
+    missionStatus: 'accepted',
+    paymentStatus: 'unpaid',
+    paidAt: null,
+    reviewStage: 'hidden',
     interventionPhase: 'idle',
     quote: null,
     quoteHistory: [],
@@ -87,6 +91,7 @@ export function completeMissionRepair(state, metadata = {}) {
   return {
     ...state,
     statusIndex: missionStatuses.findIndex(({ id }) => id === 'completed_pending_payment'),
+    missionStatus: 'completed_pending_payment',
     interventionPhase: 'completed',
     completion: Object.freeze({
       missionId: metadata.missionId ?? 'HOMEAI-DEMO-001',
@@ -98,6 +103,22 @@ export function completeMissionRepair(state, metadata = {}) {
       warrantyDays: initialQuote.warrantyDays,
     }),
   };
+}
+
+export function completeExternalPayment(state, metadata = {}) {
+  if (state.missionStatus !== 'completed_pending_payment' || !state.completion) return state;
+  return {
+    ...state,
+    missionStatus: 'completed',
+    paymentStatus: 'paid_external',
+    paidAt: metadata.paidAt ?? new Date().toISOString(),
+    reviewStage: 'payment_confirmed',
+  };
+}
+
+export function openProviderReview(state) {
+  if (state.missionStatus !== 'completed' || state.paymentStatus !== 'paid_external') return state;
+  return { ...state, reviewStage: 'rating' };
 }
 
 export function getMissionProgress(state) {
@@ -126,7 +147,7 @@ export function confirmCompletion(state) {
 }
 
 export function submitReview(state, rating) {
-  if (!state.completionConfirmed || !Number.isInteger(rating) || rating < 1 || rating > 5) return state;
+  if (!(state.completionConfirmed || state.paymentStatus === 'paid_external') || !Number.isInteger(rating) || rating < 1 || rating > 5) return state;
   return { ...state, rating, reviewSent: true };
 }
 import {
