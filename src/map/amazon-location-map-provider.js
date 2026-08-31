@@ -97,7 +97,7 @@ export function createAmazonLocationMapProvider({ apiKey, region = 'ap-southeast
     setRoute(points) {
       if (!state.map) return;
       const data = featureCollection([{ type: 'Feature', geometry: { type: 'LineString', coordinates: points.map(point) }, properties: {} }]);
-      if (!state.map.getSource('route')) { state.map.addSource('route', { type: 'geojson', data }); state.map.addLayer({ id: 'route', type: 'line', source: 'route', paint: { 'line-color': '#087b61', 'line-width': 6, 'line-opacity': .9 } }); } else state.map.getSource('route').setData(data);
+      if (!state.map.getSource('route')) { state.map.addSource('route', { type: 'geojson', data }); state.map.addLayer({ id: 'route', type: 'line', source: 'route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#087b61', 'line-width': 4, 'line-opacity': .9 } }); } else state.map.getSource('route').setData(data);
       this.fitBounds(points);
     },
     center(location) { state.map?.flyTo({ center: point(location), zoom: 14 }); },

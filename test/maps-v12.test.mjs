@@ -45,13 +45,13 @@ describe('architecture cartographique V1.2', () => {
   it('libère la carte C09 avant de créer la carte de suivi C13', async () => {
     const maps = [];
     class FakeMap {
-      constructor({ container }) { this.container = container; this.sources = new Map(); this.removed = false; maps.push(this); }
+      constructor({ container }) { this.container = container; this.sources = new Map(); this.layers = []; this.removed = false; maps.push(this); }
       addControl() {}
       once(event, listener) { if (event === 'load') listener(); }
       getContainer() { return this.container; }
       addSource(id, source) { this.sources.set(id, { ...source, setData() {} }); }
       getSource(id) { return this.sources.get(id); }
-      addLayer() {}
+      addLayer(layer) { this.layers.push(layer); }
       setPaintProperty() {}
       fitBounds() {}
       remove() { this.removed = true; }
@@ -73,10 +73,15 @@ describe('architecture cartographique V1.2', () => {
       const clientLocation = { latitude: 12.24, longitude: 109.19 };
       const technician = { id: 'p1', initials: 'P1', name: 'Provider', latitude: 12.23, longitude: 109.18 };
       await provider.render({ id: 'c09' }, { clientLocation, technicians: [technician] });
-      await provider.render({ id: 'c13' }, { clientLocation, technicians: [technician] });
+      const route = [{ latitude: 12.23, longitude: 109.18 }, { latitude: 12.235, longitude: 109.185 }, { latitude: 12.24, longitude: 109.19 }];
+      await provider.render({ id: 'c13' }, { clientLocation, technicians: [technician], route });
       assert.equal(maps.length, 2);
       assert.equal(maps[0].removed, true);
       assert.equal(maps[1].removed, false);
+      assert.deepEqual(maps[1].sources.get('route').data.features[0].geometry.coordinates, route.map(({ longitude, latitude }) => [longitude, latitude]));
+      const routeLayer = maps[1].layers.find(({ id }) => id === 'route');
+      assert.deepEqual(routeLayer.layout, { 'line-join': 'round', 'line-cap': 'round' });
+      assert.equal(routeLayer.paint['line-width'], 4);
     } finally {
       globalThis.maplibregl = previousMapLibre;
     }
