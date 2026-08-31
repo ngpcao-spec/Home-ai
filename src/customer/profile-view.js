@@ -46,6 +46,6 @@ export function createCustomerProfileMarkup(profile, options = {}) {
       <button type="button" data-profile-history>${profileIcon('↻')}<span><strong>Lịch sử dịch vụ</strong><small>Xem các chuyến đã hoàn thành</small></span><em>›</em></button>
       <button type="button" data-profile-help>${profileIcon('?')}<span><strong>Trợ giúp &amp; hỗ trợ</strong><small>Câu hỏi thường gặp và liên hệ</small></span><em>›</em></button>
       <button type="button" data-profile-terms>${profileIcon('§')}<span><strong>Điều khoản &amp; quyền riêng tư</strong><small>Thông tin sử dụng dịch vụ</small></span><em>›</em></button>
-      <button class="logout-action" type="button" data-profile-logout>${profileIcon('↪')}<span><strong>Đăng xuất</strong><small>Bản demo không sử dụng xác thực thật</small></span><em>›</em></button>
+      <button class="logout-action" type="button" data-profile-logout>${profileIcon('↪')}<span><strong>Đăng xuất</strong><small>Đăng xuất khỏi phiên khách hàng hiện tại</small></span><em>›</em></button>
     </div>`;
 }

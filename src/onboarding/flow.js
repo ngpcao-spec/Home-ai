@@ -22,6 +22,13 @@ const entryLogo = () => `<span class="entry-logo" aria-hidden="true">
   <svg viewBox="0 0 32 32"><path d="M5 15.2 16 6l11 9.2v10.3H19v-7h-6v7H5V15.2Z"/><path d="m11.5 13.5 4.5-3.8 4.5 3.8"/></svg>
 </span><span class="entry-brand">HOME <strong>AI</strong></span>`;
 
+const escapeHtml = (value) => String(value ?? '')
+  .replaceAll('&', '&amp;')
+  .replaceAll('<', '&lt;')
+  .replaceAll('>', '&gt;')
+  .replaceAll('"', '&quot;')
+  .replaceAll("'", '&#039;');
+
 export function isOnboardingCompleted(storage) {
   try {
     return storage?.getItem(onboardingStorageKey) === 'true';
@@ -60,13 +67,29 @@ export function createOnboardingMarkup(index) {
   </section>`;
 }
 
-export function createLoginPlaceholderMarkup() {
+export function createLoginMarkup({ step = 'phone', phone = '', error = '', resendMessage = '' } = {}) {
+  const content = step === 'otp'
+    ? `<p class="login-instruction">Nhập mã xác thực</p>
+      <p class="masked-phone">Mã gồm 6 chữ số đã được tạo cho <strong>${phone}</strong></p>
+      <form data-login-otp-form>
+        <label class="sr-only" for="otp-code">Mã xác thực gồm 6 chữ số</label>
+        <input id="otp-code" name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="••••••" required>
+        <button type="submit">Xác nhận</button>
+      </form>
+      <button class="resend-otp" type="button" data-resend-otp>Gửi lại mã</button>
+      ${resendMessage ? `<p class="login-success" role="status">${resendMessage}</p>` : ''}`
+    : `<h1 id="login-title">Chào mừng bạn</h1>
+      <p class="login-instruction">Nhập số điện thoại để tiếp tục</p>
+      <form data-login-phone-form>
+        <label class="phone-field"><span>+84</span><input name="phone" type="tel" inputmode="tel" autocomplete="tel-national" value="${escapeHtml(phone)}" placeholder="09•• ••• •••" aria-label="Số điện thoại" required></label>
+        <button type="submit">Tiếp tục</button>
+      </form>`;
   return `<section class="login-placeholder" aria-labelledby="login-title">
     <div class="entry-identity">${entryLogo()}</div>
     <p class="quote-eyebrow">C03 · TÀI KHOẢN KHÁCH HÀNG</p>
-    <h1 id="login-title">Đăng nhập</h1>
-    <p>Phiên bản thử nghiệm chưa yêu cầu tài khoản hoặc mã OTP.</p>
-    <button type="button" data-enter-home>Tiếp tục vào HOME AI</button>
-    <small>Không có dữ liệu đăng nhập nào được gửi hoặc lưu.</small>
+    ${step === 'otp' ? '<h1 id="login-title">Nhập mã xác thực</h1>' : ''}
+    ${content}
+    ${error ? `<p class="login-error" role="alert">${error}</p>` : ''}
+    <small>MVP thử nghiệm · Không gửi SMS và không gọi API bên ngoài.</small>
   </section>`;
 }

@@ -26,13 +26,22 @@ import {
 } from './customer/profile.js';
 import { createCustomerProfileMarkup } from './customer/profile-view.js';
 import {
-  createLoginPlaceholderMarkup,
+  createLoginMarkup,
   createOnboardingMarkup,
   createSplashMarkup,
   isOnboardingCompleted,
   onboardingPages,
   saveOnboardingCompleted,
 } from './onboarding/flow.js';
+import {
+  clearCustomerSession,
+  createMockCustomerSession,
+  isValidMockOtp,
+  maskVietnamesePhone,
+  normalizeVietnamesePhone,
+  readCustomerSession,
+  saveCustomerSession,
+} from './customer/session.js';
 import {
   advanceMission,
   confirmCompletion,
@@ -251,17 +260,30 @@ export function initialiseHomePage(
   const startupFlow = root.querySelector('[data-startup-flow]');
   const appShell = root.querySelector('[data-app-shell]');
   let onboardingIndex = 0;
-  let onboardingStorage;
-  try { onboardingStorage = globalThis.localStorage; } catch { onboardingStorage = undefined; }
-  const renderLoginPlaceholder = () => { startupFlow.innerHTML = createLoginPlaceholderMarkup(); };
+  let loginPhone = '';
+  let openHomeView = () => {};
+  let browserStorage;
+  try { browserStorage = globalThis.localStorage; } catch { browserStorage = undefined; }
+  const renderLogin = (options = {}) => {
+    startupFlow.innerHTML = createLoginMarkup({ phone: loginPhone, ...options });
+  };
+  const showApplication = () => {
+    startupFlow.hidden = true;
+    appShell.hidden = false;
+    openHomeView();
+    root.querySelector('#service-request')?.focus();
+  };
   const finishOnboarding = () => {
-    saveOnboardingCompleted(onboardingStorage);
-    renderLoginPlaceholder();
+    saveOnboardingCompleted(browserStorage);
+    renderLogin();
   };
   scheduleTask(() => {
-    startupFlow.innerHTML = isOnboardingCompleted(onboardingStorage)
-      ? createLoginPlaceholderMarkup()
-      : createOnboardingMarkup(onboardingIndex);
+    if (readCustomerSession(browserStorage)) showApplication();
+    else {
+      startupFlow.innerHTML = isOnboardingCompleted(browserStorage)
+        ? createLoginMarkup()
+        : createOnboardingMarkup(onboardingIndex);
+    }
   }, 650);
   startupFlow.addEventListener('click', (event) => {
     if (event.target.closest('[data-skip-onboarding]')) {
@@ -276,10 +298,32 @@ export function initialiseHomePage(
       }
       return;
     }
-    if (event.target.closest('[data-enter-home]')) {
-      startupFlow.hidden = true;
-      appShell.hidden = false;
-      root.querySelector('#service-request')?.focus();
+    if (event.target.closest('[data-resend-otp]')) {
+      renderLogin({ step: 'otp', phone: maskVietnamesePhone(loginPhone), resendMessage: 'Mã xác thực mới đã sẵn sàng.' });
+    }
+  });
+  startupFlow.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (event.target.matches('[data-login-phone-form]')) {
+      const normalized = normalizeVietnamesePhone(event.target.elements.phone.value);
+      if (!normalized) {
+        loginPhone = event.target.elements.phone.value;
+        renderLogin({ error: 'Số điện thoại Việt Nam không hợp lệ.' });
+        return;
+      }
+      loginPhone = normalized;
+      renderLogin({ step: 'otp', phone: maskVietnamesePhone(loginPhone) });
+      startupFlow.querySelector('[name="otp"]')?.focus();
+      return;
+    }
+    if (event.target.matches('[data-login-otp-form]')) {
+      if (!isValidMockOtp(event.target.elements.otp.value)) {
+        renderLogin({ step: 'otp', phone: maskVietnamesePhone(loginPhone), error: 'Mã xác thực không đúng. Vui lòng thử lại.' });
+        return;
+      }
+      const session = createMockCustomerSession(loginPhone);
+      saveCustomerSession(browserStorage, session);
+      showApplication();
     }
   });
   const input = root.querySelector('#service-request');
@@ -342,6 +386,7 @@ export function initialiseHomePage(
     });
     globalThis.scrollTo?.({ top: 0, behavior: 'smooth' });
   };
+  openHomeView = () => showAppView('home');
 
   root.querySelectorAll('[data-prompt]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -775,8 +820,16 @@ export function initialiseHomePage(
     }
     if (event.target.closest('[data-profile-help]')) profileStatusMessage = 'Trung tâm trợ giúp sẽ được kết nối trong phiên bản tiếp theo.';
     if (event.target.closest('[data-profile-terms]')) profileStatusMessage = 'Điều khoản và chính sách quyền riêng tư sẽ được mở tại đây.';
-    if (event.target.closest('[data-profile-logout]')) profileStatusMessage = 'Bản demo: chưa có hệ thống đăng nhập để đăng xuất.';
-    if (event.target.closest('[data-profile-help], [data-profile-terms], [data-profile-logout]')) renderCustomerProfile();
+    if (event.target.closest('[data-profile-logout]')) {
+      clearCustomerSession(browserStorage);
+      saveOnboardingCompleted(browserStorage);
+      loginPhone = '';
+      appShell.hidden = true;
+      startupFlow.hidden = false;
+      renderLogin();
+      return;
+    }
+    if (event.target.closest('[data-profile-help], [data-profile-terms]')) renderCustomerProfile();
   });
   profileView.addEventListener('submit', (event) => {
     if (!event.target.matches('[data-address-form]')) return;

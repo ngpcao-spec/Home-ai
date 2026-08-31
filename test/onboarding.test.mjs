@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
-  createLoginPlaceholderMarkup,
+  createLoginMarkup,
   createOnboardingMarkup,
   createSplashMarkup,
   isOnboardingCompleted,
@@ -63,9 +63,11 @@ describe('C01/C02 démarrage et onboarding', () => {
     assert.equal(saveOnboardingCompleted(unavailableStorage), false);
   });
 
-  it('prépare C03 sans authentification réelle', () => {
-    const markup = createLoginPlaceholderMarkup();
-    ['Đăng nhập', 'chưa yêu cầu tài khoản hoặc mã OTP', 'Tiếp tục vào HOME AI', 'Không có dữ liệu đăng nhập nào được gửi hoặc lưu'].forEach((text) => assert.match(markup, new RegExp(text)));
-    assert.doesNotMatch(markup, /password|api key|access token/i);
+  it('prépare la saisie téléphone puis l’étape OTP de C03', () => {
+    const phoneMarkup = createLoginMarkup();
+    ['Chào mừng bạn', 'Nhập số điện thoại để tiếp tục', '+84', 'Số điện thoại', 'Tiếp tục'].forEach((text) => assert.match(phoneMarkup, new RegExp(text.replace('+', '\\+'))));
+    const otpMarkup = createLoginMarkup({ step: 'otp', phone: '+84 ••• ••• 789' });
+    ['Nhập mã xác thực', '+84 ••• ••• 789', 'Xác nhận', 'Gửi lại mã'].forEach((text) => assert.match(otpMarkup, new RegExp(text.replace('+', '\\+'))));
+    assert.doesNotMatch(`${phoneMarkup}${otpMarkup}`, /password|api key|access token/i);
   });
 });
