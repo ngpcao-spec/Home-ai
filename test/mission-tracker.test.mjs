@@ -7,8 +7,11 @@ import {
   createMissionState,
   decideSupplement,
   getAcceptedSupplement,
+  getMissionProgress,
+  markMissionArrived,
   missionStatuses,
   requestSupplement,
+  startMissionRepair,
   submitReview,
 } from '../src/mission/tracker.js';
 
@@ -40,6 +43,22 @@ describe('suivi local de mission', () => {
     assert.equal(confirmCompletion(initial).completionConfirmed, false);
     const completed = { ...initial, statusIndex: 4 };
     assert.equal(confirmCompletion(completed).completionConfirmed, true);
+  });
+
+  it('passe explicitement du suivi à l’arrivée avec la troisième étape active', () => {
+    const travelling = advanceMission(createMissionState());
+    const arrived = markMissionArrived(travelling);
+    assert.equal(missionStatuses[arrived.statusIndex].id, 'arrived');
+    assert.deepEqual(getMissionProgress(arrived).map(({ progress }) => progress), ['done', 'done', 'active', 'pending', 'pending']);
+    assert.equal(markMissionArrived(arrived), arrived);
+  });
+
+  it('démarre la réparation uniquement après une action explicite à l’arrivée', () => {
+    const travelling = advanceMission(createMissionState());
+    assert.equal(startMissionRepair(travelling), travelling);
+    const inProgress = startMissionRepair(markMissionArrived(travelling));
+    assert.equal(missionStatuses[inProgress.statusIndex].id, 'in_progress');
+    assert.deepEqual(getMissionProgress(inProgress).map(({ progress }) => progress), ['done', 'done', 'done', 'active', 'pending']);
   });
 
   it('accepte uniquement une évaluation entière de 1 à 5 étoiles', () => {

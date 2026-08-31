@@ -6,7 +6,7 @@ import { getClientLocation } from './location/client-location.js';
 import { createRouteService } from './routing/routing-provider.js';
 import { createMockProviderLocationSource } from './tracking/location-stream.js';
 import { createTrackingRouteSession } from './tracking/route-session.js';
-import { createTrackingStageMarkup, updateTrackingPresentation } from './tracking/tracking-sheet.js';
+import { createTrackingStageMarkup, updateInterventionPresentation, updateTrackingPresentation } from './tracking/tracking-sheet.js';
 import { createSearchPlan, getNextTechnician, prototypeSearchTiming, searchRadiiKm } from './search/map-search.js';
 import { createNoTechnicianMarkup, createTechnicianSheetMarkup } from './search/technician-sheet.js';
 import {
@@ -15,8 +15,11 @@ import {
   createMissionState,
   decideSupplement,
   getAcceptedSupplement,
+  getMissionProgress,
+  markMissionArrived,
   missionStatuses,
   requestSupplement,
+  startMissionRepair,
   submitReview,
 } from './mission/tracker.js';
 
@@ -223,7 +226,6 @@ export function initialiseHomePage(
     await provider.render(stage, { ...state, clientLocation });
   };
   let missionState = createMissionState();
-  let repairStartedAt = '';
   let trackingRoute;
   const trackingRoutes = createTrackingRouteSession(routingProvider);
 
@@ -456,8 +458,9 @@ export function initialiseHomePage(
     const status = missionStatuses[missionState.statusIndex];
     mission.querySelector('[data-mission-status-badge]').textContent = status.label;
     mission.querySelectorAll('[data-mission-step]').forEach((step, index) => {
-      step.classList.toggle('is-active', index === missionState.statusIndex);
-      step.classList.toggle('is-done', index < missionState.statusIndex);
+      const progress = getMissionProgress(missionState)[index].progress;
+      step.classList.toggle('is-active', progress === 'active');
+      step.classList.toggle('is-done', progress === 'done');
     });
     return status;
   };
@@ -469,11 +472,12 @@ export function initialiseHomePage(
       accepted: '<h3>Thợ đã nhận yêu cầu</h3><p>Thợ đang chuẩn bị dụng cụ cho nhiệm vụ.</p>',
       travelling: createTrackingStageMarkup(selectedTechnician),
       arrived: createTrackingStageMarkup(selectedTechnician),
-      repairing: `<h3>Đang sửa chữa</h3><dl><div><dt>Giờ bắt đầu</dt><dd>${repairStartedAt || 'Vừa bắt đầu'}</dd></div><div><dt>Thời lượng dự kiến</dt><dd>45 phút</dd></div></dl>${missionState.supplement.requested ? `<div class="supplement"><strong>Thợ đề nghị chi phí bổ sung</strong><p>${formatPrice(missionState.supplement.amount)}đ · ${missionState.supplement.reason}</p>${missionState.supplement.decision === 'pending' ? '<div><button type="button" data-extra-decision="accepted">Đồng ý</button><button type="button" data-extra-decision="declined">Từ chối</button></div>' : `<p class="decision">${missionState.supplement.decision === 'accepted' ? 'Bạn đã đồng ý khoản bổ sung.' : 'Bạn đã từ chối khoản bổ sung.'}</p>`}</div>` : '<button type="button" data-request-extra>Thợ đề nghị chi phí bổ sung</button>'}`,
+      in_progress: createTrackingStageMarkup(selectedTechnician),
       completed: missionState.completionConfirmed ? `<div class="review"><h3>Đánh giá dịch vụ</h3><p>Chọn từ 1 đến 5 sao</p><div class="stars" role="group" aria-label="Chọn số sao">${[1, 2, 3, 4, 5].map((rating) => `<button type="button" data-rating="${rating}" aria-label="${rating} sao" class="${missionState.rating >= rating ? 'is-selected' : ''}">★</button>`).join('')}</div><label>Nhận xét (không bắt buộc)<textarea data-review-comment rows="3" placeholder="Chia sẻ trải nghiệm của bạn..."></textarea></label><button type="button" data-send-review ${missionState.rating ? '' : 'disabled'}>Gửi đánh giá</button>${missionState.reviewSent ? '<p class="review-thanks">Cảm ơn bạn đã gửi đánh giá!</p>' : ''}</div>` : `<h3>Nhiệm vụ đã hoàn thành</h3><dl class="final-summary"><div><dt>Thợ</dt><dd>${selectedTechnician.name}</dd></div><div><dt>Vấn đề</dt><dd>${currentDiagnosis.summary}</dd></div><div><dt>Thời lượng</dt><dd>45 phút</dd></div><div><dt>Giá ban đầu</dt><dd>${formatPrice(selectedTechnician.priceFrom)}đ</dd></div><div><dt>Phụ phí đã đồng ý</dt><dd>${formatPrice(acceptedExtra)}đ</dd></div><div><dt>Tổng dự kiến</dt><dd>${formatPrice(selectedTechnician.priceFrom + acceptedExtra)}đ</dd></div></dl><button type="button" data-confirm-completion>Xác nhận hoàn thành</button>`,
     };
     stage.innerHTML = stageMarkup[status.id];
-    mission.querySelector('[data-mission-next]').hidden = ['travelling', 'arrived', 'completed'].includes(status.id);
+    if (status.id === 'in_progress') updateInterventionPresentation(stage);
+    mission.querySelector('[data-mission-next]').hidden = ['travelling', 'arrived', 'in_progress', 'completed'].includes(status.id);
   };
   const startTrackingMap = async () => {
     if (missionStatuses[missionState.statusIndex].id !== 'travelling') return;
@@ -497,7 +501,7 @@ export function initialiseHomePage(
         if (position.arrived && missionStatuses[missionState.statusIndex].id === 'travelling') {
           stopLocationStream?.();
           stopLocationStream = undefined;
-          missionState = advanceMission(missionState);
+          missionState = markMissionArrived(missionState);
           renderMissionProgress();
           mission.querySelector('[data-mission-next]').hidden = true;
         }
@@ -537,7 +541,13 @@ export function initialiseHomePage(
       return;
     }
     if (event.target.closest('[data-mission-next]')) missionState = advanceMission(missionState);
-    if (event.target.closest('[data-start-repair]')) { repairStartedAt = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(new Date()); missionState = advanceMission(missionState); }
+    if (event.target.closest('[data-start-repair]')) {
+      missionState = startMissionRepair(missionState);
+      renderMissionProgress();
+      updateInterventionPresentation(mission.querySelector('[data-mission-stage]'));
+      mission.querySelector('[data-mission-next]').hidden = true;
+      return;
+    }
     if (event.target.closest('[data-request-extra]')) missionState = requestSupplement(missionState);
     const decision = event.target.closest('[data-extra-decision]')?.dataset.extraDecision;
     if (decision) missionState = decideSupplement(missionState, decision);

@@ -2,7 +2,7 @@ export const missionStatuses = [
   { id: 'accepted', label: 'Đã nhận yêu cầu' },
   { id: 'travelling', label: 'Đang di chuyển' },
   { id: 'arrived', label: 'Đã đến nơi' },
-  { id: 'repairing', label: 'Đang sửa chữa' },
+  { id: 'in_progress', label: 'Đang sửa chữa' },
   { id: 'completed', label: 'Hoàn thành' },
 ];
 
@@ -18,6 +18,23 @@ export function createMissionState() {
 
 export function advanceMission(state) {
   return { ...state, statusIndex: Math.min(state.statusIndex + 1, missionStatuses.length - 1) };
+}
+
+export function markMissionArrived(state) {
+  if (missionStatuses[state.statusIndex].id !== 'travelling') return state;
+  return { ...state, statusIndex: missionStatuses.findIndex(({ id }) => id === 'arrived') };
+}
+
+export function startMissionRepair(state) {
+  if (missionStatuses[state.statusIndex].id !== 'arrived') return state;
+  return { ...state, statusIndex: missionStatuses.findIndex(({ id }) => id === 'in_progress') };
+}
+
+export function getMissionProgress(state) {
+  return missionStatuses.map((status, index) => ({
+    ...status,
+    progress: index < state.statusIndex ? 'done' : index === state.statusIndex ? 'active' : 'pending',
+  }));
 }
 
 export function requestSupplement(state) {

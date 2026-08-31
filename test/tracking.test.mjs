@@ -6,7 +6,11 @@ import {
   getProviderArrivalStatus,
 } from '../src/tracking/location-stream.js';
 import { createTrackingRouteSession } from '../src/tracking/route-session.js';
-import { createTrackingStageMarkup } from '../src/tracking/tracking-sheet.js';
+import {
+  createTrackingStageMarkup,
+  updateInterventionPresentation,
+  updateTrackingPresentation,
+} from '../src/tracking/tracking-sheet.js';
 
 const collectSource = (options) => {
   const callbacks = [];
@@ -81,5 +85,30 @@ describe('suivi C13', () => {
   it('rend la bottom sheet C13 avec les informations et actions attendues', () => {
     const markup = createTrackingStageMarkup({ initials: 'NM', name: 'Nguyễn Văn Minh', rating: 4.9, reviewCount: 186, shortDescription: 'Thợ điện dân dụng' });
     ['Thợ đang đến', 'Thời gian đến', 'Quãng đường còn lại', 'Gọi thợ', 'Nhắn tin', 'Bắt đầu sửa chữa'].forEach((text) => assert.match(markup, new RegExp(text)));
+  });
+
+  it('affiche l’arrivée à zéro puis masque les métriques au démarrage manuel', () => {
+    const nodes = new Map([
+      ['[data-tracking-status]', { textContent: '' }],
+      ['[data-tracking-eta]', { textContent: '' }],
+      ['[data-tracking-distance]', { textContent: '' }],
+      ['[data-start-repair]', { hidden: true }],
+      ['[data-tracking-message]', { textContent: '', hidden: true }],
+      ['[data-tracking-metrics]', { hidden: false }],
+    ]);
+    const container = { querySelector: (selector) => nodes.get(selector) };
+
+    updateTrackingPresentation(container, { arrived: true, status: 'Thợ đã đến', etaMinutes: 0, remainingDistanceKm: 0 });
+    assert.equal(nodes.get('[data-tracking-status]').textContent, 'Thợ đã đến');
+    assert.equal(nodes.get('[data-tracking-eta]').textContent, '0 phút');
+    assert.equal(nodes.get('[data-tracking-distance]').textContent, '0 m');
+    assert.equal(nodes.get('[data-tracking-message]').textContent, 'Thợ đã đến địa điểm của bạn.');
+    assert.equal(nodes.get('[data-start-repair]').hidden, false);
+
+    updateInterventionPresentation(container);
+    assert.equal(nodes.get('[data-tracking-status]').textContent, 'Đang sửa chữa');
+    assert.equal(nodes.get('[data-tracking-message]').textContent, 'Thợ đang kiểm tra và sửa chữa thiết bị của bạn.');
+    assert.equal(nodes.get('[data-tracking-metrics]').hidden, true);
+    assert.equal(nodes.get('[data-start-repair]').hidden, true);
   });
 });

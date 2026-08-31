@@ -11,7 +11,8 @@ export function createTrackingStageMarkup(technician) {
         <div><h3>${technician.name}</h3><p>⭐ ${technician.rating} · ${technician.reviewCount ?? 0} đánh giá</p><small>${technician.specialty ?? technician.shortDescription ?? technician.category}</small></div>
         <strong data-tracking-status>Thợ đang đến</strong>
       </div>
-      <div class="tracking-metrics">
+      <p class="tracking-status-message" data-tracking-message hidden></p>
+      <div class="tracking-metrics" data-tracking-metrics>
         <div><span>Thời gian đến</span><strong data-tracking-eta>Đang tính...</strong></div>
         <div><span>Quãng đường còn lại</span><strong data-tracking-distance>Đang tính...</strong></div>
       </div>
@@ -30,4 +31,16 @@ export function updateTrackingPresentation(container, position) {
   container.querySelector('[data-tracking-eta]').textContent = position.arrived ? '0 phút' : `${position.etaMinutes} phút`;
   container.querySelector('[data-tracking-distance]').textContent = formatDistance(position.remainingDistanceKm);
   container.querySelector('[data-start-repair]').hidden = !position.arrived;
+  const message = container.querySelector('[data-tracking-message]');
+  message.textContent = position.arrived ? 'Thợ đã đến địa điểm của bạn.' : '';
+  message.hidden = !position.arrived;
+}
+
+export function updateInterventionPresentation(container) {
+  container.querySelector('[data-tracking-status]').textContent = 'Đang sửa chữa';
+  const message = container.querySelector('[data-tracking-message]');
+  message.textContent = 'Thợ đang kiểm tra và sửa chữa thiết bị của bạn.';
+  message.hidden = false;
+  container.querySelector('[data-tracking-metrics]').hidden = true;
+  container.querySelector('[data-start-repair]').hidden = true;
 }
