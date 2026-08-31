@@ -25,4 +25,14 @@ describe('moteur de diagnostic local', () => {
       summary: 'Điều hòa phát ra tiếng ồn',
     });
   });
+
+  it('normalise le diagnostic C15 de climatisation et fournit les travaux proposés', async () => {
+    const result = await createMockDiagnostic({ delay: 0 }).analyse({
+      description: 'dieu hoa khong lanh',
+    });
+    assert.equal(result.categoryId, 'air-conditioning');
+    assert.equal(result.summary, 'Điều hòa không lạnh');
+    assert.equal(result.finding, 'Tụ điện máy nén hoạt động không ổn định và cần thay thế.');
+    assert.deepEqual(result.recommendedTasks, ['Thay tụ điện máy nén', 'Kiểm tra hệ thống', 'Vệ sinh cơ bản']);
+  });
 });

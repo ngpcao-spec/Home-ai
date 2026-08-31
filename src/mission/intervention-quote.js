@@ -27,6 +27,8 @@ export function createInterventionQuote(diagnosis, technician) {
   return {
     diagnosis: diagnosis.summary,
     recommendedWork: details.recommendedWork,
+    finding: diagnosis.finding ?? details.recommendedWork,
+    recommendedTasks: diagnosis.recommendedTasks ?? [details.recommendedWork],
     laborAmount,
     partsAmount: details.partsAmount,
     totalAmount: laborAmount + details.partsAmount,

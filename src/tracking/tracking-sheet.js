@@ -19,7 +19,9 @@ export function createInterventionQuoteMarkup(quote, phase = 'quote_pending') {
   return `<div class="intervention-diagnosis">
     <p class="quote-eyebrow">KẾT QUẢ CHẨN ĐOÁN</p>
     <h4>${escapeHtml(quote.diagnosis)}</h4>
-    <p>${escapeHtml(quote.recommendedWork)}</p>
+    <p>${escapeHtml(quote.finding ?? quote.recommendedWork)}</p>
+    <p class="quote-eyebrow quote-work-heading">CÔNG VIỆC ĐỀ XUẤT</p>
+    <ul class="recommended-work">${(quote.recommendedTasks ?? [quote.recommendedWork]).map((task) => `<li>${escapeHtml(task)}</li>`).join('')}</ul>
   </div>
   <div class="repair-quote">
     <div class="quote-heading"><div><p class="quote-eyebrow">BÁO GIÁ SỬA CHỮA</p><h4>${formatPrice(quote.totalAmount)}</h4></div><span>${quote.estimatedMinutes} phút</span></div>

@@ -1,7 +1,7 @@
 const CATEGORY_RULES = [
   {
     id: 'air-conditioning',
-    keywords: ['máy lạnh', 'điều hòa', 'điều hoà', 'air conditioner', 'không lạnh'],
+    keywords: ['máy lạnh', 'điều hòa', 'điều hoà', 'dieu hoa', 'air conditioner', 'không lạnh', 'khong lanh'],
   },
   {
     id: 'plumbing',
@@ -17,6 +17,22 @@ const CATEGORY_RULES = [
   },
 ];
 
+const noCoolingAirConditionerDiagnostic = {
+  summary: 'Điều hòa không lạnh',
+  finding: 'Tụ điện máy nén hoạt động không ổn định và cần thay thế.',
+  recommendedTasks: [
+    'Thay tụ điện máy nén',
+    'Kiểm tra hệ thống',
+    'Vệ sinh cơ bản',
+  ],
+};
+
+const withoutVietnameseAccents = (value) => value
+  .toLocaleLowerCase('vi')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replaceAll('đ', 'd');
+
 export function detectCategory(description, preferredCategory) {
   const normalizedDescription = description.toLocaleLowerCase('vi');
   const match = CATEGORY_RULES.find(({ keywords }) => (
@@ -31,9 +47,13 @@ export function createMockDiagnostic({ delay = 650 } = {}) {
     async analyse({ description, preferredCategory }) {
       if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
 
+      const categoryId = detectCategory(description, preferredCategory);
+      const isNoCoolingAirConditioner = categoryId === 'air-conditioning'
+        && withoutVietnameseAccents(description).includes('dieu hoa khong lanh');
       return {
-        categoryId: detectCategory(description, preferredCategory),
+        categoryId,
         summary: description.trim(),
+        ...(isNoCoolingAirConditioner ? noCoolingAirConditionerDiagnostic : {}),
       };
     },
   };

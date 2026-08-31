@@ -170,6 +170,7 @@ h1 em { color: var(--green); font-style: normal; }
 .tracking-provider > strong { padding: 6px 9px; border-radius: 999px; color: var(--dark-green); background: var(--mint); font-size: 10px; white-space: nowrap; }
 .tracking-status-message { margin: 12px 0 0 !important; color: #264b42 !important; font-size: 12px !important; font-weight: 750; text-align: center; }
 .tracking-metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 13px 0 10px; }
+.tracking-metrics[hidden] { display: none; }
 .tracking-metrics > div { padding: 10px; border-radius: 11px; background: #f2f7f5; }
 .tracking-metrics span, .tracking-metrics strong { display: block; }
 .tracking-metrics span { color: #6d817b; font-size: 9px; }
@@ -183,6 +184,8 @@ h1 em { color: var(--green); font-style: normal; }
 .intervention-diagnosis, .repair-quote { padding: 13px; border: 1px solid #d9e8e3; border-radius: 13px; background: #fff; }
 .intervention-diagnosis h4, .quote-heading h4 { margin: 3px 0 6px; color: #173d34; font-size: 14px; }
 .quote-eyebrow { margin: 0 !important; color: var(--green) !important; font-size: 8px !important; font-weight: 850; letter-spacing: .12em; }
+.quote-work-heading { margin-top: 12px !important; }
+.recommended-work { display: grid; gap: 5px; margin: 7px 0 0; padding-left: 18px; color: #36564e; font-size: 10px; line-height: 1.45; }
 .quote-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
 .quote-heading > span { padding: 5px 8px; border-radius: 999px; color: var(--dark-green); background: var(--mint); font-size: 9px; font-weight: 800; }
 .repair-quote dl div:last-child { color: var(--dark-green); font-size: 12px; }

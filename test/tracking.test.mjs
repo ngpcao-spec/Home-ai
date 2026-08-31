@@ -123,6 +123,8 @@ describe('suivi C13', () => {
     assert.deepEqual(quote, {
       diagnosis: 'Ổ cắm điện bị hỏng',
       recommendedWork: 'Kiểm tra mạch điện, thay ổ cắm bị hỏng và kiểm tra an toàn sau sửa chữa.',
+      finding: 'Kiểm tra mạch điện, thay ổ cắm bị hỏng và kiểm tra an toàn sau sửa chữa.',
+      recommendedTasks: ['Kiểm tra mạch điện, thay ổ cắm bị hỏng và kiểm tra an toàn sau sửa chữa.'],
       laborAmount: 150000,
       partsAmount: 120000,
       totalAmount: 270000,
@@ -131,6 +133,17 @@ describe('suivi C13', () => {
     });
     const markup = createInterventionQuoteMarkup(quote);
     ['KẾT QUẢ CHẨN ĐOÁN', 'BÁO GIÁ SỬA CHỮA', '270.000đ', 'Chấp nhận báo giá', 'Từ chối báo giá'].forEach((text) => assert.match(markup, new RegExp(text)));
+  });
+
+  it('rend le diagnostic C15 accentué et la liste des travaux issus du modèle', () => {
+    const quote = createInterventionQuote({
+      summary: 'Điều hòa không lạnh',
+      finding: 'Tụ điện máy nén hoạt động không ổn định và cần thay thế.',
+      recommendedTasks: ['Thay tụ điện máy nén', 'Kiểm tra hệ thống', 'Vệ sinh cơ bản'],
+    }, { category: 'air-conditioning', priceFrom: 180000 });
+    const markup = createInterventionQuoteMarkup(quote);
+    ['Điều hòa không lạnh', 'Tụ điện máy nén hoạt động không ổn định và cần thay thế.', 'CÔNG VIỆC ĐỀ XUẤT', 'Thay tụ điện máy nén', 'Kiểm tra hệ thống', 'Vệ sinh cơ bản'].forEach((text) => assert.match(markup, new RegExp(text)));
+    assert.doesNotMatch(markup, /dieu hoa khong lanh/);
   });
 
   it('présente distinctement attente, acceptation et refus sans retirer la fiche technicien', () => {
