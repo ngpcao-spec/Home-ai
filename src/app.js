@@ -8,6 +8,12 @@ import { createMockProviderLocationSource } from './tracking/location-stream.js'
 import { createTrackingRouteSession } from './tracking/route-session.js';
 import { createInterventionQuote } from './mission/intervention-quote.js';
 import { createCompletionSummaryMarkup, createPaidExternalMarkup, createProviderReviewMarkup } from './mission/completion-summary.js';
+import {
+  createCompletedMissionRecord,
+  createMissionDetailMarkup,
+  createMissionHistoryMarkup,
+  getClientMissionHistory,
+} from './mission/history.js';
 import { createTrackingStageMarkup, updateInterventionQuotePresentation, updateTrackingPresentation } from './tracking/tracking-sheet.js';
 import { createSearchPlan, getNextTechnician, prototypeSearchTiming, searchRadiiKm } from './search/map-search.js';
 import { createNoTechnicianMarkup, createTechnicianSheetMarkup } from './search/technician-sheet.js';
@@ -126,6 +132,7 @@ export function createHomeAiMarkup() {
       </header>
 
       <main>
+        <div data-app-view="home">
         <section class="hero" aria-labelledby="home-title">
           <div class="trust-badge"><span>✓</span> Thợ uy tín gần bạn</div>
           <h1 id="home-title">Bạn cần sửa gì<br /><em>hôm nay?</em></h1>
@@ -196,9 +203,22 @@ export function createHomeAiMarkup() {
           <div><strong>Nhanh chóng &amp; an tâm</strong><span>Kết nối thợ phù hợp, báo giá minh bạch</span></div>
           <span class="rating">★ 4.9</span>
         </section>
+        </div>
+
+        <section class="history-view" data-app-view="history" hidden aria-label="Lịch sử interventions"></section>
+        <section class="mission-detail-view" data-app-view="mission-detail" hidden aria-label="Chi tiết chuyến"></section>
+        <section class="profile-view" data-app-view="profile" hidden aria-labelledby="profile-title">
+          <p class="quote-eyebrow">TÀI KHOẢN KHÁCH HÀNG</p><h1 id="profile-title">Hồ sơ</h1>
+          <article><span class="profile-user-avatar" aria-hidden="true">PD</span><div><strong>Phú Dũng</strong><span>Khách hàng HOME AI</span></div></article>
+        </section>
       </main>
 
       <footer><span>Đã phục vụ hơn <strong>10.000+</strong> gia đình Việt</span></footer>
+      <nav class="app-navigation" aria-label="Điều hướng chính">
+        <button type="button" data-navigation="home" class="is-active" aria-current="page"><span aria-hidden="true">⌂</span>Accueil</button>
+        <button type="button" data-navigation="history"><span aria-hidden="true">↻</span>Lịch sử</button>
+        <button type="button" data-navigation="profile"><span aria-hidden="true">○</span>Hồ sơ</button>
+      </nav>
     </div>`;
 }
 
@@ -235,8 +255,33 @@ export function initialiseHomePage(
     await provider.render(stage, { ...state, clientLocation });
   };
   let missionState = createMissionState();
+  let missionBookedAt;
   let trackingRoute;
   const trackingRoutes = createTrackingRouteSession(routingProvider);
+  const getCurrentMissionRecord = () => createCompletedMissionRecord(missionState, {
+    problem: currentDiagnosis?.summary ?? '',
+    service: currentDiagnosis?.service ?? '',
+    address: bookingForm?.elements.address.value ?? '',
+    bookedAt: missionBookedAt,
+    technician: selectedTechnician ?? {},
+  });
+  const getMissionHistory = () => getClientMissionHistory(getCurrentMissionRecord());
+  const showAppView = (view, missionId) => {
+    if (view === 'history') root.querySelector('[data-app-view="history"]').innerHTML = createMissionHistoryMarkup(getMissionHistory());
+    if (view === 'mission-detail') {
+      const selectedMission = getMissionHistory().find((item) => item.missionId === missionId);
+      root.querySelector('[data-app-view="mission-detail"]').innerHTML = createMissionDetailMarkup(selectedMission);
+    }
+    root.querySelectorAll('[data-app-view]').forEach((section) => { section.hidden = section.dataset.appView !== view; });
+    root.querySelectorAll('[data-navigation]').forEach((button) => {
+      const activeView = view === 'mission-detail' ? 'history' : view;
+      const isActive = button.dataset.navigation === activeView;
+      button.classList.toggle('is-active', isActive);
+      if (isActive) button.setAttribute('aria-current', 'page');
+      else button.removeAttribute('aria-current');
+    });
+    globalThis.scrollTo?.({ top: 0, behavior: 'smooth' });
+  };
 
   root.querySelectorAll('[data-prompt]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -448,6 +493,7 @@ export function initialiseHomePage(
     submit.disabled = true;
     root.querySelector('[data-booking-status]').textContent = 'Đang gửi yêu cầu đến thợ...';
     scheduleTask(() => {
+      missionBookedAt = new Date().toISOString();
       const confirmation = root.querySelector('[data-booking-confirmation]');
       const estimate = bookingPanel.querySelector('[data-booking-estimate]').textContent;
       confirmation.querySelector('[data-confirmation-technician]').textContent = selectedTechnician.name;
@@ -604,11 +650,28 @@ export function initialiseHomePage(
     const rating = Number(event.target.closest('[data-rating]')?.dataset.rating);
     if (rating && !missionState.reviewSent) missionState = { ...missionState, rating, reviewComment: mission.querySelector('[data-review-comment]')?.value ?? missionState.reviewComment };
     if (event.target.closest('[data-send-review]')) missionState = submitReview(missionState, missionState.rating, mission.querySelector('[data-review-comment]')?.value);
-    if (event.target.closest('[data-view-mission-detail]')) missionState = prepareMissionDetail(missionState);
+    if (event.target.closest('[data-view-mission-detail]')) {
+      missionState = prepareMissionDetail(missionState);
+      renderMission();
+      showAppView('mission-detail', missionState.completion.missionId);
+      return;
+    }
     renderMission();
     void startTrackingMap();
   });
   root.querySelector('[data-cancel-request]').addEventListener('click', () => { root.querySelector('[data-confirmation-status]').textContent = 'Yêu cầu đã được hủy.'; });
+
+  root.querySelector('.app-navigation').addEventListener('click', (event) => {
+    const destination = event.target.closest('[data-navigation]')?.dataset.navigation;
+    if (destination) showAppView(destination);
+  });
+  root.querySelector('[data-app-view="history"]').addEventListener('click', (event) => {
+    const missionId = event.target.closest('[data-open-mission]')?.dataset.openMission;
+    if (missionId) showAppView('mission-detail', missionId);
+  });
+  root.querySelector('[data-app-view="mission-detail"]').addEventListener('click', (event) => {
+    if (event.target.closest('[data-back-history]')) showAppView('history');
+  });
 
   root.querySelector('[data-location]').addEventListener('click', () => {
     const label = root.querySelector('[data-location-label]');

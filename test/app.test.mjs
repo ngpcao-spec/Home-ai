@@ -50,4 +50,10 @@ describe('HOME AI C04 marketplace home page', () => {
     ['Hành trình của thợ', 'Đã nhận yêu cầu', 'Đang di chuyển', 'Đã đến nơi', 'Đang sửa chữa', 'Hoàn thành', 'Chuyển sang bước tiếp theo'].forEach((text) => assert.match(markup, new RegExp(text)));
     assert.match(markup, /data-mission-stage/);
   });
+
+  it('renders the responsive C19 navigation and application views', () => {
+    const markup = createHomeAiMarkup();
+    ['Accueil', 'Lịch sử', 'Hồ sơ'].forEach((text) => assert.match(markup, new RegExp(text)));
+    ['home', 'history', 'mission-detail', 'profile'].forEach((view) => assert.match(markup, new RegExp(`data-app-view="${view}"`)));
+  });
 });
