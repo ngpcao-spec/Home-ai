@@ -195,6 +195,17 @@ h1 em { color: var(--green); font-style: normal; }
 .quote-decision { margin-top: 10px !important; padding: 9px; border-radius: 9px; font-weight: 800; text-align: center; }
 .quote-decision--accepted { color: var(--dark-green) !important; background: var(--mint); }
 .quote-decision--declined { color: #9b432d !important; background: #fff1eb; }
+.intervention-progress, .supplement-quote { display: grid; gap: 10px; margin-top: 10px; padding: 13px; border: 1px solid #d9e8e3; border-radius: 13px; background: #fff; }
+.mission-stage .discover-supplement { width: 100%; background: #315f54; }
+.authorized-summary { margin: 0 !important; }
+.supplement-quote { margin: 0; border-color: #f0c5b5; background: #fff8f4; }
+.supplement-totals { display: grid; gap: 5px; padding: 9px; border-radius: 9px; background: white; }
+.supplement-totals p { display: flex; justify-content: space-between; margin: 0 !important; }
+.supplement-totals strong { color: #173d34; }
+.quote-history ol { display: grid; gap: 5px; margin: 7px 0 0; padding: 0; list-style: none; }
+.quote-history li { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; color: #526c65; font-size: 9px; }
+.quote-history li span { font-weight: 800; }
+.quote-history li em { font-style: normal; }
 .tracking-route-error { margin-top: 10px !important; }
 
 .services { max-width: 780px; margin: 12px auto 0; }

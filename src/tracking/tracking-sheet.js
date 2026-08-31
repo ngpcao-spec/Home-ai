@@ -36,6 +36,49 @@ export function createInterventionQuoteMarkup(quote, phase = 'quote_pending') {
   </div>`;
 }
 
+const quoteStatusLabel = {
+  accepted: 'accepted',
+  supplement_pending: 'supplement_pending',
+  rejected: 'rejected',
+};
+
+export function createInterventionProgressMarkup(state) {
+  const [initial, supplement] = state.quoteHistory ?? [];
+  if (!initial || initial.status !== 'accepted') return '';
+  const authorizedTotal = supplement?.status === 'accepted' ? supplement.totalAmount : initial.totalAmount;
+  const supplementPanel = supplement
+    ? `<section class="supplement-quote">
+      <p class="quote-eyebrow">CHI PHÍ PHÁT SINH</p>
+      <h4>${escapeHtml(supplement.finding)}</h4>
+      <dl>
+        <div><dt>Linh kiện bổ sung</dt><dd>${formatPrice(supplement.additionalPartsAmount)}</dd></div>
+        <div><dt>Công bổ sung</dt><dd>${formatPrice(supplement.additionalLaborAmount)}</dd></div>
+        <div><dt>Tổng phụ phí</dt><dd>+${formatPrice(supplement.supplementAmount)}</dd></div>
+      </dl>
+      <div class="supplement-totals">
+        <p><span>Giá đã chấp nhận</span><strong>${formatPrice(initial.totalAmount)}</strong></p>
+        <p><span>Phụ phí</span><strong>+${formatPrice(supplement.supplementAmount)}</strong></p>
+        <p><span>Tổng mới đề xuất</span><strong>${formatPrice(supplement.totalAmount)}</strong></p>
+      </div>
+      ${supplement.status === 'supplement_pending'
+        ? '<div class="quote-actions"><button type="button" data-supplement-quote-decision="accepted">Đồng ý chi phí phát sinh</button><button type="button" data-supplement-quote-decision="rejected">Từ chối</button></div>'
+        : `<p class="quote-decision ${supplement.status === 'accepted' ? 'quote-decision--accepted' : 'quote-decision--declined'}" role="status">${supplement.status === 'accepted' ? 'Đã đồng ý chi phí phát sinh.' : 'Đã từ chối chi phí phát sinh.'}</p>`}
+    </section>`
+    : '<button class="discover-supplement" type="button" data-discover-supplement>Mô phỏng phát hiện chi phí phát sinh</button>';
+  const history = state.quoteHistory.map((version) => `<li><strong>v${version.version}</strong><span>${formatPrice(version.totalAmount)}</span><em>${quoteStatusLabel[version.status] ?? version.status}</em></li>`).join('');
+  return `<section class="intervention-progress">
+    <p class="quote-eyebrow">CÔNG VIỆC ĐÃ ĐƯỢC CHẤP NHẬN</p>
+    <ul class="recommended-work">${initial.recommendedTasks.map((task) => `<li>${escapeHtml(task)}</li>`).join('')}</ul>
+    <dl class="authorized-summary">
+      <div><dt>Giá đã chấp nhận</dt><dd>${formatPrice(initial.totalAmount)}</dd></div>
+      <div><dt>Bảo hành</dt><dd>${initial.warrantyDays} ngày</dd></div>
+      <div><dt>Giá được phép thực hiện</dt><dd>${formatPrice(authorizedTotal)}</dd></div>
+    </dl>
+    ${supplementPanel}
+    <div class="quote-history"><p class="quote-eyebrow">LỊCH SỬ BÁO GIÁ</p><ol>${history}</ol></div>
+  </section>`;
+}
+
 export function createTrackingStageMarkup(technician) {
   return `<div class="tracking-shell">
     <div class="tracking-map" data-tracking-map aria-label="Bản đồ theo dõi thợ"></div>
@@ -88,10 +131,13 @@ export function updateInterventionQuotePresentation(container, state) {
   container.querySelector('[data-tracking-metrics]').hidden = true;
   container.querySelector('[data-start-repair]').hidden = true;
   quote.hidden = false;
-  quote.innerHTML = createInterventionQuoteMarkup(state.quote, phase);
+  quote.innerHTML = createInterventionQuoteMarkup(state.quote, phase)
+    + (phase === 'repairing' ? createInterventionProgressMarkup(state) : '');
   if (phase === 'repairing') {
     status.textContent = 'Đang sửa chữa';
-    message.textContent = 'Thợ đang kiểm tra và sửa chữa thiết bị của bạn.';
+    message.textContent = state.quoteHistory?.[1]?.status === 'supplement_pending'
+      ? 'Phát hiện chi phí phát sinh cần bạn xác nhận.'
+      : 'Thợ đang kiểm tra và sửa chữa thiết bị của bạn.';
   } else if (phase === 'quote_declined') {
     status.textContent = 'Đã từ chối báo giá';
     message.textContent = 'Việc sửa chữa chưa bắt đầu.';

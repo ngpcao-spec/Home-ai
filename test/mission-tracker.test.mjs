@@ -5,13 +5,16 @@ import {
   advanceMission,
   confirmCompletion,
   createMissionState,
+  decideMissionSupplement,
   decideRepairQuote,
   decideSupplement,
   getAcceptedSupplement,
+  getAuthorizedMissionTotal,
   getMissionProgress,
   markMissionArrived,
   missionStatuses,
   requestSupplement,
+  discoverMissionSupplement,
   startMissionDiagnosis,
   startMissionRepair,
   submitReview,
@@ -72,12 +75,12 @@ describe('suivi local de mission', () => {
     const pending = startMissionDiagnosis(arrived, quote);
     assert.equal(missionStatuses[pending.statusIndex].id, 'in_progress');
     assert.equal(pending.interventionPhase, 'quote_pending');
-    assert.equal(pending.quote.decision, 'pending');
+    assert.equal(pending.quote.status, 'pending');
     assert.equal(decideRepairQuote(createMissionState(), 'accepted').interventionPhase, 'idle');
 
     const accepted = decideRepairQuote(pending, 'accepted');
     assert.equal(accepted.interventionPhase, 'repairing');
-    assert.equal(accepted.quote.decision, 'accepted');
+    assert.equal(accepted.quote.status, 'accepted');
   });
 
   it('un refus de devis ne démarre jamais la réparation', () => {
@@ -85,8 +88,48 @@ describe('suivi local de mission', () => {
     const pending = startMissionDiagnosis(arrived, { diagnosis: 'Thiết bị hỏng', totalAmount: 300000 });
     const declined = decideRepairQuote(pending, 'declined');
     assert.equal(declined.interventionPhase, 'quote_declined');
-    assert.equal(declined.quote.decision, 'declined');
+    assert.equal(declined.quote.status, 'declined');
     assert.equal(decideRepairQuote(declined, 'accepted'), declined);
+  });
+
+  it('crée v2 sans modifier v1 et autorise 390.000đ après accord', () => {
+    const arrived = markMissionArrived(advanceMission(createMissionState()));
+    const pending = startMissionDiagnosis(arrived, {
+      diagnosis: 'Điều hòa không lạnh',
+      recommendedTasks: ['Thay tụ điện máy nén', 'Kiểm tra hệ thống', 'Vệ sinh cơ bản'],
+      totalAmount: 290000,
+      warrantyDays: 30,
+    });
+    const repairing = decideRepairQuote(pending, 'accepted');
+    const acceptedV1 = repairing.quoteHistory[0];
+    const supplemented = discoverMissionSupplement(repairing);
+
+    assert.equal(Object.isFrozen(acceptedV1), true);
+    assert.equal(supplemented.quoteHistory[0], acceptedV1);
+    assert.deepEqual(supplemented.quoteHistory.map(({ version, status, totalAmount }) => ({ version, status, totalAmount })), [
+      { version: 1, status: 'accepted', totalAmount: 290000 },
+      { version: 2, status: 'supplement_pending', totalAmount: 390000 },
+    ]);
+    assert.equal(supplemented.quoteHistory[1].supplementAmount, 100000);
+    assert.equal(getAuthorizedMissionTotal(supplemented), 290000);
+
+    const accepted = decideMissionSupplement(supplemented, 'accepted');
+    assert.equal(accepted.quoteHistory[0], acceptedV1);
+    assert.equal(accepted.quoteHistory[1].status, 'accepted');
+    assert.equal(getAuthorizedMissionTotal(accepted), 390000);
+  });
+
+  it('conserve v1 et v2 après refus avec un prix autorisé de 290.000đ', () => {
+    const arrived = markMissionArrived(advanceMission(createMissionState()));
+    const pending = startMissionDiagnosis(arrived, { diagnosis: 'Điều hòa không lạnh', recommendedTasks: [], totalAmount: 290000, warrantyDays: 30 });
+    const supplemented = discoverMissionSupplement(decideRepairQuote(pending, 'accepted'));
+    const rejected = decideMissionSupplement(supplemented, 'rejected');
+    assert.deepEqual(rejected.quoteHistory.map(({ version, status }) => ({ version, status })), [
+      { version: 1, status: 'accepted' },
+      { version: 2, status: 'rejected' },
+    ]);
+    assert.equal(getAuthorizedMissionTotal(rejected), 290000);
+    assert.equal(decideMissionSupplement(rejected, 'accepted'), rejected);
   });
 
   it('accepte uniquement une évaluation entière de 1 à 5 étoiles', () => {

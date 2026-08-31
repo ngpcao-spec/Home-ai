@@ -15,9 +15,11 @@ import {
   confirmCompletion,
   createMissionState,
   decideRepairQuote,
+  decideMissionSupplement,
   decideSupplement,
   getAcceptedSupplement,
   getMissionProgress,
+  discoverMissionSupplement,
   markMissionArrived,
   missionStatuses,
   requestSupplement,
@@ -556,6 +558,17 @@ export function initialiseHomePage(
     if (quoteDecision) {
       missionState = decideRepairQuote(missionState, quoteDecision);
       mission.querySelector('[data-mission-status-badge]').textContent = updateInterventionQuotePresentation(mission.querySelector('[data-mission-stage]'), missionState);
+      return;
+    }
+    if (event.target.closest('[data-discover-supplement]')) {
+      missionState = discoverMissionSupplement(missionState);
+      updateInterventionQuotePresentation(mission.querySelector('[data-mission-stage]'), missionState);
+      return;
+    }
+    const supplementDecision = event.target.closest('[data-supplement-quote-decision]')?.dataset.supplementQuoteDecision;
+    if (supplementDecision) {
+      missionState = decideMissionSupplement(missionState, supplementDecision);
+      updateInterventionQuotePresentation(mission.querySelector('[data-mission-stage]'), missionState);
       return;
     }
     if (event.target.closest('[data-request-extra]')) missionState = requestSupplement(missionState);

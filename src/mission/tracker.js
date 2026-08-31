@@ -11,6 +11,7 @@ export function createMissionState() {
     statusIndex: 0,
     interventionPhase: 'idle',
     quote: null,
+    quoteHistory: [],
     supplement: { amount: 120000, reason: 'Cần thay linh kiện bị hỏng', decision: 'pending', requested: false },
     completionConfirmed: false,
     rating: 0,
@@ -34,22 +35,42 @@ export function startMissionRepair(state) {
 
 export function startMissionDiagnosis(state, quote) {
   if (missionStatuses[state.statusIndex].id !== 'arrived' || !quote) return state;
+  const version = createInitialQuoteVersion(quote);
   return {
     ...state,
     statusIndex: missionStatuses.findIndex(({ id }) => id === 'in_progress'),
     interventionPhase: 'quote_pending',
-    quote: { ...quote, decision: 'pending' },
+    quote: version,
+    quoteHistory: [version],
   };
 }
 
 export function decideRepairQuote(state, decision) {
   if (state.interventionPhase !== 'quote_pending' || !['accepted', 'declined'].includes(decision)) return state;
+  const version = decideInitialQuoteVersion(state.quoteHistory[0], decision);
   return {
     ...state,
     interventionPhase: decision === 'accepted' ? 'repairing' : 'quote_declined',
-    quote: { ...state.quote, decision },
+    quote: version,
+    quoteHistory: [version],
   };
 }
+
+export function discoverMissionSupplement(state) {
+  if (state.interventionPhase !== 'repairing' || state.quoteHistory.length !== 1) return state;
+  const version = createSupplementQuoteVersion(state.quoteHistory[0]);
+  if (!version) return state;
+  return { ...state, quoteHistory: [...state.quoteHistory, version] };
+}
+
+export function decideMissionSupplement(state, decision) {
+  const version = state.quoteHistory[1];
+  const decidedVersion = decideSupplementQuoteVersion(version, decision);
+  if (decidedVersion === version) return state;
+  return { ...state, quoteHistory: [state.quoteHistory[0], decidedVersion] };
+}
+
+export const getAuthorizedMissionTotal = (state) => getAuthorizedQuoteTotal(state.quoteHistory);
 
 export function getMissionProgress(state) {
   return missionStatuses.map((status, index) => ({
@@ -80,3 +101,10 @@ export function submitReview(state, rating) {
   if (!state.completionConfirmed || !Number.isInteger(rating) || rating < 1 || rating > 5) return state;
   return { ...state, rating, reviewSent: true };
 }
+import {
+  createInitialQuoteVersion,
+  createSupplementQuoteVersion,
+  decideInitialQuoteVersion,
+  decideSupplementQuoteVersion,
+  getAuthorizedQuoteTotal,
+} from './quote-versioning.js';

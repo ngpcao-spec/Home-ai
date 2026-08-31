@@ -11,7 +11,7 @@ const quoteDetailsByCategory = {
   },
   'air-conditioning': {
     recommendedWork: 'Kiểm tra hệ thống làm lạnh, xử lý bộ phận lỗi và chạy thử thiết bị.',
-    partsAmount: 180000,
+    partsAmount: 110000,
     estimatedMinutes: 60,
   },
   appliances: {

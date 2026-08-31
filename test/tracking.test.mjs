@@ -9,6 +9,7 @@ import { createTrackingRouteSession } from '../src/tracking/route-session.js';
 import { createInterventionQuote } from '../src/mission/intervention-quote.js';
 import {
   createInterventionQuoteMarkup,
+  createInterventionProgressMarkup,
   createTrackingStageMarkup,
   updateInterventionQuotePresentation,
   updateInterventionPresentation,
@@ -144,6 +145,28 @@ describe('suivi C13', () => {
     const markup = createInterventionQuoteMarkup(quote);
     ['Điều hòa không lạnh', 'Tụ điện máy nén hoạt động không ổn định và cần thay thế.', 'CÔNG VIỆC ĐỀ XUẤT', 'Thay tụ điện máy nén', 'Kiểm tra hệ thống', 'Vệ sinh cơ bản'].forEach((text) => assert.match(markup, new RegExp(text)));
     assert.doesNotMatch(markup, /dieu hoa khong lanh/);
+    assert.equal(quote.totalAmount, 290000);
+  });
+
+  it('rend v1 et v2 C16 avec les montants et décisions explicites', () => {
+    const v1 = Object.freeze({
+      version: 1,
+      status: 'accepted',
+      totalAmount: 290000,
+      warrantyDays: 30,
+      recommendedTasks: ['Thay tụ điện máy nén', 'Kiểm tra hệ thống', 'Vệ sinh cơ bản'],
+    });
+    const v2 = Object.freeze({
+      version: 2,
+      status: 'supplement_pending',
+      finding: 'Dây điện nguồn bị hư và cần thay thế.',
+      additionalPartsAmount: 80000,
+      additionalLaborAmount: 20000,
+      supplementAmount: 100000,
+      totalAmount: 390000,
+    });
+    const markup = createInterventionProgressMarkup({ quoteHistory: [v1, v2] });
+    ['CÔNG VIỆC ĐÃ ĐƯỢC CHẤP NHẬN', '290.000đ', '30 ngày', 'Dây điện nguồn bị hư và cần thay thế.', '80.000đ', '20.000đ', '+100.000đ', '390.000đ', 'Đồng ý chi phí phát sinh', 'Từ chối', 'v1', 'v2', 'supplement_pending'].forEach((text) => assert.match(markup, new RegExp(text.replace('+', '\\+'))));
   });
 
   it('présente distinctement attente, acceptation et refus sans retirer la fiche technicien', () => {
@@ -161,7 +184,8 @@ describe('suivi C13', () => {
     assert.match(nodes.get('[data-intervention-quote]').innerHTML, /&lt;script&gt;test&lt;\/script&gt;/);
     assert.doesNotMatch(nodes.get('[data-intervention-quote]').innerHTML, /<script>/);
 
-    assert.equal(updateInterventionQuotePresentation(container, { ...pending, interventionPhase: 'repairing' }), 'Đang sửa chữa');
+    const acceptedQuote = Object.freeze({ ...quote, version: 1, status: 'accepted' });
+    assert.equal(updateInterventionQuotePresentation(container, { ...pending, quote: acceptedQuote, quoteHistory: [acceptedQuote], interventionPhase: 'repairing' }), 'Đang sửa chữa');
     assert.match(nodes.get('[data-intervention-quote]').innerHTML, /Bạn đã chấp nhận báo giá/);
     assert.equal(updateInterventionQuotePresentation(container, { ...pending, interventionPhase: 'quote_declined' }), 'Đã từ chối báo giá');
     assert.match(nodes.get('[data-intervention-quote]').innerHTML, /Việc sửa chữa chưa bắt đầu/);
