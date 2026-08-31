@@ -30,7 +30,7 @@ describe('Amazon Location v2 dispatch', () => {
     const calls = [];
     const service = createAmazonRouteService({ apiKey: 'placeholder', fetch: async (url, options) => {
       calls.push({ url, body: JSON.parse(options.body) });
-      return { ok: true, status: 200, json: async () => calls.length === 1 ? { RouteMatrix: [[{ Status: 'Ok', Distance: 1, Duration: 60 }], [{ Status: 'Ok', Distance: 2, Duration: 120 }]] } : { Legs: [], Summary: { Distance: 1, Duration: 60 } } };
+      return { ok: true, status: 200, json: async () => calls.length === 1 ? { RouteMatrix: [[{ Status: 'Ok', Distance: 1, Duration: 60 }], [{ Status: 'Ok', Distance: 2, Duration: 120 }]] } : { Routes: [{ Legs: [{ Geometry: { LineString: [[109.1, 12.2], [109.1967, 12.2388]] } }], Summary: { Distance: 1000, Duration: 600 } }] } };
     } });
     await service.matrix(technicians.map((item, index) => ({ ...item, longitude: 109.1 + index, latitude: 12.2 + index })), { longitude: 109.1967, latitude: 12.2388 });
     const route = await service.route({ longitude: 109.1, latitude: 12.2 }, { longitude: 109.1967, latitude: 12.2388 });
@@ -38,7 +38,10 @@ describe('Amazon Location v2 dispatch', () => {
     assert.deepEqual(calls[0].body.Origins[0].Position, [109.1, 12.2]);
     assert.deepEqual(calls[0].body.Destinations[0].Position, [109.1967, 12.2388]);
     assert.equal(new URL(calls[1].url).pathname, '/v2/routes');
-    assert.equal(route.distanceKm, 0.001);
+    assert.equal(calls[1].body.LegGeometryFormat, 'Simple');
+    assert.equal(route.distanceKm, 1);
+    assert.equal(route.durationMinutes, 10);
+    assert.deepEqual(route.points, [{ longitude: 109.1, latitude: 12.2 }, { longitude: 109.1967, latitude: 12.2388 }]);
   });
 
   it('retourne un échec de routage au lieu d’un faux ETA', async () => {

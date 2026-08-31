@@ -48,7 +48,12 @@ export function createAmazonRouteService({ apiKey, region = 'ap-southeast-1', fe
   return {
     id: 'amazon-location-routes', travelMode,
     async matrix(technicians, client) { return mapRouteMatrixResponse(await request('CalculateRouteMatrix', 'route-matrix', { Origins: technicians.map((item) => ({ Position: position(item) })), Destinations: [{ Position: position(client) }], TravelMode: travelMode }), technicians); },
-    async route(origin, destination) { const data = await request('CalculateRoutes', 'routes', { Origin: position(origin), Destination: position(destination), TravelMode: travelMode }); const points = data.Legs?.flatMap((leg) => leg.Geometry?.LineString ?? []).map(([longitude, latitude]) => ({ longitude, latitude })) ?? []; return { distanceKm: data.Summary?.Distance / 1000, durationMinutes: Math.ceil(data.Summary?.Duration / 60), points, source: 'amazon-location' }; },
+    async route(origin, destination) {
+      const data = await request('CalculateRoutes', 'routes', { Origin: position(origin), Destination: position(destination), TravelMode: travelMode, LegGeometryFormat: 'Simple' });
+      const route = data.Routes?.[0] ?? data;
+      const points = route.Legs?.flatMap((leg) => leg.Geometry?.LineString ?? []).map(([longitude, latitude]) => ({ longitude, latitude })) ?? [];
+      return { distanceKm: route.Summary?.Distance / 1000, durationMinutes: Math.ceil(route.Summary?.Duration / 60), points, source: 'amazon-location' };
+    },
   };
 }
 
