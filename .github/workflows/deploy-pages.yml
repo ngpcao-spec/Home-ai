@@ -11,7 +11,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  group: pages-${{ github.repository }}
   cancel-in-progress: true
 
 jobs:
@@ -37,7 +37,11 @@ jobs:
         run: |
           test -n "$AMAZON_LOCATION_API_KEY" || { echo "AMAZON_LOCATION_API_KEY is not configured" >&2; exit 1; }
           npm run build
-          node -e "const fs=require('fs'); const bundle=fs.readFileSync('dist/src/runtime-config.js','utf8'); if (!bundle.includes(process.env.AMAZON_LOCATION_API_KEY)) process.exit(1); console.log('Amazon Location runtime configuration verified (value redacted).')"
+        env:
+          AMAZON_LOCATION_API_KEY: ${{ secrets.AMAZON_LOCATION_API_KEY }}
+
+      - name: Verify production runtime configuration
+        run: node scripts/verify-runtime-config.mjs
         env:
           AMAZON_LOCATION_API_KEY: ${{ secrets.AMAZON_LOCATION_API_KEY }}
 
