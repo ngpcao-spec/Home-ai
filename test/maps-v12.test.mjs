@@ -33,10 +33,12 @@ describe('architecture cartographique V1.2', () => {
   it('simule une route fluide avec ETA et distance décroissantes', async () => {
     const route = await createMockRoutingProvider().route(mockTechnicians[0], nhaTrangFallbackLocation);
     const callbacks = []; const values = [];
-    const stream = createMockProviderLocationStream({ providerId: 'x', route: route.points.slice(0, 4), durationMinutes: 4, scheduler(fn) { callbacks.push(fn); return 1; }, cancel() {} });
+    const stream = createMockProviderLocationStream({ providerId: 'x', route: route.points.slice(0, 4), durationMinutes: 4, sampleCount: 3, scheduler(fn) { callbacks.push(fn); return 1; }, cancel() {} });
     stream.subscribe((position) => values.push(position)); callbacks[0](); callbacks[0](); callbacks[0]();
     assert.equal(values.length, 4);
     assert.ok(values.every((value, index) => !index || value.etaMinutes <= values[index - 1].etaMinutes));
     assert.ok(values.every((value, index) => !index || value.remainingDistanceKm <= values[index - 1].remainingDistanceKm));
+    assert.equal(values.at(-1).arrived, true);
+    assert.equal(values.at(-1).status, 'Thợ đã đến');
   });
 });

@@ -4,7 +4,9 @@ import { createMockTechnicianRepository, defaultMvpLocation } from './technician
 import { createMapProvider } from './map/map-provider.js';
 import { getClientLocation } from './location/client-location.js';
 import { createRouteService } from './routing/routing-provider.js';
-import { createMockProviderLocationStream } from './tracking/location-stream.js';
+import { createMockProviderLocationSource } from './tracking/location-stream.js';
+import { createTrackingRouteSession } from './tracking/route-session.js';
+import { createTrackingStageMarkup, updateTrackingPresentation } from './tracking/tracking-sheet.js';
 import { createSearchPlan, getNextTechnician, prototypeSearchTiming, searchRadiiKm } from './search/map-search.js';
 import { createNoTechnicianMarkup, createTechnicianSheetMarkup } from './search/technician-sheet.js';
 import {
@@ -197,6 +199,7 @@ export function initialiseHomePage(
   searchTiming = prototypeSearchTiming,
   mapProviderFactory = createMapProvider,
   routingProvider = createRouteService(),
+  providerLocationSourceFactory = createMockProviderLocationSource,
 ) {
   root.innerHTML = createHomeAiMarkup();
   const input = root.querySelector('#service-request');
@@ -222,6 +225,7 @@ export function initialiseHomePage(
   let missionState = createMissionState();
   let repairStartedAt = '';
   let trackingRoute;
+  const trackingRoutes = createTrackingRouteSession(routingProvider);
 
   root.querySelectorAll('[data-prompt]').forEach((button) => {
     button.addEventListener('click', () => {
@@ -357,7 +361,7 @@ export function initialiseHomePage(
   const openBooking = async () => {
     const sheet = root.querySelector('[data-technician-sheet]');
     try {
-      const route = await routingProvider.route(selectedTechnician, clientLocation);
+      const route = await trackingRoutes.get(selectedTechnician, clientLocation);
       trackingRoute = route;
       await renderMap(root.querySelector('[data-map-stage]'), { technicians: matchedTechnicians, selectedId: selectedTechnician.id, radiusKm: currentRadiusKm, searching: false, route: route.points });
     } catch {
@@ -448,39 +452,59 @@ export function initialiseHomePage(
     }, 700);
   });
   const mission = root.querySelector('[data-mission-tracker]');
-  const renderMission = () => {
+  const renderMissionProgress = () => {
     const status = missionStatuses[missionState.statusIndex];
     mission.querySelector('[data-mission-status-badge]').textContent = status.label;
     mission.querySelectorAll('[data-mission-step]').forEach((step, index) => {
       step.classList.toggle('is-active', index === missionState.statusIndex);
       step.classList.toggle('is-done', index < missionState.statusIndex);
     });
+    return status;
+  };
+  const renderMission = () => {
+    const status = renderMissionProgress();
     const stage = mission.querySelector('[data-mission-stage]');
     const acceptedExtra = getAcceptedSupplement(missionState);
     const stageMarkup = {
       accepted: '<h3>Thợ đã nhận yêu cầu</h3><p>Thợ đang chuẩn bị dụng cụ cho nhiệm vụ.</p>',
-      travelling: '<h3>Thợ đang di chuyển</h3><div class="travel-stats"><strong data-tracking-eta>Đang tính ETA...</strong><span data-tracking-distance>Đang tính khoảng cách...</span></div><div class="tracking-map" data-tracking-map aria-label="Bản đồ theo dõi thợ"></div>',
-      arrived: '<h3>Thợ đã đến địa chỉ của bạn</h3><p>Hãy kiểm tra đúng thợ trước khi bắt đầu.</p><button type="button" data-start-repair>Bắt đầu sửa chữa</button>',
+      travelling: createTrackingStageMarkup(selectedTechnician),
+      arrived: createTrackingStageMarkup(selectedTechnician),
       repairing: `<h3>Đang sửa chữa</h3><dl><div><dt>Giờ bắt đầu</dt><dd>${repairStartedAt || 'Vừa bắt đầu'}</dd></div><div><dt>Thời lượng dự kiến</dt><dd>45 phút</dd></div></dl>${missionState.supplement.requested ? `<div class="supplement"><strong>Thợ đề nghị chi phí bổ sung</strong><p>${formatPrice(missionState.supplement.amount)}đ · ${missionState.supplement.reason}</p>${missionState.supplement.decision === 'pending' ? '<div><button type="button" data-extra-decision="accepted">Đồng ý</button><button type="button" data-extra-decision="declined">Từ chối</button></div>' : `<p class="decision">${missionState.supplement.decision === 'accepted' ? 'Bạn đã đồng ý khoản bổ sung.' : 'Bạn đã từ chối khoản bổ sung.'}</p>`}</div>` : '<button type="button" data-request-extra>Thợ đề nghị chi phí bổ sung</button>'}`,
       completed: missionState.completionConfirmed ? `<div class="review"><h3>Đánh giá dịch vụ</h3><p>Chọn từ 1 đến 5 sao</p><div class="stars" role="group" aria-label="Chọn số sao">${[1, 2, 3, 4, 5].map((rating) => `<button type="button" data-rating="${rating}" aria-label="${rating} sao" class="${missionState.rating >= rating ? 'is-selected' : ''}">★</button>`).join('')}</div><label>Nhận xét (không bắt buộc)<textarea data-review-comment rows="3" placeholder="Chia sẻ trải nghiệm của bạn..."></textarea></label><button type="button" data-send-review ${missionState.rating ? '' : 'disabled'}>Gửi đánh giá</button>${missionState.reviewSent ? '<p class="review-thanks">Cảm ơn bạn đã gửi đánh giá!</p>' : ''}</div>` : `<h3>Nhiệm vụ đã hoàn thành</h3><dl class="final-summary"><div><dt>Thợ</dt><dd>${selectedTechnician.name}</dd></div><div><dt>Vấn đề</dt><dd>${currentDiagnosis.summary}</dd></div><div><dt>Thời lượng</dt><dd>45 phút</dd></div><div><dt>Giá ban đầu</dt><dd>${formatPrice(selectedTechnician.priceFrom)}đ</dd></div><div><dt>Phụ phí đã đồng ý</dt><dd>${formatPrice(acceptedExtra)}đ</dd></div><div><dt>Tổng dự kiến</dt><dd>${formatPrice(selectedTechnician.priceFrom + acceptedExtra)}đ</dd></div></dl><button type="button" data-confirm-completion>Xác nhận hoàn thành</button>`,
     };
     stage.innerHTML = stageMarkup[status.id];
-    mission.querySelector('[data-mission-next]').hidden = status.id === 'completed' || status.id === 'arrived';
+    mission.querySelector('[data-mission-next]').hidden = ['travelling', 'arrived', 'completed'].includes(status.id);
   };
   const startTrackingMap = async () => {
     if (missionStatuses[missionState.statusIndex].id !== 'travelling') return;
-    trackingRoute ??= await routingProvider.route(selectedTechnician, clientLocation);
-    const trackingMap = mission.querySelector('[data-tracking-map]');
-    await renderMap(trackingMap, { technicians: [selectedTechnician], selectedId: selectedTechnician.id, searching: false, route: trackingRoute.points });
+    const stage = mission.querySelector('[data-mission-stage]');
     stopLocationStream?.();
-    stopLocationStream = createMockProviderLocationStream({ providerId: selectedTechnician.id, route: trackingRoute.points, durationMinutes: trackingRoute.durationMinutes }).subscribe((position) => {
-      mapProvider.moveProvider(selectedTechnician.id, position);
-      mission.querySelector('[data-tracking-eta]').textContent = position.etaMinutes ? `Còn khoảng ${position.etaMinutes} phút` : 'Thợ đã đến';
-      mission.querySelector('[data-tracking-distance]').textContent = `Còn ${position.remainingDistanceKm.toFixed(1)} km`;
-    });
+    stopLocationStream = undefined;
+    stage.querySelector('.tracking-route-error')?.remove();
+    stage.querySelector('[data-retry-tracking]')?.remove();
+    try {
+      trackingRoute = await trackingRoutes.get(selectedTechnician, clientLocation);
+      if (!trackingRoute?.points || trackingRoute.points.length < 2) throw new Error('CalculateRoutes returned no route geometry');
+      const trackingMap = mission.querySelector('[data-tracking-map]');
+      await renderMap(trackingMap, { technicians: [selectedTechnician], selectedId: selectedTechnician.id, searching: false, route: trackingRoute.points });
+      const source = providerLocationSourceFactory({ providerId: selectedTechnician.id, route: trackingRoute.points, durationMinutes: trackingRoute.durationMinutes, totalDistanceKm: trackingRoute.distanceKm });
+      stopLocationStream = source.subscribe((position) => {
+        mapProvider.moveProvider(selectedTechnician.id, position);
+        updateTrackingPresentation(stage, position);
+        if (position.arrived && missionStatuses[missionState.statusIndex].id === 'travelling') {
+          stopLocationStream?.();
+          stopLocationStream = undefined;
+          missionState = advanceMission(missionState);
+          renderMissionProgress();
+          mission.querySelector('[data-mission-next]').hidden = true;
+        }
+      });
+    } catch {
+      stage.insertAdjacentHTML('beforeend', '<p class="route-error tracking-route-error" role="alert">Không thể tải hành trình của thợ. Vui lòng thử lại.</p><button type="button" data-retry-tracking>Thử lại</button>');
+    }
   };
   root.querySelector('[data-track-technician]').addEventListener('click', () => {
-    missionState = createMissionState();
+    missionState = advanceMission(createMissionState());
     mission.querySelector('[data-mission-initials]').textContent = selectedTechnician.initials;
     mission.querySelector('[data-mission-technician]').textContent = selectedTechnician.name;
     mission.querySelector('[data-mission-rating]').textContent = selectedTechnician.rating;
@@ -489,10 +513,25 @@ export function initialiseHomePage(
     mission.querySelector('[data-mission-price]').textContent = bookingPanel.querySelector('[data-booking-estimate]').textContent;
     mission.querySelector('[data-mission-arrival]').textContent = `Khoảng ${selectedTechnician.estimatedArrivalMinutes} phút`;
     mission.hidden = false;
+    root.querySelector('[data-booking-confirmation]').hidden = true;
     renderMission();
     mission.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    void startTrackingMap();
   });
   mission.addEventListener('click', (event) => {
+    if (event.target.closest('[data-tracking-call]')) {
+      mission.querySelector('[data-tracking-action-status]').textContent = 'Bản demo: cuộc gọi với thợ sẽ được mở tại đây.';
+      return;
+    }
+    if (event.target.closest('[data-tracking-message]')) {
+      mission.querySelector('[data-tracking-action-status]').textContent = 'Bản demo: cuộc trò chuyện với thợ sẽ được mở tại đây.';
+      return;
+    }
+    if (event.target.closest('[data-retry-tracking]')) {
+      trackingRoutes.reset();
+      void startTrackingMap();
+      return;
+    }
     if (event.target.closest('[data-mission-next]')) missionState = advanceMission(missionState);
     if (event.target.closest('[data-start-repair]')) { repairStartedAt = new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(new Date()); missionState = advanceMission(missionState); }
     if (event.target.closest('[data-request-extra]')) missionState = requestSupplement(missionState);
