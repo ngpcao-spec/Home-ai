@@ -26,6 +26,14 @@ import {
 } from './customer/profile.js';
 import { createCustomerProfileMarkup } from './customer/profile-view.js';
 import {
+  createLoginPlaceholderMarkup,
+  createOnboardingMarkup,
+  createSplashMarkup,
+  isOnboardingCompleted,
+  onboardingPages,
+  saveOnboardingCompleted,
+} from './onboarding/flow.js';
+import {
   advanceMission,
   confirmCompletion,
   createMissionState,
@@ -124,7 +132,8 @@ export function createHomeAiMarkup() {
     </button>`).join('');
 
   return `
-    <div class="page-shell">
+    <div class="startup-flow" data-startup-flow>${createSplashMarkup()}</div>
+    <div class="page-shell" data-app-shell hidden>
       <header class="topbar">
         <a class="brand" href="./" aria-label="HOME AI - Trang chủ">
           <span class="brand-mark" aria-hidden="true">
@@ -239,6 +248,40 @@ export function initialiseHomePage(
   providerLocationSourceFactory = createMockProviderLocationSource,
 ) {
   root.innerHTML = createHomeAiMarkup();
+  const startupFlow = root.querySelector('[data-startup-flow]');
+  const appShell = root.querySelector('[data-app-shell]');
+  let onboardingIndex = 0;
+  let onboardingStorage;
+  try { onboardingStorage = globalThis.localStorage; } catch { onboardingStorage = undefined; }
+  const renderLoginPlaceholder = () => { startupFlow.innerHTML = createLoginPlaceholderMarkup(); };
+  const finishOnboarding = () => {
+    saveOnboardingCompleted(onboardingStorage);
+    renderLoginPlaceholder();
+  };
+  scheduleTask(() => {
+    startupFlow.innerHTML = isOnboardingCompleted(onboardingStorage)
+      ? createLoginPlaceholderMarkup()
+      : createOnboardingMarkup(onboardingIndex);
+  }, 650);
+  startupFlow.addEventListener('click', (event) => {
+    if (event.target.closest('[data-skip-onboarding]')) {
+      finishOnboarding();
+      return;
+    }
+    if (event.target.closest('[data-onboarding-next]')) {
+      if (onboardingIndex >= onboardingPages.length - 1) finishOnboarding();
+      else {
+        onboardingIndex += 1;
+        startupFlow.innerHTML = createOnboardingMarkup(onboardingIndex);
+      }
+      return;
+    }
+    if (event.target.closest('[data-enter-home]')) {
+      startupFlow.hidden = true;
+      appShell.hidden = false;
+      root.querySelector('#service-request')?.focus();
+    }
+  });
   const input = root.querySelector('#service-request');
   const status = root.querySelector('[data-form-status]');
   const resultCard = root.querySelector('[data-diagnostic-result]');

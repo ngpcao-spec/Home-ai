@@ -51,6 +51,14 @@ describe('HOME AI C04 marketplace home page', () => {
     assert.match(markup, /data-mission-stage/);
   });
 
+  it('places C01/C02 before the existing application without removing C04', () => {
+    const markup = createHomeAiMarkup();
+    assert.match(markup, /data-startup-flow/);
+    assert.match(markup, /Dịch vụ gia đình, thông minh hơn/);
+    assert.match(markup, /data-app-shell hidden/);
+    assert.match(markup, /Bạn cần sửa gì/);
+  });
+
   it('renders the responsive C19 navigation and application views', () => {
     const markup = createHomeAiMarkup();
     ['Accueil', 'Lịch sử', 'Hồ sơ'].forEach((text) => assert.match(markup, new RegExp(text)));
