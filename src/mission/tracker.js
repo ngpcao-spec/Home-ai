@@ -3,7 +3,7 @@ export const missionStatuses = [
   { id: 'travelling', label: 'Đang di chuyển' },
   { id: 'arrived', label: 'Đã đến nơi' },
   { id: 'in_progress', label: 'Đang sửa chữa' },
-  { id: 'completed', label: 'Hoàn thành' },
+  { id: 'completed_pending_payment', label: 'Hoàn thành' },
 ];
 
 export function createMissionState() {
@@ -12,6 +12,7 @@ export function createMissionState() {
     interventionPhase: 'idle',
     quote: null,
     quoteHistory: [],
+    completion: null,
     supplement: { amount: 120000, reason: 'Cần thay linh kiện bị hỏng', decision: 'pending', requested: false },
     completionConfirmed: false,
     rating: 0,
@@ -72,6 +73,33 @@ export function decideMissionSupplement(state, decision) {
 
 export const getAuthorizedMissionTotal = (state) => getAuthorizedQuoteTotal(state.quoteHistory);
 
+export function completeMissionRepair(state, metadata = {}) {
+  if (missionStatuses[state.statusIndex].id !== 'in_progress' || state.interventionPhase !== 'repairing') return state;
+  if (state.quoteHistory.some(({ status }) => status === 'supplement_pending')) return state;
+  const acceptedVersions = state.quoteHistory.filter(({ status }) => status === 'accepted');
+  const acceptedQuote = acceptedVersions.at(-1);
+  const initialQuote = state.quoteHistory[0];
+  if (!acceptedQuote || initialQuote?.status !== 'accepted') return state;
+  const completedWork = [
+    ...initialQuote.recommendedTasks,
+    ...acceptedVersions.slice(1).flatMap(({ authorizedWork = [] }) => authorizedWork),
+  ];
+  return {
+    ...state,
+    statusIndex: missionStatuses.findIndex(({ id }) => id === 'completed_pending_payment'),
+    interventionPhase: 'completed',
+    completion: Object.freeze({
+      missionId: metadata.missionId ?? 'HOMEAI-DEMO-001',
+      completedAt: metadata.completedAt ?? new Date().toISOString(),
+      completedWork: Object.freeze(completedWork),
+      acceptedQuoteId: acceptedQuote.id,
+      finalAuthorizedAmount: getAuthorizedMissionTotal(state),
+      currency: 'VND',
+      warrantyDays: initialQuote.warrantyDays,
+    }),
+  };
+}
+
 export function getMissionProgress(state) {
   return missionStatuses.map((status, index) => ({
     ...status,
@@ -93,7 +121,7 @@ export const getAcceptedSupplement = (state) => (
 );
 
 export function confirmCompletion(state) {
-  if (missionStatuses[state.statusIndex].id !== 'completed') return state;
+  if (missionStatuses[state.statusIndex].id !== 'completed_pending_payment') return state;
   return { ...state, completionConfirmed: true };
 }
 

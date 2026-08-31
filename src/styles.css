@@ -206,6 +206,15 @@ h1 em { color: var(--green); font-style: normal; }
 .quote-history li { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; color: #526c65; font-size: 9px; }
 .quote-history li span { font-weight: 800; }
 .quote-history li em { font-style: normal; }
+.mission-stage .complete-repair, .mission-stage .continue-payment { width: 100%; }
+.completion-summary { text-align: center; }
+.completion-check { display: grid; width: 48px; height: 48px; margin: 0 auto 10px; place-items: center; border-radius: 50%; color: white; background: var(--green); font-size: 22px; }
+.completion-summary > p { text-align: center; }
+.completed-work, .final-financial-summary { margin-top: 13px; padding: 13px; border: 1px solid #d9e8e3; border-radius: 13px; background: white; text-align: left; }
+.completed-work h4 { margin: 0 0 7px; color: #173d34; }
+.completed-work ul { display: grid; gap: 5px; margin: 0; padding-left: 18px; color: #36564e; font-size: 10px; }
+.final-financial-summary .payment-total { color: var(--dark-green); font-size: 13px; }
+.payment-preparation-status { min-height: 17px; color: var(--green) !important; font-weight: 750; }
 .tracking-route-error { margin-top: 10px !important; }
 
 .services { max-width: 780px; margin: 12px auto 0; }

@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import {
   advanceMission,
   confirmCompletion,
+  completeMissionRepair,
   createMissionState,
   decideMissionSupplement,
   decideRepairQuote,
@@ -130,6 +131,52 @@ describe('suivi local de mission', () => {
     ]);
     assert.equal(getAuthorizedMissionTotal(rejected), 290000);
     assert.equal(decideMissionSupplement(rejected, 'accepted'), rejected);
+  });
+
+  it('termine l’intervention sur l’étape 5 avec 390.000đ issus de v2 accepté', () => {
+    const arrived = markMissionArrived(advanceMission(createMissionState()));
+    const pending = startMissionDiagnosis(arrived, {
+      diagnosis: 'Điều hòa không lạnh',
+      recommendedTasks: ['Thay tụ điện máy nén', 'Kiểm tra hệ thống', 'Vệ sinh cơ bản'],
+      totalAmount: 290000,
+      warrantyDays: 30,
+    });
+    const supplemented = discoverMissionSupplement(decideRepairQuote(pending, 'accepted'));
+    assert.equal(completeMissionRepair(supplemented), supplemented, 'impossible de terminer avec v2 en attente');
+    const accepted = decideMissionSupplement(supplemented, 'accepted');
+    const completed = completeMissionRepair(accepted, { missionId: 'mission-17', completedAt: '2026-08-31T10:00:00.000Z' });
+
+    assert.equal(missionStatuses[completed.statusIndex].id, 'completed_pending_payment');
+    assert.deepEqual(getMissionProgress(completed).map(({ progress }) => progress), ['done', 'done', 'done', 'done', 'active']);
+    assert.deepEqual(completed.completion, {
+      missionId: 'mission-17',
+      completedAt: '2026-08-31T10:00:00.000Z',
+      completedWork: ['Thay tụ điện máy nén', 'Kiểm tra hệ thống', 'Vệ sinh cơ bản', 'Thay dây điện nguồn'],
+      acceptedQuoteId: 'quote-v2',
+      finalAuthorizedAmount: 390000,
+      currency: 'VND',
+      warrantyDays: 30,
+    });
+    assert.deepEqual(completed.quoteHistory.map(({ id, status }) => ({ id, status })), [
+      { id: 'quote-v1', status: 'accepted' },
+      { id: 'quote-v2', status: 'accepted' },
+    ]);
+  });
+
+  it('termine à 290.000đ après refus et n’inclut pas le travail non autorisé', () => {
+    const arrived = markMissionArrived(advanceMission(createMissionState()));
+    const pending = startMissionDiagnosis(arrived, {
+      diagnosis: 'Điều hòa không lạnh',
+      recommendedTasks: ['Thay tụ điện máy nén', 'Kiểm tra hệ thống', 'Vệ sinh cơ bản'],
+      totalAmount: 290000,
+      warrantyDays: 30,
+    });
+    const rejected = decideMissionSupplement(discoverMissionSupplement(decideRepairQuote(pending, 'accepted')), 'rejected');
+    const completed = completeMissionRepair(rejected, { missionId: 'mission-17-refused', completedAt: '2026-08-31T11:00:00.000Z' });
+    assert.equal(completed.completion.acceptedQuoteId, 'quote-v1');
+    assert.equal(completed.completion.finalAuthorizedAmount, 290000);
+    assert.deepEqual(completed.completion.completedWork, ['Thay tụ điện máy nén', 'Kiểm tra hệ thống', 'Vệ sinh cơ bản']);
+    assert.deepEqual(completed.quoteHistory.map(({ status }) => status), ['accepted', 'rejected']);
   });
 
   it('accepte uniquement une évaluation entière de 1 à 5 étoiles', () => {

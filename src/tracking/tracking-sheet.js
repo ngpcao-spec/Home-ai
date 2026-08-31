@@ -66,6 +66,7 @@ export function createInterventionProgressMarkup(state) {
     </section>`
     : '<button class="discover-supplement" type="button" data-discover-supplement>Mô phỏng phát hiện chi phí phát sinh</button>';
   const history = state.quoteHistory.map((version) => `<li><strong>v${version.version}</strong><span>${formatPrice(version.totalAmount)}</span><em>${quoteStatusLabel[version.status] ?? version.status}</em></li>`).join('');
+  const canComplete = !supplement || ['accepted', 'rejected'].includes(supplement.status);
   return `<section class="intervention-progress">
     <p class="quote-eyebrow">CÔNG VIỆC ĐÃ ĐƯỢC CHẤP NHẬN</p>
     <ul class="recommended-work">${initial.recommendedTasks.map((task) => `<li>${escapeHtml(task)}</li>`).join('')}</ul>
@@ -76,6 +77,7 @@ export function createInterventionProgressMarkup(state) {
     </dl>
     ${supplementPanel}
     <div class="quote-history"><p class="quote-eyebrow">LỊCH SỬ BÁO GIÁ</p><ol>${history}</ol></div>
+    ${canComplete ? '<button class="complete-repair" type="button" data-complete-repair>Hoàn thành sửa chữa</button>' : ''}
   </section>`;
 }
 

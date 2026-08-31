@@ -7,6 +7,7 @@ import {
 } from '../src/tracking/location-stream.js';
 import { createTrackingRouteSession } from '../src/tracking/route-session.js';
 import { createInterventionQuote } from '../src/mission/intervention-quote.js';
+import { createCompletionSummaryMarkup } from '../src/mission/completion-summary.js';
 import {
   createInterventionQuoteMarkup,
   createInterventionProgressMarkup,
@@ -167,6 +168,25 @@ describe('suivi C13', () => {
     });
     const markup = createInterventionProgressMarkup({ quoteHistory: [v1, v2] });
     ['CÔNG VIỆC ĐÃ ĐƯỢC CHẤP NHẬN', '290.000đ', '30 ngày', 'Dây điện nguồn bị hư và cần thay thế.', '80.000đ', '20.000đ', '+100.000đ', '390.000đ', 'Đồng ý chi phí phát sinh', 'Từ chối', 'v1', 'v2', 'supplement_pending'].forEach((text) => assert.match(markup, new RegExp(text.replace('+', '\\+'))));
+    assert.doesNotMatch(markup, /Hoàn thành sửa chữa/);
+  });
+
+  it('rend le récapitulatif C17 depuis la dernière version acceptée', () => {
+    const completion = {
+      missionId: 'mission-17',
+      completedAt: '2026-08-31T10:00:00.000Z',
+      completedWork: ['Thay tụ điện máy nén', 'Kiểm tra hệ thống', 'Vệ sinh cơ bản', 'Thay dây điện nguồn'],
+      acceptedQuoteId: 'quote-v2',
+      finalAuthorizedAmount: 390000,
+      currency: 'VND',
+      warrantyDays: 30,
+    };
+    const history = [
+      { version: 1, status: 'accepted', totalAmount: 290000 },
+      { version: 2, status: 'accepted', totalAmount: 390000, supplementAmount: 100000 },
+    ];
+    const markup = createCompletionSummaryMarkup(completion, history);
+    ['Sửa chữa hoàn tất', 'Kỹ thuật viên đã hoàn thành công việc.', 'Thay dây điện nguồn', 'Giá ban đầu đã chấp nhận', '290.000đ', 'Chi phí phát sinh đã chấp nhận', '+100.000đ', 'TỔNG THANH TOÁN', '390.000đ', 'Bảo hành', '30 ngày', 'Tiếp tục thanh toán', 'v1', 'v2'].forEach((text) => assert.match(markup, new RegExp(text.replace('+', '\\+'))));
   });
 
   it('présente distinctement attente, acceptation et refus sans retirer la fiche technicien', () => {

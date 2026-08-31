@@ -1,6 +1,7 @@
 const freezeVersion = (version) => Object.freeze({
   ...version,
   recommendedTasks: version.recommendedTasks ? Object.freeze([...version.recommendedTasks]) : undefined,
+  authorizedWork: version.authorizedWork ? Object.freeze([...version.authorizedWork]) : undefined,
 });
 
 export const supplementDiscovery = Object.freeze({
@@ -10,7 +11,7 @@ export const supplementDiscovery = Object.freeze({
 });
 
 export function createInitialQuoteVersion(quote) {
-  return freezeVersion({ ...quote, version: 1, status: 'pending' });
+  return freezeVersion({ ...quote, id: 'quote-v1', version: 1, status: 'pending' });
 }
 
 export function decideInitialQuoteVersion(version, decision) {
@@ -22,10 +23,12 @@ export function createSupplementQuoteVersion(acceptedVersion, discovery = supple
   if (acceptedVersion?.version !== 1 || acceptedVersion.status !== 'accepted') return null;
   const supplementAmount = discovery.additionalPartsAmount + discovery.additionalLaborAmount;
   return freezeVersion({
+    id: 'quote-v2',
     version: 2,
     status: 'supplement_pending',
     baseVersion: 1,
     finding: discovery.finding,
+    authorizedWork: ['Thay dây điện nguồn'],
     additionalPartsAmount: discovery.additionalPartsAmount,
     additionalLaborAmount: discovery.additionalLaborAmount,
     supplementAmount,
