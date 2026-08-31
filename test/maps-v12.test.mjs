@@ -6,6 +6,7 @@ import { getRouteMatrixCandidates, isLocationFresh, rankTechnicians } from '../s
 import { mockTechnicians } from '../src/technicians/mock-technicians.js';
 import { createMockRoutingProvider } from '../src/routing/routing-provider.js';
 import { createMockProviderLocationStream } from '../src/tracking/location-stream.js';
+import { createAmazonLocationMapProvider } from '../src/map/amazon-location-map-provider.js';
 
 describe('architecture cartographique V1.2', () => {
   it('sélectionne Amazon Location par configuration et Mock sans clé côté tests', async () => {
@@ -40,5 +41,44 @@ describe('architecture cartographique V1.2', () => {
     assert.ok(values.every((value, index) => !index || value.remainingDistanceKm <= values[index - 1].remainingDistanceKm));
     assert.equal(values.at(-1).arrived, true);
     assert.equal(values.at(-1).status, 'Thợ đã đến');
+  });
+  it('libère la carte C09 avant de créer la carte de suivi C13', async () => {
+    const maps = [];
+    class FakeMap {
+      constructor({ container }) { this.container = container; this.sources = new Map(); this.removed = false; maps.push(this); }
+      addControl() {}
+      once(event, listener) { if (event === 'load') listener(); }
+      getContainer() { return this.container; }
+      addSource(id, source) { this.sources.set(id, { ...source, setData() {} }); }
+      getSource(id) { return this.sources.get(id); }
+      addLayer() {}
+      setPaintProperty() {}
+      fitBounds() {}
+      remove() { this.removed = true; }
+    }
+    class FakeMarker {
+      setLngLat() { return this; }
+      setPopup() { return this; }
+      addTo() { return this; }
+      getElement() { return { classList: { toggle() {} } }; }
+      remove() { this.removed = true; }
+    }
+    class FakePopup { setText() { return this; } }
+    class FakeBounds { extend() { return this; } }
+    const previousMapLibre = globalThis.maplibregl;
+    globalThis.maplibregl = { Map: FakeMap, Marker: FakeMarker, Popup: FakePopup, LngLatBounds: FakeBounds, NavigationControl: class {} };
+    try {
+      const document = { createElement() { return { className: '', dataset: {}, setAttribute() {} }; } };
+      const provider = createAmazonLocationMapProvider({ apiKey: 'test', document });
+      const clientLocation = { latitude: 12.24, longitude: 109.19 };
+      const technician = { id: 'p1', initials: 'P1', name: 'Provider', latitude: 12.23, longitude: 109.18 };
+      await provider.render({ id: 'c09' }, { clientLocation, technicians: [technician] });
+      await provider.render({ id: 'c13' }, { clientLocation, technicians: [technician] });
+      assert.equal(maps.length, 2);
+      assert.equal(maps[0].removed, true);
+      assert.equal(maps[1].removed, false);
+    } finally {
+      globalThis.maplibregl = previousMapLibre;
+    }
   });
 });

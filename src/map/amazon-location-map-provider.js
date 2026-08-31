@@ -32,6 +32,13 @@ export function createAmazonLocationMapProvider({ apiKey, region = 'ap-southeast
       try {
         const maplibregl = await loadMapLibre(documentObject);
         if (!state.map || state.map.getContainer() !== container) {
+          if (state.map) {
+            state.markers.forEach((marker) => marker.remove());
+            state.markers.clear();
+            state.client?.remove();
+            state.client = null;
+            state.map.remove();
+          }
           state.map = new maplibregl.Map({ container, style, center: point(view.clientLocation ?? this.customer), zoom: 14 });
           state.map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
           await new Promise((resolve, reject) => { state.map.once('load', resolve); state.map.once('error', ({ error } = {}) => reject(error ?? new Error('MapLoadError'))); });
