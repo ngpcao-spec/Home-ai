@@ -44,16 +44,22 @@ export function createPaidExternalMarkup(completion) {
 }
 
 export function createProviderReviewMarkup(technician, missionState) {
-  const stars = [1, 2, 3, 4, 5].map((rating) => `<button type="button" data-rating="${rating}" aria-label="${rating} sao" class="${missionState.rating >= rating ? 'is-selected' : ''}">★</button>`).join('');
+  const stars = [1, 2, 3, 4, 5].map((rating) => `<button type="button" data-rating="${rating}" aria-label="${rating} sao" class="${missionState.rating >= rating ? 'is-selected' : ''}" ${missionState.reviewSent ? 'disabled' : ''}>★</button>`).join('');
+  const reviewForm = missionState.reviewSent
+    ? `<p class="review-thanks" role="status">Cảm ơn bạn đã đánh giá!</p>
+      <button class="view-mission-detail" type="button" data-view-mission-detail>Xem chi tiết chuyến</button>
+      ${missionState.missionDetailTarget ? '<p class="mission-detail-status" role="status">Đã sẵn sàng mở chi tiết chuyến.</p>' : ''}`
+    : `<label>Nhận xét (không bắt buộc)<textarea data-review-comment rows="3" placeholder="Chia sẻ trải nghiệm của bạn...">${escapeHtml(missionState.reviewComment ?? '')}</textarea></label>
+      <button type="button" data-send-review ${missionState.rating ? '' : 'disabled'}>Gửi đánh giá</button>`;
   return `<section class="provider-review" aria-labelledby="provider-review-title">
     <p class="paid-badge">✓ Đã thanh toán · ${formatPrice(missionState.completion.finalAuthorizedAmount)}</p>
-    <span class="technician-avatar" aria-hidden="true">${escapeHtml(technician.initials)}</span>
+    <div class="provider-review-profile">
+      <span class="provider-profile-avatar" aria-hidden="true"><svg viewBox="0 0 48 48"><circle cx="24" cy="17" r="8"/><path d="M10 42c1.5-10 6.7-15 14-15s12.5 5 14 15"/></svg></span>
+      <div><strong>${escapeHtml(technician.name)}</strong><span>⭐ ${technician.rating} · ${technician.reviewCount ?? 0} đánh giá</span><small>${escapeHtml(technician.shortDescription ?? technician.category)}</small></div>
+    </div>
     <h3 id="provider-review-title">Đánh giá kỹ thuật viên</h3>
-    <p>${escapeHtml(technician.name)}</p>
     <p>Trải nghiệm của bạn với kỹ thuật viên như thế nào?</p>
     <div class="stars" role="group" aria-label="Chọn số sao">${stars}</div>
-    <label>Nhận xét (không bắt buộc)<textarea data-review-comment rows="3" placeholder="Chia sẻ trải nghiệm của bạn..."></textarea></label>
-    <button type="button" data-send-review ${missionState.rating ? '' : 'disabled'}>Gửi đánh giá</button>
-    ${missionState.reviewSent ? '<p class="review-thanks" role="status">Cảm ơn bạn đã gửi đánh giá!</p>' : ''}
+    ${reviewForm}
   </section>`;
 }

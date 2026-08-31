@@ -202,6 +202,28 @@ describe('suivi C13', () => {
     assert.doesNotMatch(`${paidMarkup}${reviewMarkup}`, /stripe|paypal|wallet|card number|api key/i);
   });
 
+  it('rend le profil réel, les grandes étoiles et la fin de soumission C18', () => {
+    const technician = {
+      initials: 'ĐK',
+      name: 'Đặng Minh Khoa',
+      rating: 5,
+      reviewCount: 203,
+      shortDescription: 'Bảo dưỡng và sửa điều hòa dân dụng mọi thương hiệu.',
+    };
+    const submittedMarkup = createProviderReviewMarkup(technician, {
+      completion: { finalAuthorizedAmount: 390000 },
+      rating: 5,
+      reviewComment: 'Dịch vụ rất tốt.',
+      reviewSent: true,
+      missionDetailTarget: null,
+    });
+    ['Đặng Minh Khoa', '⭐ 5 · 203 đánh giá', 'Bảo dưỡng và sửa điều hòa dân dụng mọi thương hiệu.', 'Cảm ơn bạn đã đánh giá!', 'Xem chi tiết chuyến'].forEach((text) => assert.match(submittedMarkup, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))));
+    assert.doesNotMatch(submittedMarkup, />ĐK</);
+    assert.equal((submittedMarkup.match(/data-rating=/g) ?? []).length, 5);
+    assert.equal((submittedMarkup.match(/disabled/g) ?? []).length, 5);
+    assert.doesNotMatch(submittedMarkup, /data-send-review/);
+  });
+
   it('présente distinctement attente, acceptation et refus sans retirer la fiche technicien', () => {
     const nodes = new Map([
       ['[data-tracking-status]', { textContent: '' }],

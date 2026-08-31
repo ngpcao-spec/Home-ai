@@ -16,6 +16,7 @@ import {
   markMissionArrived,
   missionStatuses,
   openProviderReview,
+  prepareMissionDetail,
   requestSupplement,
   discoverMissionSupplement,
   startMissionDiagnosis,
@@ -205,5 +206,22 @@ describe('suivi local de mission', () => {
     const ready = { ...createMissionState(), statusIndex: 4, completionConfirmed: true };
     [0, 6, 2.5].forEach((rating) => assert.equal(submitReview(ready, rating).reviewSent, false));
     [1, 2, 3, 4, 5].forEach((rating) => assert.deepEqual(submitReview(ready, rating), { ...ready, rating, reviewSent: true }));
+  });
+
+  it('enregistre une seule évaluation avec commentaire et prépare le détail de mission', () => {
+    const ready = {
+      ...createMissionState(),
+      missionStatus: 'completed',
+      paymentStatus: 'paid_external',
+      reviewStage: 'rating',
+      completion: { finalAuthorizedAmount: 390000 },
+    };
+    const submitted = submitReview(ready, 5, '  Dịch vụ rất tốt.  ');
+    assert.equal(submitted.rating, 5);
+    assert.equal(submitted.reviewComment, 'Dịch vụ rất tốt.');
+    assert.equal(submitted.reviewSent, true);
+    assert.equal(submitReview(submitted, 1, 'Tentative de modification'), submitted);
+    assert.equal(prepareMissionDetail(submitted).missionDetailTarget, 'mission_detail');
+    assert.equal(prepareMissionDetail(ready), ready);
   });
 });

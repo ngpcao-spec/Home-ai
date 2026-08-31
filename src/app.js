@@ -26,6 +26,7 @@ import {
   markMissionArrived,
   missionStatuses,
   openProviderReview,
+  prepareMissionDetail,
   requestSupplement,
   startMissionDiagnosis,
   submitReview,
@@ -601,8 +602,9 @@ export function initialiseHomePage(
     if (decision) missionState = decideSupplement(missionState, decision);
     if (event.target.closest('[data-confirm-completion]')) missionState = confirmCompletion(missionState);
     const rating = Number(event.target.closest('[data-rating]')?.dataset.rating);
-    if (rating) missionState = { ...missionState, rating };
-    if (event.target.closest('[data-send-review]')) missionState = submitReview(missionState, missionState.rating);
+    if (rating && !missionState.reviewSent) missionState = { ...missionState, rating, reviewComment: mission.querySelector('[data-review-comment]')?.value ?? missionState.reviewComment };
+    if (event.target.closest('[data-send-review]')) missionState = submitReview(missionState, missionState.rating, mission.querySelector('[data-review-comment]')?.value);
+    if (event.target.closest('[data-view-mission-detail]')) missionState = prepareMissionDetail(missionState);
     renderMission();
     void startTrackingMap();
   });

@@ -20,7 +20,9 @@ export function createMissionState() {
     supplement: { amount: 120000, reason: 'Cần thay linh kiện bị hỏng', decision: 'pending', requested: false },
     completionConfirmed: false,
     rating: 0,
+    reviewComment: '',
     reviewSent: false,
+    missionDetailTarget: null,
   };
 }
 
@@ -146,9 +148,14 @@ export function confirmCompletion(state) {
   return { ...state, completionConfirmed: true };
 }
 
-export function submitReview(state, rating) {
-  if (!(state.completionConfirmed || state.paymentStatus === 'paid_external') || !Number.isInteger(rating) || rating < 1 || rating > 5) return state;
-  return { ...state, rating, reviewSent: true };
+export function submitReview(state, rating, comment = '') {
+  if (state.reviewSent || !(state.completionConfirmed || state.paymentStatus === 'paid_external') || !Number.isInteger(rating) || rating < 1 || rating > 5) return state;
+  return { ...state, rating, reviewComment: String(comment).trim(), reviewSent: true };
+}
+
+export function prepareMissionDetail(state) {
+  if (!state.reviewSent) return state;
+  return { ...state, missionDetailTarget: 'mission_detail' };
 }
 import {
   createInitialQuoteVersion,
