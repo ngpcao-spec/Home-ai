@@ -36,6 +36,7 @@ export const adaptMissionRow = (row) => row ? Object.freeze({
   paymentStatus: row.payment_status,
   requestedAt: row.requested_at,
   completedAt: row.completed_at ?? null,
+  scheduledFor: row.scheduled_for ?? null,
 }) : null;
 
 export const adaptProviderRow = (row) => {

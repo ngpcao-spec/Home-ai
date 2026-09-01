@@ -34,6 +34,8 @@ describe('HOME AI C04 marketplace home page', () => {
     const markup = createHomeAiMarkup();
 
     ['Địa chỉ sửa chữa', 'Sử dụng vị trí hiện tại', 'Bạn muốn thợ đến khi nào?', 'Càng sớm càng tốt', 'Đặt lịch', 'Giá dự kiến', 'Gửi yêu cầu', 'Thợ đã nhận yêu cầu!', 'Theo dõi thợ', 'Hủy yêu cầu'].forEach((text) => assert.match(markup, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))));
+    assert.match(markup, /data-confirmation-mission/);
+    assert.match(markup, /data-confirmation-state/);
   });
 
   it('builds a local technician summary and deterministic VND estimate', () => {

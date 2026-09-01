@@ -27,6 +27,7 @@ import {
   updateCustomerAddress,
 } from './customer/profile.js';
 import { loadSupabaseCustomerProfile } from './customer/supabase-profile.js';
+import { connectSupabaseCustomerMissions, createCustomerMissionDraft } from './customer/supabase-mission.js';
 import { createCustomerProfileMarkup } from './customer/profile-view.js';
 import { legalContent, supportFaqs } from './customer/support.js';
 import { createLegalMarkup, createSupportMarkup } from './customer/support-view.js';
@@ -218,7 +219,7 @@ export function createHomeAiMarkup() {
               <button class="submit-booking" type="submit">Gửi yêu cầu</button><p class="booking-status" data-booking-status role="status" aria-live="polite"></p>
             </form>
           </section>
-          <section class="booking-confirmation" data-booking-confirmation hidden aria-live="polite"><div class="confirmation-check">✓</div><p>YÊU CẦU ĐÃ ĐƯỢC XÁC NHẬN</p><h2>Thợ đã nhận yêu cầu!</h2><dl><div><dt>Thợ</dt><dd data-confirmation-technician></dd></div><div><dt>Thời gian dự kiến đến</dt><dd data-confirmation-arrival></dd></div><div><dt>Địa chỉ</dt><dd data-confirmation-address></dd></div><div><dt>Vấn đề</dt><dd data-confirmation-problem></dd></div><div><dt>Giá tham khảo</dt><dd data-confirmation-estimate></dd></div></dl><div class="confirmation-actions"><button type="button" data-track-technician>Theo dõi thợ</button><button type="button" data-cancel-request>Hủy yêu cầu</button></div><p data-confirmation-status role="status"></p></section>
+          <section class="booking-confirmation" data-booking-confirmation hidden aria-live="polite"><div class="confirmation-check">✓</div><p>YÊU CẦU ĐÃ ĐƯỢC XÁC NHẬN</p><h2 data-confirmation-title>Thợ đã nhận yêu cầu!</h2><dl><div data-confirmation-mission-row hidden><dt>Mã nhiệm vụ</dt><dd data-confirmation-mission></dd></div><div data-confirmation-state-row hidden><dt>Trạng thái</dt><dd data-confirmation-state></dd></div><div><dt>Thợ</dt><dd data-confirmation-technician></dd></div><div><dt>Thời gian dự kiến đến</dt><dd data-confirmation-arrival></dd></div><div><dt>Địa chỉ</dt><dd data-confirmation-address></dd></div><div><dt>Vấn đề</dt><dd data-confirmation-problem></dd></div><div><dt>Giá tham khảo</dt><dd data-confirmation-estimate></dd></div></dl><div class="confirmation-actions"><button type="button" data-track-technician>Theo dõi thợ</button><button type="button" data-cancel-request>Hủy yêu cầu</button></div><p data-confirmation-status role="status"></p></section>
           ${createMissionMarkup()}
         </section>
 
@@ -264,6 +265,7 @@ export function initialiseHomePage(
   routingProvider = createRouteService(),
   providerLocationSourceFactory = createMockProviderLocationSource,
   customerProfileLoader = loadSupabaseCustomerProfile,
+  customerMissionConnector = connectSupabaseCustomerMissions,
 ) {
   root.innerHTML = createHomeAiMarkup();
   const startupFlow = root.querySelector('[data-startup-flow]');
@@ -368,6 +370,9 @@ export function initialiseHomePage(
   let personalFormOpen = false;
   let supportStatusMessage = '';
   let missionBookedAt;
+  let persistedMission;
+  let missionRepository;
+  let missionConnection;
   let trackingRoute;
   const trackingRoutes = createTrackingRouteSession(routingProvider);
   const getCurrentMissionRecord = () => createCompletedMissionRecord(missionState, {
@@ -670,26 +675,64 @@ export function initialiseHomePage(
     updateSummary();
   });
   root.querySelector('[data-close-booking]').addEventListener('click', () => { bookingPanel.hidden = true; });
-  bookingForm.addEventListener('submit', (event) => {
+  const showBookingConfirmation = (remoteMission) => {
+    missionBookedAt = remoteMission?.requestedAt ?? new Date().toISOString();
+    persistedMission = remoteMission ?? null;
+    const confirmation = root.querySelector('[data-booking-confirmation]');
+    const estimate = bookingPanel.querySelector('[data-booking-estimate]').textContent;
+    const remoteSearching = remoteMission && ['requested', 'searching', 'offered'].includes(remoteMission.status);
+    confirmation.querySelector('[data-confirmation-title]').textContent = remoteSearching ? 'Yêu cầu đang tìm kỹ thuật viên' : 'Thợ đã nhận yêu cầu!';
+    confirmation.querySelector('[data-confirmation-technician]').textContent = remoteSearching ? 'Đang chờ xác nhận' : selectedTechnician.name;
+    confirmation.querySelector('[data-confirmation-arrival]').textContent = remoteSearching ? 'Đang cập nhật' : `Khoảng ${selectedTechnician.estimatedArrivalMinutes} phút`;
+    confirmation.querySelector('[data-confirmation-address]').textContent = remoteMission?.address ?? bookingForm.elements.address.value;
+    confirmation.querySelector('[data-confirmation-problem]').textContent = remoteMission?.problemDescription ?? currentDiagnosis.summary;
+    confirmation.querySelector('[data-confirmation-estimate]').textContent = estimate;
+    confirmation.querySelector('[data-confirmation-mission-row]').hidden = !remoteMission;
+    confirmation.querySelector('[data-confirmation-state-row]').hidden = !remoteMission;
+    confirmation.querySelector('[data-confirmation-mission]').textContent = remoteMission?.id ?? '';
+    confirmation.querySelector('[data-confirmation-state]').textContent = remoteSearching ? 'Đang tìm thợ' : remoteMission?.status ?? '';
+    confirmation.querySelector('[data-track-technician]').disabled = Boolean(remoteSearching);
+    bookingPanel.hidden = true;
+    confirmation.hidden = false;
+    bookingForm.querySelector('[type="submit"]').disabled = false;
+    root.querySelector('[data-booking-status]').textContent = '';
+    confirmation.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  };
+  bookingForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     const submit = bookingForm.querySelector('[type="submit"]');
     submit.disabled = true;
     root.querySelector('[data-booking-status]').textContent = 'Đang gửi yêu cầu đến thợ...';
-    scheduleTask(() => {
-      missionBookedAt = new Date().toISOString();
-      const confirmation = root.querySelector('[data-booking-confirmation]');
-      const estimate = bookingPanel.querySelector('[data-booking-estimate]').textContent;
-      confirmation.querySelector('[data-confirmation-technician]').textContent = selectedTechnician.name;
-      confirmation.querySelector('[data-confirmation-arrival]').textContent = `Khoảng ${selectedTechnician.estimatedArrivalMinutes} phút`;
-      confirmation.querySelector('[data-confirmation-address]').textContent = bookingForm.elements.address.value;
-      confirmation.querySelector('[data-confirmation-problem]').textContent = currentDiagnosis.summary;
-      confirmation.querySelector('[data-confirmation-estimate]').textContent = estimate;
-      bookingPanel.hidden = true;
-      confirmation.hidden = false;
+    missionConnection ??= customerMissionConnector();
+    const connection = await missionConnection;
+    if (connection.source === 'error') {
       submit.disabled = false;
-      root.querySelector('[data-booking-status]').textContent = '';
-      confirmation.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-    }, 700);
+      root.querySelector('[data-booking-status]').textContent = 'Không thể lưu nhiệm vụ. Vui lòng thử lại.';
+      return;
+    }
+    if (connection.source === 'supabase') {
+      try {
+        missionRepository = connection.repository;
+        const scheduled = bookingForm.elements.schedule.value === 'scheduled';
+        const scheduledFor = scheduled
+          ? new Date(`${bookingForm.elements.date.value}T${bookingForm.elements.time.value}`).toISOString()
+          : null;
+        const draft = createCustomerMissionDraft({
+          diagnosis: currentDiagnosis,
+          problemDescription: input.value,
+          serviceCategory: diagnosedCategory,
+          address: bookingForm.elements.address.value,
+          location: clientLocation,
+          scheduledFor,
+        });
+        showBookingConfirmation(connection.activeMission ?? await missionRepository.createCurrent(draft));
+      } catch {
+        submit.disabled = false;
+        root.querySelector('[data-booking-status]').textContent = 'Không thể lưu nhiệm vụ. Vui lòng thử lại.';
+      }
+      return;
+    }
+    scheduleTask(() => showBookingConfirmation(null), 700);
   });
   const mission = root.querySelector('[data-mission-tracker]');
   const renderMissionProgress = () => {
@@ -842,7 +885,20 @@ export function initialiseHomePage(
     renderMission();
     void startTrackingMap();
   });
-  root.querySelector('[data-cancel-request]').addEventListener('click', () => { root.querySelector('[data-confirmation-status]').textContent = 'Yêu cầu đã được hủy.'; });
+  root.querySelector('[data-cancel-request]').addEventListener('click', async () => {
+    const confirmationStatus = root.querySelector('[data-confirmation-status]');
+    if (persistedMission && missionRepository) {
+      try {
+        persistedMission = await missionRepository.cancelCurrent(persistedMission);
+        confirmationStatus.textContent = 'Yêu cầu đã được hủy.';
+        root.querySelector('[data-confirmation-state]').textContent = 'Đã hủy';
+      } catch {
+        confirmationStatus.textContent = 'Không thể hủy yêu cầu. Vui lòng tải lại trạng thái.';
+      }
+      return;
+    }
+    confirmationStatus.textContent = 'Yêu cầu đã được hủy.';
+  });
 
   root.querySelector('.app-navigation').addEventListener('click', (event) => {
     const destination = event.target.closest('[data-navigation]')?.dataset.navigation;
