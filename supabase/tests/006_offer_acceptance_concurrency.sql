@@ -71,6 +71,13 @@ begin
      or (select provider_id from public.missions where id='34000000-0000-0000-0000-000000000001') <> '24000000-0000-0000-0000-000000000001' then
     raise exception 'Atomic offer winner invariant failed';
   end if;
+  if (select status from public.mission_offers where id='44000000-0000-0000-0000-000000000002') <> 'expired'
+     or exists (
+       select 1 from public.mission_offers
+       where mission_id='34000000-0000-0000-0000-000000000001' and status='declined'
+     ) then
+    raise exception 'Competing active offers must expire and must never be implicitly declined';
+  end if;
 end;
 $$;
 

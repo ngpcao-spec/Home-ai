@@ -45,6 +45,12 @@ begin
      or (offer_rows[1]).match_rank <> 1 then
     raise exception 'Offers were not persisted in deterministic order';
   end if;
+  if exists (
+    select 1 from public.mission_offers
+    where mission_id = mission_row.id and status <> 'pending'
+  ) then
+    raise exception 'Newly created offers must all start pending';
+  end if;
 
   begin
     insert into public.mission_offers (mission_id, provider_id, expires_at)

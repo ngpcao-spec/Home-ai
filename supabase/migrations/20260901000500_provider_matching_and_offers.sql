@@ -228,9 +228,10 @@ begin
     raise exception 'Provider is no longer eligible.' using errcode = '55000';
   end if;
 
-  -- Decline competitors before assignment so the existing relationship trigger remains valid.
+  -- Expire competitors before assignment so the existing relationship trigger remains valid.
+  -- "declined" is reserved for an explicit provider refusal.
   update public.mission_offers
-  set status = 'declined', responded_at = statement_timestamp()
+  set status = 'expired', responded_at = statement_timestamp()
   where mission_id = mission_row.id and id <> offer_row.id and status = 'pending';
   update public.mission_offers
   set status = 'accepted', responded_at = statement_timestamp()

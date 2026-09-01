@@ -45,5 +45,13 @@ describe('contrat SQL matching et offres', () => {
     assert.match(concurrency, /dblink_send_query\('offer_one'/);
     assert.match(concurrency, /dblink_send_query\('offer_two'/);
     assert.match(concurrency, /status='accepted'\) <> 1/);
+    assert.match(concurrency, /status='declined'/);
+    assert.match(concurrency, /<> 'expired'/);
+  });
+
+  it('expire automatiquement les offres concurrentes sans les refuser au nom du prestataire', async () => {
+    const sql = await readFile(migrationUrl, 'utf8');
+    assert.match(sql, /set status = 'expired', responded_at = statement_timestamp\(\)/);
+    assert.doesNotMatch(sql, /set status = 'declined'/);
   });
 });
