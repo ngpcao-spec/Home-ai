@@ -6,6 +6,7 @@ import {
   createCustomerProfile,
   deleteCustomerAddress,
   getDefaultCustomerAddress,
+  mergeCustomerProfile,
   setDefaultCustomerAddress,
   updateCustomerAddress,
 } from '../src/customer/profile.js';
@@ -20,6 +21,20 @@ describe('C20 profil client', () => {
     assert.equal(getDefaultCustomerAddress(profile).address, 'Nha Trang, Khánh Hòa');
     assert.equal(Object.isFrozen(profile), true);
     assert.equal(Object.isFrozen(profile.addresses), true);
+  });
+
+  it('fusionne uniquement les champs du profil Supabase sans perdre le fallback local', () => {
+    const initial = createCustomerProfile();
+    const merged = mergeCustomerProfile(initial, {
+      id: 'customer-real-1', role: 'customer', name: 'Trần Thu Hà', avatarUrl: 'https://example.com/avatar.jpg',
+    }, '+84912345678');
+    assert.equal(merged.id, 'customer-real-1');
+    assert.equal(merged.name, 'Trần Thu Hà');
+    assert.equal(merged.phone, '+84912345678');
+    assert.equal(merged.avatarUrl, 'https://example.com/avatar.jpg');
+    assert.deepEqual(merged.addresses, initial.addresses, 'les adresses restent le fallback C20 existant');
+    assert.equal(merged.language, initial.language);
+    assert.equal(mergeCustomerProfile(initial, { role: 'provider', name: 'Incorrect' }), initial);
   });
 
   it('ajoute et modifie une adresse sans disperser les données dans la vue', () => {
@@ -90,5 +105,17 @@ describe('C20 profil client', () => {
     assert.match(editMarkup, /Chỉnh sửa địa chỉ/);
     assert.match(editMarkup, /value="Nha Trang, Khánh Hòa"/);
     assert.match(editMarkup, /checked/);
+  });
+
+  it('rend les états de chargement et un avatar Supabase sûr', () => {
+    const profile = { ...createCustomerProfile(), avatarUrl: 'https://example.com/avatar.jpg' };
+    const markup = createCustomerProfileMarkup(profile, { loadMessage: 'Đang tải hồ sơ...' });
+    assert.match(markup, /data-profile-load-status/);
+    assert.match(markup, /Đang tải hồ sơ/);
+    assert.match(markup, /https:\/\/example\.com\/avatar\.jpg/);
+    assert.doesNotMatch(
+      createCustomerProfileMarkup({ ...profile, avatarUrl: 'javascript:alert(1)' }),
+      /<img/,
+    );
   });
 });

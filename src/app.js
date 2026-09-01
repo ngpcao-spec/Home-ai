@@ -26,6 +26,7 @@ import {
   setDefaultCustomerAddress,
   updateCustomerAddress,
 } from './customer/profile.js';
+import { loadSupabaseCustomerProfile } from './customer/supabase-profile.js';
 import { createCustomerProfileMarkup } from './customer/profile-view.js';
 import { legalContent, supportFaqs } from './customer/support.js';
 import { createLegalMarkup, createSupportMarkup } from './customer/support-view.js';
@@ -262,6 +263,7 @@ export function initialiseHomePage(
   mapProviderFactory = createMapProvider,
   routingProvider = createRouteService(),
   providerLocationSourceFactory = createMockProviderLocationSource,
+  customerProfileLoader = loadSupabaseCustomerProfile,
 ) {
   root.innerHTML = createHomeAiMarkup();
   const startupFlow = root.querySelector('[data-startup-flow]');
@@ -358,6 +360,9 @@ export function initialiseHomePage(
   let addressFormOpen = false;
   let editingAddressId;
   let profileStatusMessage = '';
+  let profileLoadState = 'idle';
+  let profileLoadMessage = '';
+  let profileLoadAttempt;
   let supportStatusMessage = '';
   let missionBookedAt;
   let trackingRoute;
@@ -375,11 +380,39 @@ export function initialiseHomePage(
       addressFormOpen,
       editingAddressId,
       statusMessage: profileStatusMessage,
+      loadMessage: profileLoadMessage,
     });
+  };
+  const loadRealCustomerProfile = () => {
+    if (profileLoadState === 'loading' || profileLoadState === 'loaded') return profileLoadAttempt;
+    profileLoadState = 'loading';
+    profileLoadMessage = 'Đang tải hồ sơ...';
+    renderCustomerProfile();
+    profileLoadAttempt = Promise.resolve(customerProfileLoader({ fallbackProfile: customerProfile }))
+      .then((result) => {
+        customerProfile = result.profile ?? customerProfile;
+        profileLoadState = result.source === 'supabase' ? 'loaded' : 'fallback';
+        profileLoadMessage = result.reason === 'error'
+          ? 'Không thể tải hồ sơ trực tuyến. Đang sử dụng hồ sơ mẫu.'
+          : result.reason === 'no-session-or-profile'
+            ? 'Đang sử dụng hồ sơ mẫu.'
+            : '';
+      })
+      .catch(() => {
+        profileLoadState = 'fallback';
+        profileLoadMessage = 'Không thể tải hồ sơ trực tuyến. Đang sử dụng hồ sơ mẫu.';
+      })
+      .finally(() => {
+        if (!root.querySelector('[data-app-view="profile"]')?.hidden) renderCustomerProfile();
+      });
+    return profileLoadAttempt;
   };
   const showAppView = (view, missionId) => {
     if (view === 'history') root.querySelector('[data-app-view="history"]').innerHTML = createMissionHistoryMarkup(getMissionHistory());
-    if (view === 'profile') renderCustomerProfile();
+    if (view === 'profile') {
+      renderCustomerProfile();
+      void loadRealCustomerProfile();
+    }
     if (view === 'support') root.querySelector('[data-app-view="support"]').innerHTML = createSupportMarkup(supportFaqs, supportStatusMessage);
     if (view === 'legal') root.querySelector('[data-app-view="legal"]').innerHTML = createLegalMarkup(legalContent);
     if (view === 'mission-detail') {

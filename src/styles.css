@@ -325,6 +325,8 @@ h1 em { color: var(--green); font-style: normal; }
 .customer-profile-heading { margin-bottom: 18px; }.customer-profile-heading p { margin-bottom: 5px !important; }
 .customer-profile-card { display: flex; align-items: center; gap: 14px; padding: 18px; border: 1px solid #dce9e4; border-radius: 18px; background: linear-gradient(135deg, #f1faf6, #fff); box-shadow: 0 8px 25px rgb(22 74 62 / 7%); }
 .customer-profile-avatar { display: grid; width: 58px; height: 58px; flex: 0 0 auto; place-items: center; border-radius: 50%; color: white; background: linear-gradient(145deg, #2f866f, #174d41); font-size: 17px; font-weight: 850; box-shadow: 0 7px 16px rgb(8 123 97 / 20%); }
+.customer-profile-card img.customer-profile-avatar { object-fit: cover; }
+.profile-load-status { margin: 7px 0 0; color: #55736b; font-size: 13px; }
 .customer-profile-card > div { display: grid; gap: 3px; }.customer-profile-card strong { color: #173d34; font-size: 16px; }.customer-profile-card span, .customer-profile-card small { color: #667c76; font-size: 10px; }
 .profile-section { margin-top: 14px; padding: 16px; border: 1px solid #dce9e4; border-radius: 17px; background: white; }
 .profile-section h2 { display: flex; align-items: center; gap: 9px; margin: 0 0 12px; color: #173d34; font-size: 14px; }

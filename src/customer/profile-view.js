@@ -7,7 +7,24 @@ const escapeHtml = (value) => String(value ?? '')
 
 const profileIcon = (symbol) => `<span class="profile-section-icon" aria-hidden="true">${symbol}</span>`;
 
+const profileInitials = (name) => String(name ?? '')
+  .trim().split(/\s+/).slice(-2).map((part) => part[0] ?? '').join('').toUpperCase() || 'MA';
+
+const safeAvatarUrl = (value) => {
+  try {
+    const url = new URL(String(value ?? ''));
+    return ['https:', 'http:'].includes(url.protocol) ? url.toString() : null;
+  } catch { return null; }
+};
+
 export function createCustomerProfileMarkup(profile, options = {}) {
+  const avatarUrl = safeAvatarUrl(profile.avatarUrl);
+  const avatar = avatarUrl
+    ? `<img class="customer-profile-avatar" src="${escapeHtml(avatarUrl)}" alt="Ảnh đại diện của ${escapeHtml(profile.name)}">`
+    : `<span class="customer-profile-avatar" aria-hidden="true">${escapeHtml(profileInitials(profile.name))}</span>`;
+  const loadStatus = options.loadMessage
+    ? `<p class="profile-load-status" data-profile-load-status role="status">${escapeHtml(options.loadMessage)}</p>`
+    : '';
   const editingAddress = profile.addresses.find(({ id }) => id === options.editingAddressId);
   const addresses = profile.addresses.length
     ? profile.addresses.map((item) => `<article class="customer-address-card">
@@ -29,9 +46,9 @@ export function createCustomerProfileMarkup(profile, options = {}) {
       </form>`
     : '<button class="add-address" type="button" data-add-address>+ Thêm địa chỉ</button>';
 
-  return `<div class="customer-profile-heading"><p class="quote-eyebrow">TÀI KHOẢN KHÁCH HÀNG</p><h1 id="profile-title">Hồ sơ</h1></div>
+  return `<div class="customer-profile-heading"><p class="quote-eyebrow">TÀI KHOẢN KHÁCH HÀNG</p><h1 id="profile-title">Hồ sơ</h1>${loadStatus}</div>
     <article class="customer-profile-card">
-      <span class="customer-profile-avatar" aria-hidden="true">MA</span>
+      ${avatar}
       <div><strong>${escapeHtml(profile.name)}</strong><span>${escapeHtml(profile.phone)}</span><small>${escapeHtml(profile.language)}</small></div>
     </article>
     <section class="profile-section" aria-labelledby="personal-info-title">

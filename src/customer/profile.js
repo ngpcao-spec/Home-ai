@@ -32,6 +32,17 @@ export function createCustomerProfile() {
   });
 }
 
+export function mergeCustomerProfile(profile, remoteProfile, phone) {
+  if (!remoteProfile || remoteProfile.role !== 'customer') return profile;
+  return freezeProfile({
+    ...profile,
+    id: remoteProfile.id ?? profile.id,
+    name: String(remoteProfile.name ?? '').trim() || profile.name,
+    phone: String(phone ?? '').trim() || profile.phone,
+    avatarUrl: remoteProfile.avatarUrl ?? profile.avatarUrl ?? null,
+  });
+}
+
 export const getDefaultCustomerAddress = (profile) => profile.addresses.find(({ isDefault }) => isDefault) ?? null;
 
 export function addCustomerAddress(profile, address) {

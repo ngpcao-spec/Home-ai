@@ -14,6 +14,7 @@ export function createSupabaseProfilesRepository(supabase) {
     getById,
     async getCurrent() {
       const authResult = await client.auth.getUser();
+      if (authResult.error?.name === 'AuthSessionMissingError') return null;
       const user = unwrap(authResult, 'profiles.getCurrentUser')?.user;
       return user ? getById(user.id) : null;
     },
