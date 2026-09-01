@@ -39,11 +39,15 @@ jobs:
           npm run build
         env:
           AMAZON_LOCATION_API_KEY: ${{ secrets.AMAZON_LOCATION_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
       - name: Verify production runtime configuration
         run: node scripts/verify-runtime-config.mjs
         env:
           AMAZON_LOCATION_API_KEY: ${{ secrets.AMAZON_LOCATION_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
