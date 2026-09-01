@@ -1,6 +1,8 @@
 import { createMockDiagnostic } from './diagnostic/mock-diagnostic.js';
 import { getMatchReasons, getRouteMatrixCandidates } from './technicians/matching.js';
 import { createMockTechnicianRepository, defaultMvpLocation } from './technicians/repository.js';
+import { createProviderProfile } from './technicians/provider-profile.js';
+import { createProviderProfileMarkup } from './technicians/provider-profile-view.js';
 import { createMapProvider } from './map/map-provider.js';
 import { getClientLocation } from './location/client-location.js';
 import { createRouteService } from './routing/routing-provider.js';
@@ -199,6 +201,7 @@ export function createHomeAiMarkup() {
             <div class="map-stage" data-map-stage></div>
             <div class="search-progress" data-search-progress role="status"><span class="search-spinner" aria-hidden="true"></span><strong data-search-message>Đang tìm thợ gần bạn...</strong><small data-search-stats>Đang kiểm tra trong bán kính 2 km</small></div>
             <div data-technician-sheet></div>
+            <div data-provider-profile hidden></div>
           </section>
           <section class="booking-panel" data-booking-panel hidden aria-labelledby="booking-title">
             <div class="booking-title-row"><div><p>ĐẶT LỊCH SỬA CHỮA</p><h2 id="booking-title">Xác nhận yêu cầu</h2></div><button type="button" data-close-booking aria-label="Đóng đặt lịch">×</button></div>
@@ -547,6 +550,33 @@ export function initialiseHomePage(
   };
 
   root.querySelector('[data-map-search]').addEventListener('click', (event) => {
+    const profilePanel = root.querySelector('[data-provider-profile]');
+    const technicianSheet = root.querySelector('[data-technician-sheet]');
+    if (event.target.closest?.('[data-view-profile]')) {
+      const technicianId = event.target.closest('[data-view-profile]').dataset.viewProfile;
+      const technician = matchedTechnicians.find(({ id }) => id === technicianId) ?? selectedTechnician;
+      if (technician) {
+        selectedTechnician = technician;
+        profilePanel.innerHTML = createProviderProfileMarkup(createProviderProfile(technician));
+        profilePanel.hidden = false;
+        technicianSheet.hidden = true;
+        profilePanel.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+      }
+      return;
+    }
+    if (event.target.closest?.('[data-close-provider-profile]')) {
+      profilePanel.hidden = true;
+      profilePanel.innerHTML = '';
+      technicianSheet.hidden = false;
+      technicianSheet.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+      return;
+    }
+    if (event.target.closest?.('[data-choose-profile-technician]')) {
+      profilePanel.hidden = true;
+      technicianSheet.hidden = false;
+      void openBooking();
+      return;
+    }
     if (event.target.closest?.('[data-choose-map-technician]')) void openBooking();
     if (event.target.closest?.('[data-next-technician]')) {
       selectedTechnician = getNextTechnician(matchedTechnicians, selectedTechnician.id);

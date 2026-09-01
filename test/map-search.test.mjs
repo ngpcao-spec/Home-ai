@@ -56,7 +56,7 @@ describe('C08/C09 — tìm thợ trên bản đồ', () => {
 
   it('cung cấp fiche kết quả, hành động đặt thợ và trạng thái không có thợ', () => {
     const sheet = createTechnicianSheetMarkup(mockTechnicians[6]);
-    ['Đã tìm thấy thợ phù hợp', '203 đánh giá', 'Kỹ năng', 'km đường bộ', 'ETA khoảng', 'Vì sao HOME AI đề xuất thợ này?', 'Chọn thợ này', 'Tìm thợ khác'].forEach((text) => assert.match(sheet, new RegExp(text)));
+    ['Đã tìm thấy thợ phù hợp', '203 đánh giá', 'Kỹ năng', 'km đường bộ', 'ETA khoảng', 'Vì sao HOME AI đề xuất thợ này?', 'Chọn thợ này', 'Tìm thợ khác', 'Xem hồ sơ'].forEach((text) => assert.match(sheet, new RegExp(text)));
     const empty = createNoTechnicianMarkup();
     ['Hiện chưa có thợ phù hợp gần bạn', 'Thử lại', 'Đặt lịch sau'].forEach((text) => assert.match(empty, new RegExp(text)));
   });
