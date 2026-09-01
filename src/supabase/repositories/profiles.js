@@ -10,17 +10,30 @@ export function createSupabaseProfilesRepository(supabase) {
     return adaptProfileRow(unwrap(result, 'profiles.getById'));
   };
 
+  const getCurrentUserId = async () => {
+    const authResult = await client.auth.getUser();
+    if (authResult.error?.name === 'AuthSessionMissingError') return null;
+    return unwrap(authResult, 'profiles.getCurrentUser')?.user?.id ?? null;
+  };
+
   return Object.freeze({
     getById,
+    getCurrentUserId,
     async getCurrent() {
-      const authResult = await client.auth.getUser();
-      if (authResult.error?.name === 'AuthSessionMissingError') return null;
-      const user = unwrap(authResult, 'profiles.getCurrentUser')?.user;
-      return user ? getById(user.id) : null;
+      const userId = await getCurrentUserId();
+      return userId ? getById(userId) : null;
     },
     async getPhone(userId) {
       const result = await client.rpc('get_profile_phone', { target_user_id: userId });
       return unwrap(result, 'profiles.getPhone');
+    },
+    async saveCurrent({ name, phone = null, avatarUrl = null }) {
+      const result = await client.rpc('upsert_current_customer_profile', {
+        new_display_name: name,
+        new_phone: phone,
+        new_avatar_url: avatarUrl,
+      });
+      return adaptProfileRow(unwrap(result, 'profiles.saveCurrent'));
     },
   });
 }

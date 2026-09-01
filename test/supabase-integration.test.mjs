@@ -5,6 +5,8 @@ import { createSupabaseBrowserClient } from '../src/supabase/client.js';
 import { readSupabaseConfig } from '../src/supabase/config.js';
 import { createOptionalSupabaseRepositories } from '../src/supabase/repositories/index.js';
 import { createSupabaseMissionsRepository } from '../src/supabase/repositories/missions.js';
+import { createSupabaseProfilesRepository } from '../src/supabase/repositories/profiles.js';
+import { createSupabaseCustomerAddressesRepository } from '../src/supabase/repositories/customer-addresses.js';
 
 const jwt = (role) => {
   const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
@@ -19,6 +21,7 @@ describe('configuration Supabase optionnelle', () => {
       enabled: false,
       client: null,
       profiles: null,
+      addresses: null,
       missions: null,
       providers: null,
     });
@@ -76,5 +79,45 @@ describe('adapters et repositories Supabase préparatoires', () => {
     const missions = await repository.listForClient('u1');
     assert.equal(missions[0].id, 'm1');
     assert.deepEqual(calls.find(([name]) => name === 'eq'), ['eq', 'client_id', 'u1']);
+  });
+
+  it('écrit le profil uniquement via la RPC customer sans rôle ni user_id contrôlable', async () => {
+    const calls = [];
+    const repository = createSupabaseProfilesRepository({
+      from() { return {}; },
+      rpc(name, args) {
+        calls.push([name, args]);
+        return Promise.resolve({ data: { user_id: 'u1', role: 'customer', display_name: 'Minh', status: 'active' }, error: null });
+      },
+    });
+    const saved = await repository.saveCurrent({ name: 'Minh', phone: '+84912345678', avatarUrl: null });
+    assert.equal(saved.role, 'customer');
+    assert.deepEqual(calls[0], ['upsert_current_customer_profile', {
+      new_display_name: 'Minh', new_phone: '+84912345678', new_avatar_url: null,
+    }]);
+    assert.equal('role' in calls[0][1], false);
+    assert.equal('user_id' in calls[0][1], false);
+  });
+
+  it('persiste les adresses via les RPC liées à auth.uid()', async () => {
+    const calls = [];
+    const repository = createSupabaseCustomerAddressesRepository({
+      from() { return {}; },
+      rpc(name, args) {
+        calls.push([name, args]);
+        return Promise.resolve({ data: name.startsWith('delete_') ? null : {
+          id: 'a1', label: 'Nhà', address_text: 'Nha Trang', is_default: true,
+        }, error: null });
+      },
+    });
+    await repository.save({ label: 'Nhà', address: 'Nha Trang', isDefault: true });
+    await repository.setDefault('a1');
+    await repository.delete('a1');
+    assert.deepEqual(calls.map(([name]) => name), [
+      'save_current_customer_address',
+      'set_current_customer_default_address',
+      'delete_current_customer_address',
+    ]);
+    assert.equal(calls.some(([, args]) => 'customer_id' in args), false);
   });
 });

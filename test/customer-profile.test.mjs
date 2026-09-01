@@ -118,4 +118,16 @@ describe('C20 profil client', () => {
       /<img/,
     );
   });
+
+  it('n’expose les formulaires persistants que pour une session Supabase', () => {
+    const profile = createCustomerProfile();
+    assert.doesNotMatch(createCustomerProfileMarkup(profile), /data-profile-personal-form/);
+    assert.match(createCustomerProfileMarkup(profile, { canPersist: true }), /data-edit-personal-profile/);
+    assert.match(createCustomerProfileMarkup(profile, {
+      canPersist: true, personalFormOpen: true, canEditAddresses: false,
+    }), /data-profile-personal-form/);
+    assert.match(createCustomerProfileMarkup(profile, {
+      canPersist: true, personalFormOpen: true, canEditAddresses: false,
+    }), /Lưu thông tin cá nhân trước/);
+  });
 });

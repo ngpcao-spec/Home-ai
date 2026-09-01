@@ -327,6 +327,12 @@ h1 em { color: var(--green); font-style: normal; }
 .customer-profile-avatar { display: grid; width: 58px; height: 58px; flex: 0 0 auto; place-items: center; border-radius: 50%; color: white; background: linear-gradient(145deg, #2f866f, #174d41); font-size: 17px; font-weight: 850; box-shadow: 0 7px 16px rgb(8 123 97 / 20%); }
 .customer-profile-card img.customer-profile-avatar { object-fit: cover; }
 .profile-load-status { margin: 7px 0 0; color: #55736b; font-size: 13px; }
+.profile-personal-form { display: grid; gap: 12px; margin-top: 16px; }
+.profile-personal-form label { display: grid; gap: 6px; color: #31564d; font-size: 13px; font-weight: 700; }
+.profile-personal-form input { min-height: 44px; padding: 0 12px; border: 1px solid #c8dcd6; border-radius: 12px; font: inherit; }
+.profile-personal-form div { display: flex; gap: 10px; }
+.profile-personal-form button, .edit-personal-profile { min-height: 42px; padding: 0 16px; border: 1px solid #16866b; border-radius: 12px; background: white; color: #087b61; font-weight: 800; }
+.profile-personal-form button[type="submit"] { background: #087b61; color: white; }
 .customer-profile-card > div { display: grid; gap: 3px; }.customer-profile-card strong { color: #173d34; font-size: 16px; }.customer-profile-card span, .customer-profile-card small { color: #667c76; font-size: 10px; }
 .profile-section { margin-top: 14px; padding: 16px; border: 1px solid #dce9e4; border-radius: 17px; background: white; }
 .profile-section h2 { display: flex; align-items: center; gap: 9px; margin: 0 0 12px; color: #173d34; font-size: 14px; }

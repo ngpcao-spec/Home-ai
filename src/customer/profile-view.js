@@ -18,6 +18,7 @@ const safeAvatarUrl = (value) => {
 };
 
 export function createCustomerProfileMarkup(profile, options = {}) {
+  const canEditAddresses = options.canEditAddresses !== false;
   const avatarUrl = safeAvatarUrl(profile.avatarUrl);
   const avatar = avatarUrl
     ? `<img class="customer-profile-avatar" src="${escapeHtml(avatarUrl)}" alt="Ảnh đại diện của ${escapeHtml(profile.name)}">`
@@ -25,18 +26,30 @@ export function createCustomerProfileMarkup(profile, options = {}) {
   const loadStatus = options.loadMessage
     ? `<p class="profile-load-status" data-profile-load-status role="status">${escapeHtml(options.loadMessage)}</p>`
     : '';
+  const personalForm = options.personalFormOpen
+    ? `<form class="profile-personal-form" data-profile-personal-form>
+        <label>Họ và tên<input name="name" value="${escapeHtml(profile.name)}" required maxlength="120"></label>
+        <label>Số điện thoại<input name="phone" value="${escapeHtml(profile.phone)}" placeholder="09xx xxx xxx" required></label>
+        <label>Ảnh đại diện (URL)<input name="avatarUrl" value="${escapeHtml(profile.avatarUrl)}" type="url" placeholder="https://..."></label>
+        <div><button type="submit">Lưu thông tin</button><button type="button" data-cancel-profile-edit>Hủy</button></div>
+      </form>`
+    : options.canPersist
+      ? '<button class="edit-personal-profile" type="button" data-edit-personal-profile>Chỉnh sửa thông tin</button>'
+      : '';
   const editingAddress = profile.addresses.find(({ id }) => id === options.editingAddressId);
   const addresses = profile.addresses.length
     ? profile.addresses.map((item) => `<article class="customer-address-card">
         <div><strong>${escapeHtml(item.label)}</strong>${item.isDefault ? '<span>Mặc định</span>' : ''}<p>${escapeHtml(item.address)}</p></div>
-        <div class="address-actions">
+        ${canEditAddresses ? `<div class="address-actions">
           ${item.isDefault ? '' : `<button type="button" data-default-address="${escapeHtml(item.id)}">Đặt mặc định</button>`}
           <button type="button" data-edit-address="${escapeHtml(item.id)}">Sửa</button>
           <button type="button" data-delete-address="${escapeHtml(item.id)}">Xóa</button>
-        </div>
+        </div>` : ''}
       </article>`).join('')
     : '<p class="empty-addresses">Bạn chưa có địa chỉ đã lưu.</p>';
-  const addressForm = options.addressFormOpen
+  const addressForm = !canEditAddresses
+    ? '<p class="empty-addresses">Lưu thông tin cá nhân trước khi quản lý địa chỉ.</p>'
+    : options.addressFormOpen
     ? `<form class="address-form" data-address-form>
         <h3>${editingAddress ? 'Chỉnh sửa địa chỉ' : 'Thêm địa chỉ'}</h3>
         <label>Tên địa chỉ<input name="label" value="${escapeHtml(editingAddress?.label)}" placeholder="Ví dụ: Nhà, Văn phòng" required></label>
@@ -44,7 +57,7 @@ export function createCustomerProfileMarkup(profile, options = {}) {
         <label class="default-address-option"><input type="checkbox" name="isDefault" ${editingAddress?.isDefault ? 'checked' : ''}> Đặt làm địa chỉ mặc định</label>
         <div><button type="submit">Lưu địa chỉ</button><button type="button" data-cancel-address>Hủy</button></div>
       </form>`
-    : '<button class="add-address" type="button" data-add-address>+ Thêm địa chỉ</button>';
+      : '<button class="add-address" type="button" data-add-address>+ Thêm địa chỉ</button>';
 
   return `<div class="customer-profile-heading"><p class="quote-eyebrow">TÀI KHOẢN KHÁCH HÀNG</p><h1 id="profile-title">Hồ sơ</h1>${loadStatus}</div>
     <article class="customer-profile-card">
@@ -53,7 +66,7 @@ export function createCustomerProfileMarkup(profile, options = {}) {
     </article>
     <section class="profile-section" aria-labelledby="personal-info-title">
       <h2 id="personal-info-title">${profileIcon('人')}Thông tin cá nhân</h2>
-      <dl><div><dt>Họ và tên</dt><dd>${escapeHtml(profile.name)}</dd></div><div><dt>Số điện thoại</dt><dd>${escapeHtml(profile.phone)}</dd></div><div><dt>Ngôn ngữ</dt><dd>${escapeHtml(profile.language)}</dd></div></dl>
+      <dl><div><dt>Họ và tên</dt><dd>${escapeHtml(profile.name)}</dd></div><div><dt>Số điện thoại</dt><dd>${escapeHtml(profile.phone)}</dd></div><div><dt>Ngôn ngữ</dt><dd>${escapeHtml(profile.language)}</dd></div></dl>${personalForm}
     </section>
     <section class="profile-section" aria-labelledby="addresses-title">
       <h2 id="addresses-title">${profileIcon('⌖')}Địa chỉ của tôi</h2><div class="customer-address-list">${addresses}</div>${addressForm}

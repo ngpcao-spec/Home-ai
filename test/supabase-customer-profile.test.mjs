@@ -24,18 +24,36 @@ describe('lecture optionnelle du profil client Supabase', () => {
     assert.equal(result.reason, 'not-configured');
   });
 
-  it('conserve le mock quand aucune session ou ligne profile n’existe', async () => {
+  it('conserve le mock quand aucune session Supabase n’existe', async () => {
     const fallbackProfile = createCustomerProfile();
     const result = await loadSupabaseCustomerProfile({
       fallbackProfile,
       runtimeConfig: configuredRuntime,
       repositoryLoader: async () => ({
         enabled: true,
-        profiles: { getCurrent: async () => null },
+        profiles: { getCurrentUserId: async () => null },
       }),
     });
     assert.equal(result.profile, fallbackProfile);
-    assert.equal(result.reason, 'no-session-or-profile');
+    assert.equal(result.reason, 'no-session');
+    assert.equal(result.persistence, null);
+  });
+
+  it('permet la création sécurisée lorsqu’une session existe sans ligne profile', async () => {
+    const fallbackProfile = createCustomerProfile();
+    const repositories = {
+      enabled: true,
+      profiles: { getCurrentUserId: async () => 'new-user', getById: async () => null },
+      addresses: {},
+    };
+    const result = await loadSupabaseCustomerProfile({
+      fallbackProfile,
+      runtimeConfig: configuredRuntime,
+      repositoryLoader: async () => repositories,
+    });
+    assert.equal(result.profile, fallbackProfile);
+    assert.equal(result.reason, 'no-profile');
+    assert.equal(result.persistence, repositories);
   });
 
   it('lit le repository préparé et fusionne le profil du customer authentifié', async () => {
@@ -47,15 +65,17 @@ describe('lecture optionnelle du profil client Supabase', () => {
       repositoryLoader: async () => ({
         enabled: true,
         profiles: {
-          getCurrent: async () => {
-            calls.push('getCurrent');
+          getCurrentUserId: async () => 'real-1',
+          getById: async () => {
+            calls.push('getById');
             return { id: 'real-1', role: 'customer', name: 'Lê Mai', avatarUrl: null };
           },
           getPhone: async (id) => { calls.push(['getPhone', id]); return '+84987654321'; },
         },
+        addresses: { listCurrent: async () => [] },
       }),
     });
-    assert.deepEqual(calls, ['getCurrent', ['getPhone', 'real-1']]);
+    assert.deepEqual(calls, ['getById', ['getPhone', 'real-1']]);
     assert.equal(result.source, 'supabase');
     assert.equal(result.profile.name, 'Lê Mai');
     assert.equal(result.profile.phone, '+84987654321');
@@ -68,7 +88,7 @@ describe('lecture optionnelle du profil client Supabase', () => {
       runtimeConfig: configuredRuntime,
       repositoryLoader: async () => ({
         enabled: true,
-        profiles: { getCurrent: async () => { throw new Error('network unavailable'); } },
+        profiles: { getCurrentUserId: async () => { throw new Error('network unavailable'); } },
       }),
     });
     assert.equal(result.profile, fallbackProfile);

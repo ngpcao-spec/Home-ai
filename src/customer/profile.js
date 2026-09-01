@@ -43,6 +43,10 @@ export function mergeCustomerProfile(profile, remoteProfile, phone) {
   });
 }
 
+export function replaceCustomerAddresses(profile, addresses) {
+  return freezeProfile({ ...profile, addresses: ensureSingleDefault(addresses.map((address) => ({ ...address }))) });
+}
+
 export const getDefaultCustomerAddress = (profile) => profile.addresses.find(({ isDefault }) => isDefault) ?? null;
 
 export function addCustomerAddress(profile, address) {

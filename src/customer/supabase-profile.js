@@ -1,4 +1,4 @@
-import { mergeCustomerProfile } from './profile.js';
+import { mergeCustomerProfile, replaceCustomerAddresses } from './profile.js';
 import { readSupabaseConfig } from '../supabase/config.js';
 
 const defaultRepositoryLoader = async (runtimeConfig) => {
@@ -13,20 +13,24 @@ export async function loadSupabaseCustomerProfile({
 } = {}) {
   try {
     if (!readSupabaseConfig(runtimeConfig)) {
-      return Object.freeze({ profile: fallbackProfile, source: 'mock', reason: 'not-configured' });
+      return Object.freeze({ profile: fallbackProfile, source: 'mock', reason: 'not-configured', persistence: null });
     }
 
     const repositories = await repositoryLoader(runtimeConfig);
     if (!repositories?.enabled || !repositories.profiles) {
-      return Object.freeze({ profile: fallbackProfile, source: 'mock', reason: 'not-configured' });
+      return Object.freeze({ profile: fallbackProfile, source: 'mock', reason: 'not-configured', persistence: null });
     }
 
-    const remoteProfile = await repositories.profiles.getCurrent();
+    const currentUserId = await repositories.profiles.getCurrentUserId();
+    if (!currentUserId) {
+      return Object.freeze({ profile: fallbackProfile, source: 'mock', reason: 'no-session', persistence: null });
+    }
+    const remoteProfile = await repositories.profiles.getById(currentUserId);
     if (!remoteProfile) {
-      return Object.freeze({ profile: fallbackProfile, source: 'mock', reason: 'no-session-or-profile' });
+      return Object.freeze({ profile: fallbackProfile, source: 'mock', reason: 'no-profile', persistence: repositories });
     }
     if (remoteProfile.role !== 'customer') {
-      return Object.freeze({ profile: fallbackProfile, source: 'mock', reason: 'not-customer' });
+      return Object.freeze({ profile: fallbackProfile, source: 'mock', reason: 'not-customer', persistence: null });
     }
 
     let phone;
@@ -35,12 +39,15 @@ export async function loadSupabaseCustomerProfile({
     } catch {
       // The safe profile row is still useful if the optional phone RPC is unavailable.
     }
+    const addresses = repositories.addresses ? await repositories.addresses.listCurrent() : null;
+    const merged = mergeCustomerProfile(fallbackProfile, remoteProfile, phone);
     return Object.freeze({
-      profile: mergeCustomerProfile(fallbackProfile, remoteProfile, phone),
+      profile: addresses ? replaceCustomerAddresses(merged, addresses) : merged,
       source: 'supabase',
       reason: null,
+      persistence: repositories,
     });
   } catch (error) {
-    return Object.freeze({ profile: fallbackProfile, source: 'mock', reason: 'error', error });
+    return Object.freeze({ profile: fallbackProfile, source: 'mock', reason: 'error', error, persistence: null });
   }
 }

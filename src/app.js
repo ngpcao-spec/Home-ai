@@ -363,6 +363,9 @@ export function initialiseHomePage(
   let profileLoadState = 'idle';
   let profileLoadMessage = '';
   let profileLoadAttempt;
+  let customerProfilePersistence;
+  let persistedCustomerProfileExists = false;
+  let personalFormOpen = false;
   let supportStatusMessage = '';
   let missionBookedAt;
   let trackingRoute;
@@ -381,6 +384,9 @@ export function initialiseHomePage(
       editingAddressId,
       statusMessage: profileStatusMessage,
       loadMessage: profileLoadMessage,
+      canPersist: Boolean(customerProfilePersistence),
+      personalFormOpen,
+      canEditAddresses: !customerProfilePersistence || persistedCustomerProfileExists,
     });
   };
   const loadRealCustomerProfile = () => {
@@ -391,11 +397,13 @@ export function initialiseHomePage(
     profileLoadAttempt = Promise.resolve(customerProfileLoader({ fallbackProfile: customerProfile }))
       .then((result) => {
         customerProfile = result.profile ?? customerProfile;
+        customerProfilePersistence = result.persistence ?? null;
+        persistedCustomerProfileExists = result.source === 'supabase';
         profileLoadState = result.source === 'supabase' ? 'loaded' : 'fallback';
         profileLoadMessage = result.reason === 'error'
           ? 'Không thể tải hồ sơ trực tuyến. Đang sử dụng hồ sơ mẫu.'
-          : result.reason === 'no-session-or-profile'
-            ? 'Đang sử dụng hồ sơ mẫu.'
+          : result.reason === 'no-profile'
+            ? 'Hãy lưu thông tin để tạo hồ sơ Supabase của bạn.'
             : '';
       })
       .catch(() => {
@@ -864,7 +872,17 @@ export function initialiseHomePage(
     if (event.target.closest('[data-back-profile]')) showAppView('profile');
   });
   const profileView = root.querySelector('[data-app-view="profile"]');
-  profileView.addEventListener('click', (event) => {
+  const refreshPersistedCustomerProfile = async (message) => {
+    profileStatusMessage = message;
+    profileLoadState = 'idle';
+    profileLoadMessage = '';
+    await loadRealCustomerProfile();
+  };
+  const showProfilePersistenceError = () => {
+    profileStatusMessage = 'Không thể lưu thay đổi. Vui lòng thử lại.';
+    renderCustomerProfile();
+  };
+  profileView.addEventListener('click', async (event) => {
     if (event.target.closest('[data-profile-history]')) {
       showAppView('history');
       return;
@@ -873,6 +891,17 @@ export function initialiseHomePage(
       addressFormOpen = true;
       editingAddressId = undefined;
       profileStatusMessage = '';
+      renderCustomerProfile();
+      return;
+    }
+    if (event.target.closest('[data-edit-personal-profile]')) {
+      personalFormOpen = true;
+      profileStatusMessage = '';
+      renderCustomerProfile();
+      return;
+    }
+    if (event.target.closest('[data-cancel-profile-edit]')) {
+      personalFormOpen = false;
       renderCustomerProfile();
       return;
     }
@@ -892,6 +921,13 @@ export function initialiseHomePage(
     }
     const defaultId = event.target.closest('[data-default-address]')?.dataset.defaultAddress;
     if (defaultId) {
+      if (customerProfilePersistence) {
+        try {
+          await customerProfilePersistence.addresses.setDefault(defaultId);
+          await refreshPersistedCustomerProfile('Đã cập nhật địa chỉ mặc định.');
+        } catch { showProfilePersistenceError(); }
+        return;
+      }
       customerProfile = setDefaultCustomerAddress(customerProfile, defaultId);
       profileStatusMessage = 'Đã cập nhật địa chỉ mặc định.';
       renderCustomerProfile();
@@ -899,6 +935,13 @@ export function initialiseHomePage(
     }
     const deleteId = event.target.closest('[data-delete-address]')?.dataset.deleteAddress;
     if (deleteId) {
+      if (customerProfilePersistence) {
+        try {
+          await customerProfilePersistence.addresses.delete(deleteId);
+          await refreshPersistedCustomerProfile('Đã xóa địa chỉ.');
+        } catch { showProfilePersistenceError(); }
+        return;
+      }
       customerProfile = deleteCustomerAddress(customerProfile, deleteId);
       profileStatusMessage = 'Đã xóa địa chỉ.';
       renderCustomerProfile();
@@ -923,7 +966,26 @@ export function initialiseHomePage(
       return;
     }
   });
-  profileView.addEventListener('submit', (event) => {
+  profileView.addEventListener('submit', async (event) => {
+    if (event.target.matches('[data-profile-personal-form]')) {
+      event.preventDefault();
+      const phone = normalizeVietnamesePhone(event.target.elements.phone.value);
+      if (!phone) {
+        profileStatusMessage = 'Số điện thoại Việt Nam không hợp lệ.';
+        renderCustomerProfile();
+        return;
+      }
+      try {
+        await customerProfilePersistence.profiles.saveCurrent({
+          name: event.target.elements.name.value,
+          phone,
+          avatarUrl: event.target.elements.avatarUrl.value || null,
+        });
+        personalFormOpen = false;
+        await refreshPersistedCustomerProfile('Đã lưu thông tin cá nhân.');
+      } catch { showProfilePersistenceError(); }
+      return;
+    }
     if (!event.target.matches('[data-address-form]')) return;
     event.preventDefault();
     const address = {
@@ -931,6 +993,16 @@ export function initialiseHomePage(
       address: event.target.elements.address.value,
       isDefault: event.target.elements.isDefault.checked,
     };
+    if (customerProfilePersistence) {
+      try {
+        const wasEditing = Boolean(editingAddressId);
+        await customerProfilePersistence.addresses.save({ id: editingAddressId ?? null, ...address });
+        addressFormOpen = false;
+        editingAddressId = undefined;
+        await refreshPersistedCustomerProfile(wasEditing ? 'Đã cập nhật địa chỉ.' : 'Đã thêm địa chỉ.');
+      } catch { showProfilePersistenceError(); }
+      return;
+    }
     customerProfile = editingAddressId
       ? updateCustomerAddress(customerProfile, editingAddressId, address)
       : addCustomerAddress(customerProfile, address);

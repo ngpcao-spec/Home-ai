@@ -8,6 +8,17 @@ export const adaptProfileRow = (row) => row ? Object.freeze({
   updatedAt: row.updated_at,
 }) : null;
 
+export const adaptCustomerAddressRow = (row) => row ? Object.freeze({
+  id: row.id,
+  label: row.label,
+  address: row.address_text,
+  latitude: row.latitude ?? null,
+  longitude: row.longitude ?? null,
+  isDefault: row.is_default === true,
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+}) : null;
+
 export const adaptMissionRow = (row) => row ? Object.freeze({
   id: row.id,
   clientId: row.client_id,
