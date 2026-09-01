@@ -1,4 +1,5 @@
 import { mockTechnicians } from './mock-technicians.js';
+import { createOptionalSupabaseRepositories } from '../supabase/repositories/index.js';
 
 export const defaultMvpLocation = { city: 'Nha Trang', province: 'Khánh Hòa' };
 
@@ -16,4 +17,28 @@ export function createMockTechnicianRepository(data = mockTechnicians) {
       }));
     },
   };
+}
+
+export function createProgressiveTechnicianRepository(
+  runtimeConfig = globalThis.__HOME_AI_CONFIG__,
+  fallback = createMockTechnicianRepository(),
+) {
+  const repositories = createOptionalSupabaseRepositories(runtimeConfig);
+  return Object.freeze({
+    async list({ location = defaultMvpLocation, serviceCategory } = {}) {
+      if (!repositories.enabled || !serviceCategory
+          || !Number.isFinite(location?.latitude) || !Number.isFinite(location?.longitude)) {
+        return fallback.list({ location });
+      }
+      try {
+        return await repositories.providers.listMatchingCandidates({
+          serviceCategory,
+          latitude: location.latitude,
+          longitude: location.longitude,
+        });
+      } catch {
+        return fallback.list({ location });
+      }
+    },
+  });
 }

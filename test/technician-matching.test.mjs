@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import { createSelectionMessage, createTechnicianCardsMarkup } from '../src/app.js';
 import { findBestTechnicians, rankTechnicians } from '../src/technicians/matching.js';
 import { mockTechnicians } from '../src/technicians/mock-technicians.js';
+import { createProgressiveTechnicianRepository } from '../src/technicians/repository.js';
 
 describe('ghép thợ cục bộ', () => {
   it('lọc theo danh mục và loại trừ danh mục không tương thích', () => {
@@ -43,5 +44,16 @@ describe('ghép thợ cục bộ', () => {
     const markup = createTechnicianCardsMarkup([mockTechnicians[0]]);
     assert.match(markup, /data-choose-technician="dien-minh"/);
     assert.equal(createSelectionMessage(mockTechnicians[0].name), 'Bạn đã chọn Nguyễn Văn Minh');
+  });
+
+  it('conserve le fallback mock si Supabase est absent', async () => {
+    const fallbackCalls = [];
+    const fallback = { async list(args) { fallbackCalls.push(args); return mockTechnicians; } };
+    const repository = createProgressiveTechnicianRepository({}, fallback);
+    const result = await repository.list({
+      serviceCategory: 'electricity', location: { latitude: 12.24, longitude: 109.19 },
+    });
+    assert.equal(result, mockTechnicians);
+    assert.equal(fallbackCalls.length, 1);
   });
 });

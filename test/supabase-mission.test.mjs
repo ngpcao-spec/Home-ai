@@ -49,6 +49,9 @@ describe('missions client Supabase', () => {
       from() { return {}; },
       rpc(name, args) {
         calls.push([name, args]);
+        if (name === 'create_current_customer_mission_offers') {
+          return Promise.resolve({ data: [{ id: 'o1', mission_id: 'm1' }], error: null });
+        }
         return Promise.resolve({ data: {
           id: 'm1', client_id: 'c1', provider_id: null, service_category: 'hvac',
           problem_description: 'Test', address_text: 'Nha Trang', client_latitude: 12.24,
@@ -64,9 +67,11 @@ describe('missions client Supabase', () => {
       address: 'Nha Trang', clientLocation: { latitude: 12.24, longitude: 109.19 },
     });
     await repository.cancelCurrent(mission);
-    assert.deepEqual(calls.map(([name]) => name), ['create_current_customer_mission', 'cancel_current_customer_mission']);
+    await repository.createOffers(mission.id);
+    assert.deepEqual(calls.map(([name]) => name), ['create_current_customer_mission', 'cancel_current_customer_mission', 'create_current_customer_mission_offers']);
     assert.equal('client_id' in calls[0][1], false);
     assert.equal('provider_id' in calls[0][1], false);
     assert.equal('status' in calls[0][1], false);
+    assert.equal('provider_id' in calls[2][1], false);
   });
 });

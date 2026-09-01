@@ -50,5 +50,12 @@ export function createSupabaseMissionsRepository(supabase) {
       });
       return adaptMissionRow(unwrap(result, 'missions.cancelCurrent'));
     },
+    async createOffers(missionId, limit = 10) {
+      const result = await client.rpc('create_current_customer_mission_offers', {
+        target_mission_id: missionId,
+        offer_limit: limit,
+      });
+      return Object.freeze([...(unwrap(result, 'missions.createOffers') ?? [])]);
+    },
   });
 }

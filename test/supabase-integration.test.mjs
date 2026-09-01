@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { adaptMissionRow, adaptProfileRow, adaptProviderRow } from '../src/supabase/adapters.js';
+import { adaptMatchingProviderRow, adaptMissionRow, adaptProfileRow, adaptProviderRow } from '../src/supabase/adapters.js';
 import { createSupabaseBrowserClient } from '../src/supabase/client.js';
 import { readSupabaseConfig } from '../src/supabase/config.js';
 import { createOptionalSupabaseRepositories } from '../src/supabase/repositories/index.js';
@@ -24,6 +24,7 @@ describe('configuration Supabase optionnelle', () => {
       addresses: null,
       missions: null,
       providers: null,
+      offers: null,
     });
   });
 
@@ -61,6 +62,40 @@ describe('adapters et repositories Supabase préparatoires', () => {
       service_radius_km: '10', rating_average: '4.9', review_count: 10, completed_jobs: 20,
       reliability_score: '98', languages: ['vi'], kyc_status: 'verified', active: true,
     }).verified, true);
+    const candidate = adaptMatchingProviderRow({
+      provider_id: 'p1', display_name: 'Phạm Lan', specialty: 'Plomberie',
+      service_category: 'plumbing', base_price: 150000, currency: 'VND',
+      service_radius_km: '10', rating_average: '4.9', review_count: 20,
+      completed_jobs: 30, reliability_score: '98', latitude: 12.24,
+      longitude: 109.19, last_location_at: '2026-09-01T00:00:00Z',
+      straight_line_distance_km: '1.25',
+    });
+    assert.equal(candidate.category, 'plumbing');
+    assert.equal(candidate.distanceKm, 1.25);
+    assert.equal(candidate.online, true);
+  });
+
+  it('demande la présélection et la création des offres uniquement via RPC', async () => {
+    const calls = [];
+    const client = {
+      from() { return {}; },
+      rpc(name, args) {
+        calls.push([name, args]);
+        return Promise.resolve({ data: name.startsWith('get_matching') ? [] : [{ id: 'o1' }], error: null });
+      },
+    };
+    const repositories = {
+      providers: (await import('../src/supabase/repositories/providers.js')).createSupabaseProvidersRepository(client),
+      missions: createSupabaseMissionsRepository(client),
+    };
+    await repositories.providers.listMatchingCandidates({
+      serviceCategory: 'plumbing', latitude: 12.24, longitude: 109.19,
+    });
+    await repositories.missions.createOffers('m1');
+    assert.deepEqual(calls.map(([name]) => name), [
+      'get_matching_provider_candidates', 'create_current_customer_mission_offers',
+    ]);
+    assert.equal(calls.some(([, args]) => 'provider_id' in args), false);
   });
 
   it('exécute le contrat missions via un client injecté et laisse RLS filtrer côté serveur', async () => {

@@ -1,4 +1,4 @@
-import { adaptProviderRow } from '../adapters.js';
+import { adaptMatchingProviderRow, adaptProviderRow } from '../adapters.js';
 import { requireSupabaseClient, unwrap } from './shared.js';
 
 const providerColumns = `
@@ -32,6 +32,15 @@ export function createSupabaseProvidersRepository(supabase) {
         .eq('provider_id', providerId)
         .eq('enabled', true);
       return Object.freeze([...(unwrap(result, 'providers.listServices') ?? [])]);
+    },
+    async listMatchingCandidates({ serviceCategory, latitude, longitude, limit = 20 }) {
+      const result = await client.rpc('get_matching_provider_candidates', {
+        requested_service_category: serviceCategory,
+        customer_latitude: latitude,
+        customer_longitude: longitude,
+        candidate_limit: limit,
+      });
+      return Object.freeze((unwrap(result, 'providers.listMatchingCandidates') ?? []).map(adaptMatchingProviderRow));
     },
   });
 }

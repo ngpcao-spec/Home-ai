@@ -1,6 +1,6 @@
 import { createMockDiagnostic } from './diagnostic/mock-diagnostic.js';
 import { getMatchReasons, getRouteMatrixCandidates } from './technicians/matching.js';
-import { createMockTechnicianRepository, defaultMvpLocation } from './technicians/repository.js';
+import { createProgressiveTechnicianRepository } from './technicians/repository.js';
 import { createProviderProfile } from './technicians/provider-profile.js';
 import { createProviderProfileMarkup } from './technicians/provider-profile-view.js';
 import { createMapProvider } from './map/map-provider.js';
@@ -258,7 +258,7 @@ export function initialiseHomePage(
   root,
   geolocation = globalThis.navigator?.geolocation,
   diagnostic = createMockDiagnostic(),
-  technicianRepository = createMockTechnicianRepository(),
+  technicianRepository = createProgressiveTechnicianRepository(),
   scheduleTask = globalThis.setTimeout,
   searchTiming = prototypeSearchTiming,
   mapProviderFactory = createMapProvider,
@@ -503,7 +503,10 @@ export function initialiseHomePage(
     status.textContent = '';
     clientLocation = await getClientLocation(geolocation);
     root.querySelector('[data-location-label]').textContent = clientLocation.source === 'browser' ? 'Vị trí hiện tại' : 'Đang dùng vị trí mặc định · Nha Trang';
-    const technicians = await technicianRepository.list({ location: defaultMvpLocation });
+    const technicians = await technicianRepository.list({
+      location: clientLocation,
+      serviceCategory: diagnosedCategory,
+    });
     const routingCandidates = getRouteMatrixCandidates(technicians, diagnosedCategory);
     try {
       await renderMap(stage, { technicians: routingCandidates, radiusKm: 2, searching: true });
@@ -725,7 +728,9 @@ export function initialiseHomePage(
           location: clientLocation,
           scheduledFor,
         });
-        showBookingConfirmation(connection.activeMission ?? await missionRepository.createCurrent(draft));
+        const remoteMission = connection.activeMission ?? await missionRepository.createCurrent(draft);
+        await missionRepository.createOffers?.(remoteMission.id).catch(() => []);
+        showBookingConfirmation(remoteMission);
       } catch {
         submit.disabled = false;
         root.querySelector('[data-booking-status]').textContent = 'Không thể lưu nhiệm vụ. Vui lòng thử lại.';
