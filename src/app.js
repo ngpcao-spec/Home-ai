@@ -27,6 +27,8 @@ import {
   updateCustomerAddress,
 } from './customer/profile.js';
 import { createCustomerProfileMarkup } from './customer/profile-view.js';
+import { legalContent, supportFaqs } from './customer/support.js';
+import { createLegalMarkup, createSupportMarkup } from './customer/support-view.js';
 import {
   createLoginMarkup,
   createOnboardingMarkup,
@@ -237,6 +239,8 @@ export function createHomeAiMarkup() {
         <section class="history-view" data-app-view="history" hidden aria-label="Lịch sử interventions"></section>
         <section class="mission-detail-view" data-app-view="mission-detail" hidden aria-label="Chi tiết chuyến"></section>
         <section class="profile-view" data-app-view="profile" hidden aria-labelledby="profile-title"></section>
+        <section class="support-view" data-app-view="support" hidden aria-labelledby="support-title"></section>
+        <section class="legal-view" data-app-view="legal" hidden aria-labelledby="legal-title"></section>
       </main>
 
       <footer><span>Đã phục vụ hơn <strong>10.000+</strong> gia đình Việt</span></footer>
@@ -354,6 +358,7 @@ export function initialiseHomePage(
   let addressFormOpen = false;
   let editingAddressId;
   let profileStatusMessage = '';
+  let supportStatusMessage = '';
   let missionBookedAt;
   let trackingRoute;
   const trackingRoutes = createTrackingRouteSession(routingProvider);
@@ -375,13 +380,15 @@ export function initialiseHomePage(
   const showAppView = (view, missionId) => {
     if (view === 'history') root.querySelector('[data-app-view="history"]').innerHTML = createMissionHistoryMarkup(getMissionHistory());
     if (view === 'profile') renderCustomerProfile();
+    if (view === 'support') root.querySelector('[data-app-view="support"]').innerHTML = createSupportMarkup(supportFaqs, supportStatusMessage);
+    if (view === 'legal') root.querySelector('[data-app-view="legal"]').innerHTML = createLegalMarkup(legalContent);
     if (view === 'mission-detail') {
       const selectedMission = getMissionHistory().find((item) => item.missionId === missionId);
       root.querySelector('[data-app-view="mission-detail"]').innerHTML = createMissionDetailMarkup(selectedMission);
     }
     root.querySelectorAll('[data-app-view]').forEach((section) => { section.hidden = section.dataset.appView !== view; });
     root.querySelectorAll('[data-navigation]').forEach((button) => {
-      const activeView = view === 'mission-detail' ? 'history' : view;
+      const activeView = view === 'mission-detail' ? 'history' : ['support', 'legal'].includes(view) ? 'profile' : view;
       const isActive = button.dataset.navigation === activeView;
       button.classList.toggle('is-active', isActive);
       if (isActive) button.setAttribute('aria-current', 'page');
@@ -807,6 +814,22 @@ export function initialiseHomePage(
   root.querySelector('[data-app-view="mission-detail"]').addEventListener('click', (event) => {
     if (event.target.closest('[data-back-history]')) showAppView('history');
   });
+  root.querySelector('[data-app-view="support"]').addEventListener('click', (event) => {
+    if (event.target.closest('[data-back-profile]')) {
+      showAppView('profile');
+      return;
+    }
+    const action = event.target.closest('[data-mock-support]')?.dataset.mockSupport;
+    if (action) {
+      supportStatusMessage = action === 'call'
+        ? 'Cuộc gọi hỗ trợ đã được mô phỏng. Không có cuộc gọi thật nào được thực hiện.'
+        : 'Tin nhắn hỗ trợ đã được mô phỏng. Không có dữ liệu nào được gửi.';
+      showAppView('support');
+    }
+  });
+  root.querySelector('[data-app-view="legal"]').addEventListener('click', (event) => {
+    if (event.target.closest('[data-back-profile]')) showAppView('profile');
+  });
   const profileView = root.querySelector('[data-app-view="profile"]');
   profileView.addEventListener('click', (event) => {
     if (event.target.closest('[data-profile-history]')) {
@@ -848,8 +871,15 @@ export function initialiseHomePage(
       renderCustomerProfile();
       return;
     }
-    if (event.target.closest('[data-profile-help]')) profileStatusMessage = 'Trung tâm trợ giúp sẽ được kết nối trong phiên bản tiếp theo.';
-    if (event.target.closest('[data-profile-terms]')) profileStatusMessage = 'Điều khoản và chính sách quyền riêng tư sẽ được mở tại đây.';
+    if (event.target.closest('[data-profile-help]')) {
+      supportStatusMessage = '';
+      showAppView('support');
+      return;
+    }
+    if (event.target.closest('[data-profile-terms]')) {
+      showAppView('legal');
+      return;
+    }
     if (event.target.closest('[data-profile-logout]')) {
       clearCustomerSession(browserStorage);
       saveOnboardingCompleted(browserStorage);
@@ -859,7 +889,6 @@ export function initialiseHomePage(
       renderLogin();
       return;
     }
-    if (event.target.closest('[data-profile-help], [data-profile-terms]')) renderCustomerProfile();
   });
   profileView.addEventListener('submit', (event) => {
     if (!event.target.matches('[data-address-form]')) return;

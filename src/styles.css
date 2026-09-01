@@ -37,7 +37,7 @@ button { cursor: pointer; }
 @keyframes startup-spin { to { transform: rotate(360deg); } }
 @keyframes startup-in { from { opacity: 0; transform: translateY(8px); } }
 
-.page-shell { min-height: 100vh; padding-bottom: 72px; overflow: hidden; background: linear-gradient(180deg, #f4fbf7 0, #fff 38rem); }
+.page-shell { min-height: 100vh; padding-bottom: calc(112px + env(safe-area-inset-bottom)); overflow: hidden; background: linear-gradient(180deg, #f4fbf7 0, #fff 38rem); }
 .topbar { display: flex; align-items: center; justify-content: space-between; width: min(100% - 32px, 1040px); height: 76px; margin: auto; }
 .brand { display: flex; gap: 9px; align-items: center; color: #153b34; font-size: 18px; font-weight: 800; letter-spacing: -.04em; text-decoration: none; }
 .brand strong { color: var(--orange); }
@@ -343,6 +343,16 @@ h1 em { color: var(--green); font-style: normal; }
 .app-navigation button { display: grid; min-height: 49px; place-items: center; gap: 1px; padding: 3px; border: 0; border-radius: 11px; color: #78908a; background: transparent; font-size: 9px; font-weight: 750; }
 .app-navigation button span { font-size: 19px; line-height: 1; }
 .app-navigation button.is-active { color: var(--dark-green); background: #ebf7f2; }
+.support-view, .legal-view { width: min(100%, 760px); margin: 0 auto; padding-bottom: 24px; }
+.support-back { display: inline-flex; align-items: center; gap: 5px; min-height: 38px; margin-bottom: 15px; padding: 0 11px; border: 1px solid #cfe1da; border-radius: 11px; color: var(--dark-green); background: white; font-size: 10px; font-weight: 800; }
+.support-back span { font-size: 20px; line-height: 1; }
+.support-heading { margin-bottom: 18px; }.support-heading p { margin-bottom: 5px !important; }.support-heading h1 { font-size: clamp(30px, 7vw, 42px); }.support-heading > span { display: block; margin-top: 9px; color: #687d77; font-size: 11px; }
+.support-card { margin-top: 13px; padding: 18px; border: 1px solid #dce9e4; border-radius: 18px; background: white; box-shadow: 0 8px 24px rgb(22 74 62 / 6%); }
+.support-card > h2 { margin: 0 0 13px; color: #173d34; font-size: 16px; }.support-card > p { color: #687d77; font-size: 10px; }
+.support-faq-list { display: grid; gap: 8px; }.support-faq { overflow: hidden; border: 1px solid #deebe6; border-radius: 13px; background: #fbfdfc; }.support-faq summary { display: flex; min-height: 48px; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 13px; color: #294a43; font-size: 11px; font-weight: 800; cursor: pointer; list-style: none; }.support-faq summary::-webkit-details-marker { display: none; }.support-faq summary span { color: var(--green); font-size: 19px; transition: transform .18s; }.support-faq[open] summary span { transform: rotate(45deg); }.support-faq p { margin: 0; padding: 0 13px 13px; color: #617770; font-size: 10px; line-height: 1.6; }
+.support-contact-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 13px; }.support-contact-actions button { min-height: 44px; border: 1px solid var(--green); border-radius: 12px; color: white; background: var(--green); font-size: 10px; font-weight: 800; }.support-contact-actions button:last-child { color: var(--green); background: white; }.support-status { min-height: 17px; margin: 10px 0 0 !important; color: var(--green) !important; font-weight: 750; text-align: center; }
+.legal-placeholder { padding: 11px 13px; border: 1px solid #efd9aa; border-radius: 12px; color: #76571a; background: #fff8e7; font-size: 10px; font-weight: 700; }.legal-document article { padding: 12px 0; border-top: 1px solid #edf2f0; }.legal-document article:first-of-type { border-top: 0; }.legal-document h3 { margin: 0 0 6px; color: #294a43; font-size: 12px; }.legal-document article p { margin: 0; color: #657a74; font-size: 10px; line-height: 1.65; }
+@media (max-width: 600px) { .support-card { padding: 14px; }.support-contact-actions { grid-template-columns: 1fr; } }
 
 .services { max-width: 780px; margin: 12px auto 0; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; margin-bottom: 17px; }

@@ -62,7 +62,7 @@ describe('HOME AI C04 marketplace home page', () => {
   it('renders the responsive C19 navigation and application views', () => {
     const markup = createHomeAiMarkup();
     ['Accueil', 'Lịch sử', 'Hồ sơ'].forEach((text) => assert.match(markup, new RegExp(text)));
-    ['home', 'history', 'mission-detail', 'profile'].forEach((view) => assert.match(markup, new RegExp(`data-app-view="${view}"`)));
+    ['home', 'history', 'mission-detail', 'profile', 'support', 'legal'].forEach((view) => assert.match(markup, new RegExp(`data-app-view="${view}"`)));
   });
 
   it('keeps the C20 profile surface model-driven and initially empty for rendering', () => {
