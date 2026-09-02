@@ -5,7 +5,9 @@ returns jsonb language plpgsql stable security definer set search_path = '' as $
 declare uid uuid := (select auth.uid()); result jsonb;
 begin
   if uid is null or (select auth.role()) <> 'authenticated'
-     or not private.profile_has_role(uid, 'provider') then
+     or not private.profile_has_role(uid, 'provider')
+     or not exists (select 1 from public.provider_profiles pp
+       where pp.provider_id=uid and pp.active and pp.kyc_status='verified') then
     raise exception 'Active provider authentication required.' using errcode='42501';
   end if;
   select jsonb_build_object(
@@ -16,7 +18,7 @@ begin
     'offers', coalesce((select jsonb_agg(jsonb_build_object(
       'id', mo.id, 'missionId', mo.mission_id, 'status', mo.status,
       'serviceCategory', m.service_category, 'request', m.problem_description,
-      'approximateAddress', coalesce(nullif(regexp_replace(m.address_text, '^[^,]+,\s*', ''), ''), 'Khu vực khách hàng'),
+      'approximateAddress', 'Khu vực Nha Trang',
       'distanceKm', mo.straight_line_distance_km,
       'etaMinutes', greatest(2, ceil(coalesce(mo.straight_line_distance_km, 0) / 0.32)::integer),
       'expiresAt', mo.expires_at
@@ -41,7 +43,9 @@ create or replace function public.set_current_provider_availability(
 declare uid uuid := (select auth.uid()); result public.provider_status;
 begin
   if uid is null or (select auth.role()) <> 'authenticated'
-     or not private.profile_has_role(uid, 'provider') then
+     or not private.profile_has_role(uid, 'provider')
+     or not exists (select 1 from public.provider_profiles pp
+       where pp.provider_id=uid and pp.active and pp.kyc_status='verified') then
     raise exception 'Active provider authentication required.' using errcode='42501';
   end if;
   if new_available and not new_online then raise exception 'Availability requires online status.' using errcode='22023'; end if;
@@ -63,7 +67,9 @@ returns public.mission_offers language plpgsql security definer set search_path 
 declare uid uuid := (select auth.uid()); result public.mission_offers;
 begin
   if uid is null or (select auth.role()) <> 'authenticated'
-     or not private.profile_has_role(uid, 'provider') then
+     or not private.profile_has_role(uid, 'provider')
+     or not exists (select 1 from public.provider_profiles pp
+       where pp.provider_id=uid and pp.active and pp.kyc_status='verified') then
     raise exception 'Active provider authentication required.' using errcode='42501';
   end if;
   update public.mission_offers set status='declined', responded_at=statement_timestamp()
