@@ -7,6 +7,9 @@ export function createSupabaseOffersRepository(supabase) {
     async getProviderDashboard() {
       return Object.freeze({ ...(unwrap(await client.rpc('get_current_provider_dashboard'), 'offers.getProviderDashboard') ?? {}) });
     },
+    async getCurrentProviderQuoteState() {
+      return unwrap(await client.rpc('get_current_provider_quote_state'), 'offers.getCurrentProviderQuoteState');
+    },
     async acceptCurrentProviderOffer(offerId) {
       const result = await client.rpc('accept_current_provider_offer', { target_offer_id: offerId });
       return adaptMissionRow(unwrap(result, 'offers.acceptCurrentProviderOffer'));
@@ -25,6 +28,16 @@ export function createSupabaseOffersRepository(supabase) {
         target_mission_id: missionId, new_status: status,
         new_latitude: latitude, new_longitude: longitude,
       }), 'offers.updateProviderMissionProgress');
+    },
+    async createCurrentProviderQuote(missionId, draft) {
+      const items = [
+        { item_type: 'labor', description: draft.laborDescription, amount: Number(draft.laborAmount), position: 1 },
+        { item_type: 'part', description: draft.partsDescription, amount: Number(draft.partsAmount), position: 2 },
+      ];
+      return unwrap(await client.rpc('create_current_provider_quote_version', {
+        target_mission_id: missionId, new_diagnosis: draft.diagnosis,
+        new_warranty_days: Number(draft.warrantyDays), new_items: items, target_parent_quote_id: null,
+      }), 'offers.createCurrentProviderQuote');
     },
   });
 }

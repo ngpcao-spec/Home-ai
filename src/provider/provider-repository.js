@@ -25,6 +25,17 @@ export function createMockProviderAppRepository(seed = mockProviderDashboard) {
       state.status = { ...state.status, lastLocationAt: new Date().toISOString() };
       return clone(state);
     },
+    async createQuote(missionId, draft) {
+      if (state.assignment?.id !== missionId || state.assignment.status !== 'arrived') throw new Error('Mission is not ready for diagnosis');
+      const laborAmount = Number(draft.laborAmount); const partsAmount = Number(draft.partsAmount);
+      if (!draft.diagnosis?.trim() || laborAmount < 0 || partsAmount < 0) throw new Error('Invalid quote');
+      const quote = { id: 'quote-demo-v1', version: 1, status: 'pending', diagnosis: draft.diagnosis.trim(), warrantyDays: Number(draft.warrantyDays) || 0, totalAmount: laborAmount + partsAmount, items: [
+        { itemType: 'labor', description: draft.laborDescription || 'Công kiểm tra và sửa chữa', amount: laborAmount },
+        { itemType: 'part', description: draft.partsDescription || 'Linh kiện dự kiến', amount: partsAmount },
+      ] };
+      state.assignment = { ...state.assignment, status: 'quote_pending', quote };
+      return clone(state);
+    },
   });
 }
 
@@ -36,12 +47,19 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
     if (!data?.session?.user) return fallback;
     const initial = await repositories.offers.getProviderDashboard();
     if (!initial?.provider?.id) return fallback;
+    const loadDashboard = async () => {
+      const dashboard = await repositories.offers.getProviderDashboard();
+      if (!dashboard.assignment) return dashboard;
+      const quote = await repositories.offers.getCurrentProviderQuoteState();
+      return { ...dashboard, assignment: { ...dashboard.assignment, quote } };
+    };
     return Object.freeze({
-      source: 'supabase', async load() { return repositories.offers.getProviderDashboard(); },
-      async setAvailability(next) { await repositories.offers.setProviderAvailability(next); return repositories.offers.getProviderDashboard(); },
-      async accept(id) { await repositories.offers.acceptCurrentProviderOffer(id); return repositories.offers.getProviderDashboard(); },
-      async decline(id) { await repositories.offers.declineCurrentProviderOffer(id); return repositories.offers.getProviderDashboard(); },
-      async updateMissionProgress(id, status, location) { await repositories.offers.updateProviderMissionProgress(id, status, location); return repositories.offers.getProviderDashboard(); },
+      source: 'supabase', load: loadDashboard,
+      async setAvailability(next) { await repositories.offers.setProviderAvailability(next); return loadDashboard(); },
+      async accept(id) { await repositories.offers.acceptCurrentProviderOffer(id); return loadDashboard(); },
+      async decline(id) { await repositories.offers.declineCurrentProviderOffer(id); return loadDashboard(); },
+      async updateMissionProgress(id, status, location) { await repositories.offers.updateProviderMissionProgress(id, status, location); return loadDashboard(); },
+      async createQuote(id, draft) { await repositories.offers.createCurrentProviderQuote(id, draft); return loadDashboard(); },
     });
   } catch { return fallback; }
 }

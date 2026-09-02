@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import { describe,it } from 'node:test';
+import { createMockProviderAppRepository } from '../src/provider/provider-repository.js';
+import { renderProviderDashboard } from '../src/provider/provider-app.js';
+
+async function arrivedRepository(){const repo=createMockProviderAppRepository();let state=await repo.accept('offer-demo-1');state=await repo.updateMissionProgress(state.assignment.id,'travelling',state.assignment.clientLocation);await repo.updateMissionProgress(state.assignment.id,'arrived',state.assignment.clientLocation);return repo;}
+
+describe('diagnostic et devis Provider App',()=>{
+  it('propose le diagnostic seulement après arrived',async()=>{const repo=await arrivedRepository();const state=await repo.load();const html=renderProviderDashboard(state);assert.match(html,/Bắt đầu chẩn đoán/);assert.doesNotMatch(html,/Bắt đầu di chuyển/);});
+  it('crée une version pending et attend une acceptation explicite',async()=>{const repo=await arrivedRepository();const state=await repo.load();const quoted=await repo.createQuote(state.assignment.id,{diagnosis:'Ổ cắm và dây nguồn bị cháy',laborAmount:150000,partsAmount:50000,warrantyDays:30});assert.equal(quoted.assignment.status,'quote_pending');assert.deepEqual({version:quoted.assignment.quote.version,status:quoted.assignment.quote.status,total:quoted.assignment.quote.totalAmount},{version:1,status:'pending',total:200000});const html=renderProviderDashboard(quoted);assert.match(html,/Đang chờ khách hàng chấp nhận/);assert.match(html,/Không bắt đầu công việc tính phí/);});
+  it('interdit de remplacer le devis pending dans le fallback',async()=>{const repo=await arrivedRepository();const state=await repo.load();await repo.createQuote(state.assignment.id,{diagnosis:'Test',laborAmount:1,partsAmount:0,warrantyDays:0});await assert.rejects(repo.createQuote(state.assignment.id,{diagnosis:'Autre',laborAmount:2,partsAmount:0,warrantyDays:0}),/not ready/);});
+});
