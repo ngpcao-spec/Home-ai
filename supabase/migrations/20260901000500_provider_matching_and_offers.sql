@@ -195,6 +195,7 @@ set search_path = ''
 as $$
 declare
   current_user_id uuid := (select auth.uid());
+  locked_mission_id uuid;
   offer_row public.mission_offers;
   mission_row public.missions;
 begin
@@ -203,19 +204,25 @@ begin
     raise exception 'Active provider authentication required.' using errcode = '42501';
   end if;
 
+  -- This unlocked lookup is used only to choose the mission lock. No authorization,
+  -- validity or assignment decision may use data from this snapshot.
+  select mo.mission_id into locked_mission_id
+  from public.mission_offers mo where mo.id = target_offer_id;
+
+  -- Every contender locks the mission first. Locking distinct offers first would
+  -- deadlock when the winner expires a row already locked by another contender.
+  select * into mission_row from public.missions
+  where id = locked_mission_id for update;
   select * into offer_row from public.mission_offers
-  where id = target_offer_id;
+  where id = target_offer_id for update;
+
+  -- Revalidate every security and validity property from the locked row.
   if offer_row.id is null or offer_row.provider_id <> current_user_id then
     raise exception 'Provider offer not found.' using errcode = '42501';
   end if;
-
-  -- Every contender locks the mission first. Locking distinct offers first would
-  -- deadlock when the winner declines a row already locked by another contender.
-  select * into mission_row from public.missions
-  where id = offer_row.mission_id for update;
-  select * into offer_row from public.mission_offers
-  where id = target_offer_id for update;
-  if offer_row.status <> 'pending' or offer_row.expires_at <= statement_timestamp()
+  if mission_row.id is null or offer_row.mission_id is distinct from locked_mission_id
+     or offer_row.mission_id is distinct from mission_row.id
+     or offer_row.status <> 'pending' or offer_row.expires_at <= statement_timestamp()
      or mission_row.provider_id is not null or mission_row.status not in ('searching', 'offered') then
     raise exception 'Offer is no longer available.' using errcode = '40001';
   end if;

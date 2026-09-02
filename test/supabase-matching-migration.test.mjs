@@ -38,8 +38,18 @@ describe('contrat SQL matching et offres', () => {
       readFile(migrationUrl, 'utf8'), readFile(securityTestUrl, 'utf8'), readFile(concurrencyTestUrl, 'utf8'),
     ]);
     const missionLock = migration.indexOf('where id = offer_row.mission_id for update');
+    const missionIdLookup = migration.indexOf('select mo.mission_id into locked_mission_id');
+    const lockedMission = migration.indexOf('where id = locked_mission_id for update');
     const offerLock = migration.indexOf('where id = target_offer_id for update');
-    assert.ok(missionLock >= 0 && offerLock > missionLock, 'mission must be locked before the competing offer');
+    assert.equal(missionLock, -1, 'mission lock must not depend on a stale offer composite');
+    assert.ok(missionIdLookup >= 0 && lockedMission > missionIdLookup && offerLock > lockedMission,
+      'mission must be locked before the offer is reloaded and locked');
+    const lockedValidation = migration.slice(offerLock);
+    for (const check of ['offer_row.id is null', 'offer_row.provider_id <> current_user_id',
+      "offer_row.status <> 'pending'", 'offer_row.expires_at <= statement_timestamp()',
+      'offer_row.mission_id is distinct from locked_mission_id']) {
+      assert.ok(lockedValidation.includes(check), `missing locked offer revalidation: ${check}`);
+    }
     assert.match(security, /RLS is not enabled on all 14 public tables/);
     assert.match(security, /Direct offer insert bypassed RPC ownership/);
     assert.match(concurrency, /dblink_send_query\('offer_one'/);
@@ -47,6 +57,8 @@ describe('contrat SQL matching et offres', () => {
     assert.match(concurrency, /status='accepted'\) <> 1/);
     assert.match(concurrency, /status='declined'/);
     assert.match(concurrency, /<> 'expired'/);
+    assert.match(concurrency, /Concurrent ownership change was accepted from a stale read/);
+    assert.match(concurrency, /Concurrently deleted offer was accepted from a stale read/);
   });
 
   it('expire automatiquement les offres concurrentes sans les refuser au nom du prestataire', async () => {
