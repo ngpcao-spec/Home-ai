@@ -30,7 +30,7 @@ create or replace function public.create_current_provider_quote_version(target_m
   new_warranty_days integer,new_items jsonb,target_parent_quote_id uuid default null)
 returns public.quotes language plpgsql security definer set search_path = '' as $$
 declare uid uuid := (select auth.uid()); mission_row public.missions; parent_row public.quotes; result public.quotes;
-  item jsonb; next_version integer; total bigint:=0; quote_type public.quote_type; quote_status public.quote_status;
+  item jsonb; next_version integer; latest_accepted_version integer; total bigint:=0; quote_type public.quote_type; quote_status public.quote_status;
 begin
   if uid is null or (select auth.role()) <> 'authenticated' or not private.profile_has_role(uid,'provider')
      or not exists(select 1 from public.provider_profiles pp where pp.provider_id=uid and pp.active and pp.kyc_status='verified') then
@@ -59,9 +59,12 @@ begin
     quote_type:='initial'; quote_status:='pending';
   else
     select * into parent_row from public.quotes where id=target_parent_quote_id and mission_id=mission_row.id for update;
+    select max(q.version) into latest_accepted_version from public.quotes q
+      where q.mission_id=mission_row.id and q.status='accepted';
     if mission_row.status<>'in_progress' or parent_row.id is null or parent_row.status<>'accepted'
+       or parent_row.version is distinct from latest_accepted_version
        or exists(select 1 from public.quotes q where q.mission_id=mission_row.id and q.status in ('pending','supplement_pending')) then
-      raise exception 'Accepted parent quote required for a new version.' using errcode='55000';
+      raise exception 'Latest accepted parent quote required for a new version.' using errcode='55000';
     end if;
     select coalesce(max(q.version),0)+1 into next_version from public.quotes q where q.mission_id=mission_row.id;
     quote_type:='supplement'; quote_status:='supplement_pending';
