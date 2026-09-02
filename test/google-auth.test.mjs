@@ -2,10 +2,25 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createGoogleCustomerAuth, googleOAuthRedirectTo } from '../src/customer/google-auth.js';
 import { createLoginMarkup } from '../src/onboarding/flow.js';
+import {
+  createMockCustomerSession,
+  googleOAuthAttemptStorageKey,
+  markGoogleOAuthAttempt,
+  resolveCustomerStartupSession,
+  saveCustomerSession,
+} from '../src/customer/session.js';
 
 const runtime = { SUPABASE_URL: 'https://example.supabase.co', SUPABASE_ANON_KEY: 'anon-key' };
 
 describe('C03 Google Auth Supabase', () => {
+  const createStorage = () => {
+    const values = new Map();
+    return {
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => values.set(key, String(value)),
+      removeItem: (key) => values.delete(key),
+    };
+  };
   it('affiche Google sans supprimer le téléphone et OTP mock', () => {
     const markup = createLoginMarkup();
     assert.match(markup, /Continuer avec Google/);
@@ -72,5 +87,27 @@ describe('C03 Google Auth Supabase', () => {
     assert.equal(auth.enabled, false);
     assert.equal(await auth.resume(), null);
     await auth.signOut();
+  });
+
+  it('n’ouvre jamais C04 après un retour Google sans vraie session Supabase', () => {
+    const storage = createStorage();
+    saveCustomerSession(storage, createMockCustomerSession('+84901234567'));
+    markGoogleOAuthAttempt(storage);
+
+    const startup = resolveCustomerStartupSession(storage, false);
+
+    assert.deepEqual(startup, { authenticated: false, kind: null, oauthFailed: true });
+    assert.equal(storage.getItem(googleOAuthAttemptStorageKey), null);
+    assert.equal(storage.getItem('customerSession'), null);
+  });
+
+  it('ouvre C04 après le retour Google uniquement avec une session Supabase réelle', () => {
+    const storage = createStorage();
+    markGoogleOAuthAttempt(storage);
+
+    const startup = resolveCustomerStartupSession(storage, true);
+
+    assert.deepEqual(startup, { authenticated: true, kind: 'supabase-google', oauthFailed: false });
+    assert.equal(storage.getItem(googleOAuthAttemptStorageKey), null);
   });
 });

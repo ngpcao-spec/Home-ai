@@ -1,4 +1,5 @@
 export const customerSessionStorageKey = 'customerSession';
+export const googleOAuthAttemptStorageKey = 'googleOAuthAttempt';
 export const mockOtpCode = '123456';
 
 const vietnameseMobilePattern = /^(3[2-9]|5[2689]|7[06-9]|8[1-689]|9[0-9])[0-9]{7}$/;
@@ -59,4 +60,43 @@ export function clearCustomerSession(storage) {
   } catch {
     return false;
   }
+}
+
+export function markGoogleOAuthAttempt(storage) {
+  try {
+    storage?.setItem(googleOAuthAttemptStorageKey, new Date().toISOString());
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function clearGoogleOAuthAttempt(storage) {
+  try {
+    storage?.removeItem(googleOAuthAttemptStorageKey);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function resolveCustomerStartupSession(storage, oauthAuthenticated = false) {
+  let oauthAttempted = false;
+  try { oauthAttempted = Boolean(storage?.getItem(googleOAuthAttemptStorageKey)); } catch { /* Ignore unavailable storage. */ }
+
+  if (oauthAuthenticated) {
+    clearGoogleOAuthAttempt(storage);
+    return Object.freeze({ authenticated: true, kind: 'supabase-google', oauthFailed: false });
+  }
+  if (oauthAttempted) {
+    clearGoogleOAuthAttempt(storage);
+    clearCustomerSession(storage);
+    return Object.freeze({ authenticated: false, kind: null, oauthFailed: true });
+  }
+  const mockSession = readCustomerSession(storage);
+  return Object.freeze({
+    authenticated: Boolean(mockSession),
+    kind: mockSession ? 'mock-phone' : null,
+    oauthFailed: false,
+  });
 }

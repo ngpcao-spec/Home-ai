@@ -46,7 +46,9 @@ import {
   isValidMockOtp,
   maskVietnamesePhone,
   normalizeVietnamesePhone,
-  readCustomerSession,
+  markGoogleOAuthAttempt,
+  clearGoogleOAuthAttempt,
+  resolveCustomerStartupSession,
   saveCustomerSession,
 } from './customer/session.js';
 import {
@@ -291,23 +293,25 @@ export function initialiseHomePage(
     renderLogin();
   };
   scheduleTask(async () => {
+    let oauthAuthenticated = false;
     try {
       const oauthSession = await customerAuth.resume();
-      if (oauthSession?.authenticated) {
-        showApplication();
-        return;
-      }
+      oauthAuthenticated = Boolean(oauthSession?.authenticated);
     } catch {
       // Keep the local phone/OTP fallback available if OAuth recovery fails.
     }
-    if (readCustomerSession(browserStorage)) showApplication();
+    const startupSession = resolveCustomerStartupSession(browserStorage, oauthAuthenticated);
+    if (startupSession.authenticated) showApplication();
+    else if (startupSession.oauthFailed) renderLogin({ error: 'Đăng nhập Google chưa hoàn tất. Vui lòng thử lại.' });
     else startupFlow.innerHTML = isOnboardingCompleted(browserStorage) ? createLoginMarkup() : createOnboardingMarkup(onboardingIndex);
   }, 650);
   startupFlow.addEventListener('click', async (event) => {
     if (event.target.closest('[data-google-login]')) {
+      markGoogleOAuthAttempt(browserStorage);
       try {
         await customerAuth.signIn();
       } catch {
+        clearGoogleOAuthAttempt(browserStorage);
         renderLogin({ error: 'Không thể đăng nhập bằng Google. Vui lòng thử lại hoặc dùng số điện thoại.' });
       }
       return;
