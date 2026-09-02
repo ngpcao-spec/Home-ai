@@ -1,0 +1,21 @@
+.provider-auth {
+  max-width: 420px;
+  margin: 12vh auto;
+  padding: 32px 24px;
+  text-align: center;
+}
+.provider-auth .brand { justify-content: center; margin-bottom: 28px; }
+.provider-auth h1 { font-size: 28px; }
+.provider-auth p { color: #60756f; line-height: 1.55; }
+.provider-auth button {
+  width: 100%;
+  border: 0;
+  border-radius: 14px;
+  padding: 15px;
+  background: #087b61;
+  color: #fff;
+  font-weight: 800;
+  font-size: 16px;
+  cursor: pointer;
+}
+.provider-auth .app-message { color: #b42318; }

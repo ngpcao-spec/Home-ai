@@ -43,30 +43,29 @@ export function createMockProviderAppRepository(seed = mockProviderDashboard) {
   });
 }
 
-export async function createProgressiveProviderAppRepository(runtimeConfig = globalThis.__HOME_AI_CONFIG__, fallback = createMockProviderAppRepository()) {
-  const repositories = createOptionalSupabaseRepositories(runtimeConfig);
+export async function createProgressiveProviderAppRepository(runtimeConfig = globalThis.__HOME_AI_CONFIG__, fallback = createMockProviderAppRepository(), repositoryFactory = createOptionalSupabaseRepositories) {
+  const repositories = repositoryFactory(runtimeConfig);
   if (!repositories.enabled) return fallback;
-  try {
-    const { data } = await repositories.client.auth.getSession();
-    if (!data?.session?.user) return fallback;
-    const initial = await repositories.offers.getProviderDashboard();
-    if (!initial?.provider?.id) return fallback;
-    const loadDashboard = async () => {
-      const dashboard = await repositories.offers.getProviderDashboard();
-      if (!dashboard.assignment) return dashboard;
-      const quote = await repositories.offers.getCurrentProviderQuoteState();
-      return { ...dashboard, assignment: { ...dashboard.assignment, quote } };
-    };
-    return Object.freeze({
-      source: 'supabase', load: loadDashboard,
-      async setAvailability(next) { await repositories.offers.setProviderAvailability(next); return loadDashboard(); },
-      async accept(id) { await repositories.offers.acceptCurrentProviderOffer(id); return loadDashboard(); },
-      async decline(id) { await repositories.offers.declineCurrentProviderOffer(id); return loadDashboard(); },
-      async updateMissionProgress(id, status, location) { await repositories.offers.updateProviderMissionProgress(id, status, location); return loadDashboard(); },
-      async createQuote(id, draft) { await repositories.offers.createCurrentProviderQuote(id, draft); return loadDashboard(); },
-      async startIntervention(id) { const current=await loadDashboard(); await repositories.offers.startIntervention(id,current.assignment.version); return loadDashboard(); },
-      async finishIntervention(id) { const current=await loadDashboard(); await repositories.offers.finishIntervention(id,current.assignment.version); return loadDashboard(); },
-      async getHistory() { return repositories.offers.getMissionHistory(); },
-    });
-  } catch { return fallback; }
+  const { data, error } = await repositories.client.auth.getSession();
+  if (error) throw error;
+  if (!data?.session?.user) return fallback;
+  const initial = await repositories.offers.getProviderDashboard();
+  if (!initial?.provider?.id) throw new Error('Authenticated provider is not provisioned');
+  const loadDashboard = async () => {
+    const dashboard = await repositories.offers.getProviderDashboard();
+    if (!dashboard.assignment) return dashboard;
+    const quote = await repositories.offers.getCurrentProviderQuoteState();
+    return { ...dashboard, assignment: { ...dashboard.assignment, quote } };
+  };
+  return Object.freeze({
+    source: 'supabase', load: loadDashboard,
+    async setAvailability(next) { await repositories.offers.setProviderAvailability(next); return loadDashboard(); },
+    async accept(id) { await repositories.offers.acceptCurrentProviderOffer(id); return loadDashboard(); },
+    async decline(id) { await repositories.offers.declineCurrentProviderOffer(id); return loadDashboard(); },
+    async updateMissionProgress(id, status, location) { await repositories.offers.updateProviderMissionProgress(id, status, location); return loadDashboard(); },
+    async createQuote(id, draft) { await repositories.offers.createCurrentProviderQuote(id, draft); return loadDashboard(); },
+    async startIntervention(id) { const current=await loadDashboard(); await repositories.offers.startIntervention(id,current.assignment.version); return loadDashboard(); },
+    async finishIntervention(id) { const current=await loadDashboard(); await repositories.offers.finishIntervention(id,current.assignment.version); return loadDashboard(); },
+    async getHistory() { return repositories.offers.getMissionHistory(); },
+  });
 }
