@@ -20,5 +20,11 @@ export function createSupabaseOffersRepository(supabase) {
         new_latitude: latitude, new_longitude: longitude,
       }), 'offers.setProviderAvailability');
     },
+    async updateProviderMissionProgress(missionId, status, { latitude, longitude }) {
+      return unwrap(await client.rpc('update_current_provider_mission_progress', {
+        target_mission_id: missionId, new_status: status,
+        new_latitude: latitude, new_longitude: longitude,
+      }), 'offers.updateProviderMissionProgress');
+    },
   });
 }

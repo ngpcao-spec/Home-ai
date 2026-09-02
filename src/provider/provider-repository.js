@@ -10,12 +10,21 @@ export function createMockProviderAppRepository(seed = mockProviderDashboard) {
     async accept(offerId) {
       const offer = state.offers.find(({ id }) => id === offerId);
       if (!offer) throw new Error('Offer unavailable');
-      state.assignment = { id: offer.missionId, serviceCategory: offer.serviceCategory, request: offer.request, address: offer.approximateAddress, status: 'accepted', acceptedAt: new Date().toISOString() };
+      state.assignment = { id: offer.missionId, serviceCategory: offer.serviceCategory, request: offer.request, address: offer.address ?? offer.approximateAddress, clientLocation: offer.clientLocation ?? { latitude: 12.2315, longitude: 109.1902 }, providerLocation: { latitude: 12.2388, longitude: 109.1967 }, status: 'accepted', acceptedAt: new Date().toISOString() };
       state.offers = state.offers.filter(({ id }) => id === offerId).map((item) => ({ ...item, status: 'accepted' }));
       state.status = { ...state.status, available: false };
       return clone(state);
     },
     async decline(offerId) { state.offers = state.offers.filter(({ id }) => id !== offerId); return clone(state); },
+    async updateMissionProgress(missionId, status, location) {
+      if (state.assignment?.id !== missionId) throw new Error('Mission unavailable');
+      const allowed = state.assignment.status === 'accepted' && status === 'travelling'
+        || state.assignment.status === 'travelling' && status === 'arrived';
+      if (!allowed) throw new Error('Invalid mission transition');
+      state.assignment = { ...state.assignment, status, providerLocation: location ?? state.assignment.providerLocation };
+      state.status = { ...state.status, lastLocationAt: new Date().toISOString() };
+      return clone(state);
+    },
   });
 }
 
@@ -32,6 +41,7 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
       async setAvailability(next) { await repositories.offers.setProviderAvailability(next); return repositories.offers.getProviderDashboard(); },
       async accept(id) { await repositories.offers.acceptCurrentProviderOffer(id); return repositories.offers.getProviderDashboard(); },
       async decline(id) { await repositories.offers.declineCurrentProviderOffer(id); return repositories.offers.getProviderDashboard(); },
+      async updateMissionProgress(id, status, location) { await repositories.offers.updateProviderMissionProgress(id, status, location); return repositories.offers.getProviderDashboard(); },
     });
   } catch { return fallback; }
 }
