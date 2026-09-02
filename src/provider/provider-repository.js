@@ -26,10 +26,11 @@ export function createMockProviderAppRepository(seed = mockProviderDashboard) {
       return clone(state);
     },
     async createQuote(missionId, draft) {
-      if (state.assignment?.id !== missionId || state.assignment.status !== 'arrived') throw new Error('Mission is not ready for diagnosis');
+      if (state.assignment?.id !== missionId || state.assignment.status !== 'arrived' || state.assignment.quote?.status === 'accepted') throw new Error('Mission is not ready for diagnosis');
       const laborAmount = Number(draft.laborAmount); const partsAmount = Number(draft.partsAmount);
       if (!draft.diagnosis?.trim() || laborAmount < 0 || partsAmount < 0) throw new Error('Invalid quote');
-      const quote = { id: 'quote-demo-v1', version: 1, status: 'pending', diagnosis: draft.diagnosis.trim(), warrantyDays: Number(draft.warrantyDays) || 0, totalAmount: laborAmount + partsAmount, items: [
+      const version = (state.assignment.quote?.version ?? 0) + 1;
+      const quote = { id: `quote-demo-v${version}`, version, status: 'pending', diagnosis: draft.diagnosis.trim(), warrantyDays: Number(draft.warrantyDays) || 0, totalAmount: laborAmount + partsAmount, items: [
         { itemType: 'labor', description: draft.laborDescription || 'Công kiểm tra và sửa chữa', amount: laborAmount },
         { itemType: 'part', description: draft.partsDescription || 'Linh kiện dự kiến', amount: partsAmount },
       ] };

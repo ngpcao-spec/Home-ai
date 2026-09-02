@@ -1,5 +1,14 @@
 -- Provider diagnosis and versioned quotes. Keep remote deployment behind a separate audit.
 
+-- 008 has not been deployed: relax the original v1-only initial quote constraint so a
+-- provider can submit v2+ after an explicit customer decline. Initial quotes still
+-- have no parent; post-acceptance changes remain supplements with an accepted parent.
+alter table public.quotes drop constraint quotes_type_version_parent;
+alter table public.quotes add constraint quotes_type_version_parent check (
+  (type='initial' and version>0 and parent_quote_id is null)
+  or (type='supplement' and version>1 and parent_quote_id is not null)
+);
+
 create or replace function public.get_current_provider_quote_state()
 returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare uid uuid := (select auth.uid()); result jsonb;
@@ -42,10 +51,12 @@ begin
     total:=total+(item->>'amount')::bigint;
   end loop;
   if target_parent_quote_id is null then
-    if mission_row.status<>'arrived' or exists(select 1 from public.quotes q where q.mission_id=mission_row.id) then
+    if mission_row.status<>'arrived'
+       or exists(select 1 from public.quotes q where q.mission_id=mission_row.id and q.status in ('pending','supplement_pending','accepted')) then
       raise exception 'Initial quote cannot be created.' using errcode='55000';
     end if;
-    next_version:=1; quote_type:='initial'; quote_status:='pending';
+    select coalesce(max(q.version),0)+1 into next_version from public.quotes q where q.mission_id=mission_row.id;
+    quote_type:='initial'; quote_status:='pending';
   else
     select * into parent_row from public.quotes where id=target_parent_quote_id and mission_id=mission_row.id for update;
     if mission_row.status<>'in_progress' or parent_row.id is null or parent_row.status<>'accepted'
@@ -67,13 +78,14 @@ begin
   return result;
 end $$;
 
-create or replace function public.accept_current_customer_quote(target_quote_id uuid)
+create or replace function public.decide_current_customer_quote(target_quote_id uuid,new_decision text)
 returns public.quotes language plpgsql security definer set search_path = '' as $$
 declare uid uuid := (select auth.uid()); locked_mission_id uuid; mission_row public.missions; quote_row public.quotes;
 begin
   if uid is null or (select auth.role()) <> 'authenticated' or not private.profile_has_role(uid,'customer') then
     raise exception 'Customer authentication required.' using errcode='42501';
   end if;
+  if new_decision not in ('accepted','declined') then raise exception 'Invalid quote decision.' using errcode='22023'; end if;
   select q.mission_id into locked_mission_id from public.quotes q where q.id=target_quote_id;
   select * into mission_row from public.missions where id=locked_mission_id for update;
   select * into quote_row from public.quotes where id=target_quote_id for update;
@@ -83,17 +95,24 @@ begin
   if not ((quote_row.status='pending' and mission_row.status='quote_pending') or (quote_row.status='supplement_pending' and mission_row.status='supplement_pending')) then
     raise exception 'Quote is no longer awaiting acceptance.' using errcode='40001';
   end if;
-  update public.quotes set status='accepted',decided_by=uid,decided_at=statement_timestamp() where id=quote_row.id returning * into quote_row;
-  update public.missions set status='in_progress',final_authorized_amount=quote_row.total_amount,started_at=coalesce(started_at,statement_timestamp()),version=version+1
-    where id=mission_row.id and client_id=uid;
+  update public.quotes set status=case when new_decision='accepted' then 'accepted'::public.quote_status
+      when quote_row.type='initial' then 'declined'::public.quote_status else 'rejected'::public.quote_status end,
+    decided_by=uid,decided_at=statement_timestamp() where id=quote_row.id returning * into quote_row;
+  update public.missions set
+    status=case when new_decision='accepted' then 'in_progress'::public.mission_status
+      when quote_row.type='initial' then 'arrived'::public.mission_status else 'in_progress'::public.mission_status end,
+    final_authorized_amount=case when new_decision='accepted' then quote_row.total_amount else final_authorized_amount end,
+    started_at=case when new_decision='accepted' then coalesce(started_at,statement_timestamp()) else started_at end,
+    version=version+1 where id=mission_row.id and client_id=uid;
   insert into public.mission_events(mission_id,event_type,actor_user_id,actor_role,payload)
-    values(mission_row.id,'mission.quote.accepted',uid,'customer',jsonb_build_object('quoteId',quote_row.id,'version',quote_row.version,'authorizedAmount',quote_row.total_amount));
+    values(mission_row.id,case when new_decision='accepted' then 'mission.quote.accepted' else 'mission.quote.declined' end,
+      uid,'customer',jsonb_build_object('quoteId',quote_row.id,'version',quote_row.version,'decision',quote_row.status));
   return quote_row;
 end $$;
 
 revoke all on function public.get_current_provider_quote_state() from public,anon;
 revoke all on function public.create_current_provider_quote_version(uuid,text,integer,jsonb,uuid) from public,anon;
-revoke all on function public.accept_current_customer_quote(uuid) from public,anon;
+revoke all on function public.decide_current_customer_quote(uuid,text) from public,anon;
 grant execute on function public.get_current_provider_quote_state() to authenticated;
 grant execute on function public.create_current_provider_quote_version(uuid,text,integer,jsonb,uuid) to authenticated;
-grant execute on function public.accept_current_customer_quote(uuid) to authenticated;
+grant execute on function public.decide_current_customer_quote(uuid,text) to authenticated;
