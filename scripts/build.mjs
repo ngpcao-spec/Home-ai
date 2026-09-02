@@ -3,6 +3,10 @@ import { cp, mkdir, rm, writeFile } from 'node:fs/promises';
 await rm('dist', { force: true, recursive: true });
 await mkdir('dist/src', { recursive: true });
 await cp('index.html', 'dist/index.html');
+await cp('provider.html', 'dist/provider.html');
+await cp('provider-manifest.webmanifest', 'dist/provider-manifest.webmanifest');
+await cp('provider-sw.js', 'dist/provider-sw.js');
+await cp('provider-icon.svg', 'dist/provider-icon.svg');
 await cp('src', 'dist/src', { recursive: true });
 // Amazon Location browser API keys are public identifiers, but must be restricted
 // by HTTP referrer and allowed actions. Never print the value or inject server secrets.
