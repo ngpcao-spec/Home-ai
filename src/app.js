@@ -27,6 +27,7 @@ import {
   updateCustomerAddress,
 } from './customer/profile.js';
 import { loadSupabaseCustomerProfile } from './customer/supabase-profile.js';
+import { createGoogleCustomerAuth } from './customer/google-auth.js';
 import { connectSupabaseCustomerMissions, createCustomerMissionDraft } from './customer/supabase-mission.js';
 import { createCustomerProfileMarkup } from './customer/profile-view.js';
 import { legalContent, supportFaqs } from './customer/support.js';
@@ -266,6 +267,7 @@ export function initialiseHomePage(
   providerLocationSourceFactory = createMockProviderLocationSource,
   customerProfileLoader = loadSupabaseCustomerProfile,
   customerMissionConnector = connectSupabaseCustomerMissions,
+  customerAuth = createGoogleCustomerAuth(),
 ) {
   root.innerHTML = createHomeAiMarkup();
   const startupFlow = root.querySelector('[data-startup-flow]');
@@ -288,15 +290,28 @@ export function initialiseHomePage(
     saveOnboardingCompleted(browserStorage);
     renderLogin();
   };
-  scheduleTask(() => {
-    if (readCustomerSession(browserStorage)) showApplication();
-    else {
-      startupFlow.innerHTML = isOnboardingCompleted(browserStorage)
-        ? createLoginMarkup()
-        : createOnboardingMarkup(onboardingIndex);
+  scheduleTask(async () => {
+    try {
+      const oauthSession = await customerAuth.resume();
+      if (oauthSession?.authenticated) {
+        showApplication();
+        return;
+      }
+    } catch {
+      // Keep the local phone/OTP fallback available if OAuth recovery fails.
     }
+    if (readCustomerSession(browserStorage)) showApplication();
+    else startupFlow.innerHTML = isOnboardingCompleted(browserStorage) ? createLoginMarkup() : createOnboardingMarkup(onboardingIndex);
   }, 650);
-  startupFlow.addEventListener('click', (event) => {
+  startupFlow.addEventListener('click', async (event) => {
+    if (event.target.closest('[data-google-login]')) {
+      try {
+        await customerAuth.signIn();
+      } catch {
+        renderLogin({ error: 'Không thể đăng nhập bằng Google. Vui lòng thử lại hoặc dùng số điện thoại.' });
+      }
+      return;
+    }
     if (event.target.closest('[data-skip-onboarding]')) {
       finishOnboarding();
       return;
@@ -1019,6 +1034,7 @@ export function initialiseHomePage(
     }
     if (event.target.closest('[data-profile-logout]')) {
       clearCustomerSession(browserStorage);
+      try { await customerAuth.signOut(); } catch { /* Local logout must still complete. */ }
       saveOnboardingCompleted(browserStorage);
       loginPhone = '';
       appShell.hidden = true;

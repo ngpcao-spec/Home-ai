@@ -83,13 +83,15 @@ export function createLoginMarkup({ step = 'phone', phone = '', error = '', rese
       <form data-login-phone-form>
         <label class="phone-field"><span>+84</span><input name="phone" type="tel" inputmode="tel" autocomplete="tel-national" value="${escapeHtml(phone)}" placeholder="09•• ••• •••" aria-label="Số điện thoại" required></label>
         <button type="submit">Tiếp tục</button>
-      </form>`;
+      </form>
+      <div class="login-divider"><span>hoặc</span></div>
+      <button class="google-login" type="button" data-google-login><strong>G</strong>Continuer avec Google</button>`;
   return `<section class="login-placeholder" aria-labelledby="login-title">
     <div class="entry-identity">${entryLogo()}</div>
     <p class="quote-eyebrow">C03 · TÀI KHOẢN KHÁCH HÀNG</p>
     ${step === 'otp' ? '<h1 id="login-title">Nhập mã xác thực</h1>' : ''}
     ${content}
     ${error ? `<p class="login-error" role="alert">${error}</p>` : ''}
-    <small>MVP thử nghiệm · Không gửi SMS và không gọi API bên ngoài.</small>
+    <small>Điện thoại dùng OTP thử nghiệm 123456 · Google dùng đăng nhập Supabase an toàn.</small>
   </section>`;
 }
