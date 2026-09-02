@@ -57,5 +57,18 @@ export function createSupabaseMissionsRepository(supabase) {
       });
       return Object.freeze([...(unwrap(result, 'missions.createOffers') ?? [])]);
     },
+    async completeExternalPayment(mission) {
+      return adaptMissionRow(unwrap(await client.rpc('complete_current_customer_external_payment', {
+        target_mission_id: mission.id, expected_version: mission.version,
+      }), 'missions.completeExternalPayment'));
+    },
+    async createReview(missionId, rating, comment = null) {
+      return Object.freeze({ ...(unwrap(await client.rpc('create_current_customer_review', {
+        target_mission_id: missionId, new_rating: rating, new_comment: comment,
+      }), 'missions.createReview') ?? {}) });
+    },
+    async getCurrentUserHistory() {
+      return Object.freeze([...(unwrap(await client.rpc('get_current_user_mission_history'), 'missions.getCurrentUserHistory') ?? [])]);
+    },
   });
 }

@@ -37,6 +37,9 @@ export function createMockProviderAppRepository(seed = mockProviderDashboard) {
       state.assignment = { ...state.assignment, status: 'quote_pending', quote };
       return clone(state);
     },
+    async startIntervention(missionId) { if (state.assignment?.id !== missionId || state.assignment.quote?.status !== 'accepted') throw new Error('Accepted quote required'); state.assignment.status='in_progress'; return clone(state); },
+    async finishIntervention(missionId) { if (state.assignment?.id !== missionId || state.assignment.status !== 'in_progress') throw new Error('Mission is not in progress'); state.assignment.status='completed_pending_payment'; return clone(state); },
+    async getHistory() { return clone(state.history ?? []); },
   });
 }
 
@@ -61,6 +64,9 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
       async decline(id) { await repositories.offers.declineCurrentProviderOffer(id); return loadDashboard(); },
       async updateMissionProgress(id, status, location) { await repositories.offers.updateProviderMissionProgress(id, status, location); return loadDashboard(); },
       async createQuote(id, draft) { await repositories.offers.createCurrentProviderQuote(id, draft); return loadDashboard(); },
+      async startIntervention(id) { const current=await loadDashboard(); await repositories.offers.startIntervention(id,current.assignment.version); return loadDashboard(); },
+      async finishIntervention(id) { const current=await loadDashboard(); await repositories.offers.finishIntervention(id,current.assignment.version); return loadDashboard(); },
+      async getHistory() { return repositories.offers.getMissionHistory(); },
     });
   } catch { return fallback; }
 }

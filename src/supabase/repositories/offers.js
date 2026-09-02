@@ -39,5 +39,18 @@ export function createSupabaseOffersRepository(supabase) {
         new_warranty_days: Number(draft.warrantyDays), new_items: items, target_parent_quote_id: null,
       }), 'offers.createCurrentProviderQuote');
     },
+    async startIntervention(missionId, version) {
+      return adaptMissionRow(unwrap(await client.rpc('start_current_provider_intervention', {
+        target_mission_id: missionId, expected_version: version,
+      }), 'offers.startIntervention'));
+    },
+    async finishIntervention(missionId, version) {
+      return adaptMissionRow(unwrap(await client.rpc('finish_current_provider_intervention', {
+        target_mission_id: missionId, expected_version: version,
+      }), 'offers.finishIntervention'));
+    },
+    async getMissionHistory() {
+      return Object.freeze([...(unwrap(await client.rpc('get_current_user_mission_history'), 'offers.getMissionHistory') ?? [])]);
+    },
   });
 }
