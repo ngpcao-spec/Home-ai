@@ -1,4 +1,4 @@
-import { adaptMissionRow } from '../adapters.js';
+import { adaptMissionRow, adaptQuoteRow } from '../adapters.js';
 import { requireSupabaseClient, unwrap } from './shared.js';
 
 const missionColumns = [
@@ -56,6 +56,20 @@ export function createSupabaseMissionsRepository(supabase) {
         offer_limit: limit,
       });
       return Object.freeze([...(unwrap(result, 'missions.createOffers') ?? [])]);
+    },
+    async getQuoteHistory(missionId) {
+      const result = await client.from('quotes')
+        .select('id, mission_id, parent_quote_id, version, type, status, diagnosis, total_amount, currency, warranty_days, created_at, decided_at, quote_items(id, item_type, description, amount, position)')
+        .eq('mission_id', missionId)
+        .order('version', { ascending: true });
+      return Object.freeze((unwrap(result, 'missions.getQuoteHistory') ?? []).map(adaptQuoteRow));
+    },
+    async decideCurrentQuote(quoteId, decision) {
+      const result = await client.rpc('decide_current_customer_quote', {
+        target_quote_id: quoteId,
+        new_decision: decision,
+      });
+      return adaptQuoteRow(unwrap(result, 'missions.decideCurrentQuote'));
     },
     async completeExternalPayment(mission) {
       return adaptMissionRow(unwrap(await client.rpc('complete_current_customer_external_payment', {

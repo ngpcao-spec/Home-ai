@@ -11,7 +11,9 @@ const escapeHtml = (value) => String(value)
   .replaceAll("'", '&#039;');
 
 export function createInterventionQuoteMarkup(quote, phase = 'quote_pending') {
-  const decision = phase === 'repairing'
+  const decision = phase === 'quote_accepted'
+    ? '<p class="quote-decision quote-decision--accepted" role="status">Bạn đã chấp nhận báo giá. Đang chờ thợ bắt đầu công việc.</p>'
+    : phase === 'repairing'
     ? '<p class="quote-decision quote-decision--accepted" role="status">Bạn đã chấp nhận báo giá. Thợ bắt đầu sửa chữa.</p>'
     : phase === 'quote_declined'
       ? '<p class="quote-decision quote-decision--declined" role="status">Bạn đã từ chối báo giá. Việc sửa chữa chưa bắt đầu.</p>'
@@ -24,7 +26,7 @@ export function createInterventionQuoteMarkup(quote, phase = 'quote_pending') {
     <ul class="recommended-work">${(quote.recommendedTasks ?? [quote.recommendedWork]).map((task) => `<li>${escapeHtml(task)}</li>`).join('')}</ul>
   </div>
   <div class="repair-quote">
-    <div class="quote-heading"><div><p class="quote-eyebrow">BÁO GIÁ SỬA CHỮA</p><h4>${formatPrice(quote.totalAmount)}</h4></div><span>${quote.estimatedMinutes} phút</span></div>
+    <div class="quote-heading"><div><p class="quote-eyebrow">BÁO GIÁ SỬA CHỮA</p><h4>${formatPrice(quote.totalAmount)}</h4></div>${quote.estimatedMinutes ? `<span>${quote.estimatedMinutes} phút</span>` : ''}</div>
     <dl>
       <div><dt>Công thợ</dt><dd>${formatPrice(quote.laborAmount)}</dd></div>
       <div><dt>Linh kiện dự kiến</dt><dd>${formatPrice(quote.partsAmount)}</dd></div>
@@ -140,6 +142,9 @@ export function updateInterventionQuotePresentation(container, state) {
     message.textContent = state.quoteHistory?.[1]?.status === 'supplement_pending'
       ? 'Phát hiện chi phí phát sinh cần bạn xác nhận.'
       : 'Thợ đang kiểm tra và sửa chữa thiết bị của bạn.';
+  } else if (phase === 'quote_accepted') {
+    status.textContent = 'Đã chấp nhận báo giá';
+    message.textContent = 'Đang chờ thợ bắt đầu công việc.';
   } else if (phase === 'quote_declined') {
     status.textContent = 'Đã từ chối báo giá';
     message.textContent = 'Việc sửa chữa chưa bắt đầu.';

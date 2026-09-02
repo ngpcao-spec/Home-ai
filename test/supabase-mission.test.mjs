@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { connectSupabaseCustomerMissions, createCustomerMissionDraft } from '../src/customer/supabase-mission.js';
+import {
+  connectSupabaseCustomerMissions,
+  createAssignedCustomerTechnician,
+  createCustomerMissionDraft,
+  createCustomerMissionStateFromServer,
+  createCustomerMissionSynchronizer,
+} from '../src/customer/supabase-mission.js';
 import { createSupabaseMissionsRepository } from '../src/supabase/repositories/missions.js';
 
 const runtime = { SUPABASE_URL: 'https://example.supabase.co', SUPABASE_ANON_KEY: 'anon-key' };
@@ -35,12 +41,75 @@ describe('missions client Supabase', () => {
     const result = await connectSupabaseCustomerMissions({
       runtimeConfig: runtime,
       repositoryLoader: async () => ({
-        profiles: { getCurrentUserId: async () => 'customer-1' }, missions: repository,
+        profiles: { getCurrentUserId: async () => 'customer-1' }, missions: repository, providers: { getById() {} },
       }),
     });
     assert.equal(result.source, 'supabase');
     assert.equal(result.activeMission, activeMission);
     assert.equal(result.repository, repository);
+    assert.equal(typeof result.providerRepository.getById, 'function');
+  });
+
+  it('crée la mission et les offres sans masquer une erreur serveur', async () => {
+    const calls = [];
+    const missionRepository = {
+      createCurrent: async () => { calls.push('mission'); return { id: 'm1', providerId: null }; },
+      createOffers: async () => { calls.push('offers'); throw new Error('offers failed'); },
+      getById: async () => null,
+      getQuoteHistory: async () => [],
+    };
+    const synchronizer = createCustomerMissionSynchronizer({
+      missionRepository,
+      providerRepository: { getById: async () => null },
+    });
+    await assert.rejects(() => synchronizer.create({}), /offers failed/);
+    assert.deepEqual(calls, ['mission', 'offers']);
+  });
+
+  it('synchronise mission, provider assigné et devis serveur puis décide via RPC', async () => {
+    const mission = { id: 'm1', providerId: 'p1', status: 'quote_pending', paymentStatus: 'unpaid', serviceCategory: 'electricity' };
+    const provider = { id: 'p1', name: 'Nguyễn Văn An', specialty: 'Thợ điện', verified: true };
+    const pending = { id: 'q1', missionId: 'm1', version: 1, status: 'pending', diagnosis: 'Dây cháy', recommendedTasks: ['Thay dây'], totalAmount: 200000 };
+    const accepted = { ...pending, status: 'accepted' };
+    let quotes = [pending];
+    const decisions = [];
+    const synchronizer = createCustomerMissionSynchronizer({
+      missionRepository: {
+        getById: async () => mission,
+        getQuoteHistory: async () => quotes,
+        decideCurrentQuote: async (quoteId, decision) => { decisions.push([quoteId, decision]); quotes = [accepted]; return accepted; },
+      },
+      providerRepository: { getById: async () => provider },
+    });
+    const loaded = await synchronizer.load('m1');
+    assert.equal(loaded.provider, provider);
+    assert.equal(loaded.quotes[0].status, 'pending');
+    const decided = await synchronizer.decideQuote('q1', 'accepted');
+    assert.deepEqual(decisions, [['q1', 'accepted']]);
+    assert.equal(decided.quotes[0].status, 'accepted');
+    assert.equal(createAssignedCustomerTechnician(provider, mission).id, 'p1');
+    assert.equal(createCustomerMissionStateFromServer(loaded).interventionPhase, 'quote_pending');
+    assert.equal(createCustomerMissionStateFromServer(decided).interventionPhase, 'quote_accepted');
+  });
+
+  it('poll Supabase signale les erreurs sans produire de snapshot mock', async () => {
+    const scheduled = [];
+    const errors = [];
+    const states = [];
+    const synchronizer = createCustomerMissionSynchronizer({
+      missionRepository: {
+        getById: async () => { throw new Error('network down'); },
+        getQuoteHistory: async () => [],
+      },
+      providerRepository: { getById: async () => null },
+      scheduleTask: (task) => { scheduled.push(task); return scheduled.length; },
+      clearTask: () => {},
+    });
+    const stop = synchronizer.poll('m1', (state) => states.push(state), (error) => errors.push(error));
+    await scheduled.shift()();
+    stop();
+    assert.equal(states.length, 0);
+    assert.match(errors[0].message, /network down/);
   });
 
   it('utilise uniquement les RPC server-owned pour créer et annuler', async () => {
@@ -68,10 +137,12 @@ describe('missions client Supabase', () => {
     });
     await repository.cancelCurrent(mission);
     await repository.createOffers(mission.id);
-    assert.deepEqual(calls.map(([name]) => name), ['create_current_customer_mission', 'cancel_current_customer_mission', 'create_current_customer_mission_offers']);
+    await repository.decideCurrentQuote('q1', 'accepted');
+    assert.deepEqual(calls.map(([name]) => name), ['create_current_customer_mission', 'cancel_current_customer_mission', 'create_current_customer_mission_offers', 'decide_current_customer_quote']);
     assert.equal('client_id' in calls[0][1], false);
     assert.equal('provider_id' in calls[0][1], false);
     assert.equal('status' in calls[0][1], false);
     assert.equal('provider_id' in calls[2][1], false);
+    assert.deepEqual(calls[3][1], { target_quote_id: 'q1', new_decision: 'accepted' });
   });
 });

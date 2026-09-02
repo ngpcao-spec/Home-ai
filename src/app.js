@@ -28,7 +28,13 @@ import {
 } from './customer/profile.js';
 import { loadSupabaseCustomerProfile } from './customer/supabase-profile.js';
 import { createGoogleCustomerAuth } from './customer/google-auth.js';
-import { connectSupabaseCustomerMissions, createCustomerMissionDraft } from './customer/supabase-mission.js';
+import {
+  connectSupabaseCustomerMissions,
+  createAssignedCustomerTechnician,
+  createCustomerMissionDraft,
+  createCustomerMissionStateFromServer,
+  createCustomerMissionSynchronizer,
+} from './customer/supabase-mission.js';
 import { createCustomerProfileMarkup } from './customer/profile-view.js';
 import { legalContent, supportFaqs } from './customer/support.js';
 import { createLegalMarkup, createSupportMarkup } from './customer/support-view.js';
@@ -392,6 +398,9 @@ export function initialiseHomePage(
   let persistedMission;
   let missionRepository;
   let missionConnection;
+  let missionSynchronizer;
+  let remoteMissionState;
+  let stopMissionPolling;
   let trackingRoute;
   const trackingRoutes = createTrackingRouteSession(routingProvider);
   const getCurrentMissionRecord = () => createCompletedMissionRecord(missionState, {
@@ -522,10 +531,19 @@ export function initialiseHomePage(
     status.textContent = '';
     clientLocation = await getClientLocation(geolocation);
     root.querySelector('[data-location-label]').textContent = clientLocation.source === 'browser' ? 'Vị trí hiện tại' : 'Đang dùng vị trí mặc định · Nha Trang';
-    const technicians = await technicianRepository.list({
-      location: clientLocation,
-      serviceCategory: diagnosedCategory,
-    });
+    let technicians;
+    try {
+      technicians = await technicianRepository.list({
+        location: clientLocation,
+        serviceCategory: diagnosedCategory,
+      });
+    } catch (error) {
+      console.error('[HOME AI][Supabase matching]', { operation: 'candidates', errorType: error?.name ?? 'Error' });
+      search.querySelector('[data-search-progress]').hidden = true;
+      search.querySelector('#map-search-title').textContent = 'Không thể tải danh sách thợ';
+      sheet.innerHTML = '<article class="map-bottom-sheet map-empty"><h2>Kết nối Supabase bị gián đoạn</h2><p>Không có dữ liệu mẫu nào được sử dụng. Vui lòng thử lại.</p><div class="sheet-actions"><button type="button" data-retry-search>Thử lại</button></div></article>';
+      return;
+    }
     const routingCandidates = getRouteMatrixCandidates(technicians, diagnosedCategory);
     try {
       await renderMap(stage, { technicians: routingCandidates, radiusKm: 2, searching: true });
@@ -704,8 +722,8 @@ export function initialiseHomePage(
     const estimate = bookingPanel.querySelector('[data-booking-estimate]').textContent;
     const remoteSearching = remoteMission && ['requested', 'searching', 'offered'].includes(remoteMission.status);
     confirmation.querySelector('[data-confirmation-title]').textContent = remoteSearching ? 'Yêu cầu đang tìm kỹ thuật viên' : 'Thợ đã nhận yêu cầu!';
-    confirmation.querySelector('[data-confirmation-technician]').textContent = remoteSearching ? 'Đang chờ xác nhận' : selectedTechnician.name;
-    confirmation.querySelector('[data-confirmation-arrival]').textContent = remoteSearching ? 'Đang cập nhật' : `Khoảng ${selectedTechnician.estimatedArrivalMinutes} phút`;
+    confirmation.querySelector('[data-confirmation-technician]').textContent = remoteSearching || !selectedTechnician ? 'Đang chờ xác nhận' : selectedTechnician.name;
+    confirmation.querySelector('[data-confirmation-arrival]').textContent = remoteSearching || !selectedTechnician?.estimatedArrivalMinutes ? 'Đang cập nhật' : `Khoảng ${selectedTechnician.estimatedArrivalMinutes} phút`;
     confirmation.querySelector('[data-confirmation-address]').textContent = remoteMission?.address ?? bookingForm.elements.address.value;
     confirmation.querySelector('[data-confirmation-problem]').textContent = remoteMission?.problemDescription ?? currentDiagnosis.summary;
     confirmation.querySelector('[data-confirmation-estimate]').textContent = estimate;
@@ -713,12 +731,33 @@ export function initialiseHomePage(
     confirmation.querySelector('[data-confirmation-state-row]').hidden = !remoteMission;
     confirmation.querySelector('[data-confirmation-mission]').textContent = remoteMission?.id ?? '';
     confirmation.querySelector('[data-confirmation-state]').textContent = remoteSearching ? 'Đang tìm thợ' : remoteMission?.status ?? '';
-    confirmation.querySelector('[data-track-technician]').disabled = Boolean(remoteSearching);
+    confirmation.querySelector('[data-track-technician]').disabled = Boolean(remoteSearching || (remoteMission && !remoteMission.providerId));
     bookingPanel.hidden = true;
     confirmation.hidden = false;
     bookingForm.querySelector('[type="submit"]').disabled = false;
     root.querySelector('[data-booking-status]').textContent = '';
     confirmation.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  };
+  const applyRemoteMissionState = (snapshot) => {
+    remoteMissionState = snapshot;
+    persistedMission = snapshot.mission;
+    const assignedTechnician = createAssignedCustomerTechnician(snapshot.provider, snapshot.mission);
+    if (assignedTechnician) selectedTechnician = assignedTechnician;
+    missionState = createCustomerMissionStateFromServer(snapshot);
+    const confirmation = root.querySelector('[data-booking-confirmation]');
+    if (!confirmation.hidden) showBookingConfirmation(snapshot.mission);
+    if (!mission.hidden && selectedTechnician) {
+      renderMission();
+    }
+    confirmation.querySelector('[data-confirmation-status]').textContent = '';
+  };
+  const showRemoteMissionError = () => {
+    const confirmation = root.querySelector('[data-booking-confirmation]');
+    confirmation.querySelector('[data-confirmation-status]').textContent = 'Không thể đồng bộ nhiệm vụ Supabase. Vui lòng thử lại.';
+  };
+  const startRemoteMissionPolling = (missionId) => {
+    stopMissionPolling?.();
+    stopMissionPolling = missionSynchronizer.poll(missionId, applyRemoteMissionState, showRemoteMissionError);
   };
   bookingForm.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -735,6 +774,11 @@ export function initialiseHomePage(
     if (connection.source === 'supabase') {
       try {
         missionRepository = connection.repository;
+        missionSynchronizer = createCustomerMissionSynchronizer({
+          missionRepository,
+          providerRepository: connection.providerRepository,
+          scheduleTask,
+        });
         const scheduled = bookingForm.elements.schedule.value === 'scheduled';
         const scheduledFor = scheduled
           ? new Date(`${bookingForm.elements.date.value}T${bookingForm.elements.time.value}`).toISOString()
@@ -747,12 +791,16 @@ export function initialiseHomePage(
           location: clientLocation,
           scheduledFor,
         });
-        const remoteMission = connection.activeMission ?? await missionRepository.createCurrent(draft);
-        await missionRepository.createOffers?.(remoteMission.id).catch(() => []);
-        showBookingConfirmation(remoteMission);
-      } catch {
+        const snapshot = connection.activeMission
+          ? await missionSynchronizer.load(connection.activeMission.id)
+          : await missionSynchronizer.create(draft);
+        applyRemoteMissionState(snapshot);
+        showBookingConfirmation(snapshot.mission);
+        startRemoteMissionPolling(snapshot.mission.id);
+      } catch (error) {
+        console.error('[HOME AI][Supabase mission]', { operation: 'create-and-offer', errorType: error?.name ?? 'Error' });
         submit.disabled = false;
-        root.querySelector('[data-booking-status]').textContent = 'Không thể lưu nhiệm vụ. Vui lòng thử lại.';
+        root.querySelector('[data-booking-status]').textContent = 'Không thể tạo hoặc gửi nhiệm vụ. Vui lòng thử lại.';
       }
       return;
     }
@@ -823,7 +871,8 @@ export function initialiseHomePage(
     }
   };
   root.querySelector('[data-track-technician]').addEventListener('click', () => {
-    missionState = advanceMission(createMissionState());
+    if (!selectedTechnician) return;
+    if (!remoteMissionState) missionState = advanceMission(createMissionState());
     mission.querySelector('[data-mission-initials]').textContent = selectedTechnician.initials;
     mission.querySelector('[data-mission-technician]').textContent = selectedTechnician.name;
     mission.querySelector('[data-mission-rating]').textContent = selectedTechnician.rating;
@@ -835,9 +884,9 @@ export function initialiseHomePage(
     root.querySelector('[data-booking-confirmation]').hidden = true;
     renderMission();
     mission.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-    void startTrackingMap();
+    if (!remoteMissionState) void startTrackingMap();
   });
-  mission.addEventListener('click', (event) => {
+  mission.addEventListener('click', async (event) => {
     if (event.target.closest('[data-tracking-call]')) {
       mission.querySelector('[data-tracking-action-status]').textContent = 'Bản demo: cuộc gọi với thợ sẽ được mở tại đây.';
       return;
@@ -861,10 +910,23 @@ export function initialiseHomePage(
     }
     const quoteDecision = event.target.closest('[data-quote-decision]')?.dataset.quoteDecision;
     if (quoteDecision) {
-      missionState = decideRepairQuote(missionState, quoteDecision);
-      mission.querySelector('[data-mission-status-badge]').textContent = updateInterventionQuotePresentation(mission.querySelector('[data-mission-stage]'), missionState);
+      if (remoteMissionState) {
+        const pendingQuote = remoteMissionState.quotes.find(({ status }) => status === 'pending');
+        if (!pendingQuote) return;
+        try {
+          mission.querySelector('[data-mission-status-badge]').textContent = 'Đang gửi quyết định...';
+          applyRemoteMissionState(await missionSynchronizer.decideQuote(pendingQuote.id, quoteDecision));
+        } catch (error) {
+          console.error('[HOME AI][Supabase quote]', { operation: 'decide', errorType: error?.name ?? 'Error' });
+          mission.querySelector('[data-mission-status-badge]').textContent = 'Không thể gửi quyết định báo giá';
+        }
+      } else {
+        missionState = decideRepairQuote(missionState, quoteDecision);
+        mission.querySelector('[data-mission-status-badge]').textContent = updateInterventionQuotePresentation(mission.querySelector('[data-mission-stage]'), missionState);
+      }
       return;
     }
+    if (remoteMissionState) return;
     if (event.target.closest('[data-discover-supplement]')) {
       missionState = discoverMissionSupplement(missionState);
       updateInterventionQuotePresentation(mission.querySelector('[data-mission-stage]'), missionState);
@@ -914,6 +976,7 @@ export function initialiseHomePage(
     if (persistedMission && missionRepository) {
       try {
         persistedMission = await missionRepository.cancelCurrent(persistedMission);
+        stopMissionPolling?.();
         confirmationStatus.textContent = 'Yêu cầu đã được hủy.';
         root.querySelector('[data-confirmation-state]').textContent = 'Đã hủy';
       } catch {
@@ -1037,6 +1100,13 @@ export function initialiseHomePage(
       return;
     }
     if (event.target.closest('[data-profile-logout]')) {
+      stopMissionPolling?.();
+      stopMissionPolling = undefined;
+      remoteMissionState = undefined;
+      missionSynchronizer = undefined;
+      missionConnection = undefined;
+      missionRepository = undefined;
+      persistedMission = undefined;
       clearCustomerSession(browserStorage);
       try { await customerAuth.signOut(); } catch { /* Local logout must still complete. */ }
       saveOnboardingCompleted(browserStorage);

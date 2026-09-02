@@ -22,23 +22,27 @@ export function createMockTechnicianRepository(data = mockTechnicians) {
 export function createProgressiveTechnicianRepository(
   runtimeConfig = globalThis.__HOME_AI_CONFIG__,
   fallback = createMockTechnicianRepository(),
+  repositoryFactory = createOptionalSupabaseRepositories,
 ) {
-  const repositories = createOptionalSupabaseRepositories(runtimeConfig);
+  const repositories = repositoryFactory(runtimeConfig);
   return Object.freeze({
     async list({ location = defaultMvpLocation, serviceCategory } = {}) {
-      if (!repositories.enabled || !serviceCategory
-          || !Number.isFinite(location?.latitude) || !Number.isFinite(location?.longitude)) {
+      if (!repositories.enabled) {
         return fallback.list({ location });
       }
-      try {
-        return await repositories.providers.listMatchingCandidates({
-          serviceCategory,
-          latitude: location.latitude,
-          longitude: location.longitude,
-        });
-      } catch {
+      const { data, error } = await repositories.client.auth.getSession();
+      if (error) throw error;
+      if (!data?.session?.user) {
         return fallback.list({ location });
       }
+      if (!serviceCategory || !Number.isFinite(location?.latitude) || !Number.isFinite(location?.longitude)) {
+        throw new Error('Authenticated matching requires service and coordinates');
+      }
+      return repositories.providers.listMatchingCandidates({
+        serviceCategory,
+        latitude: location.latitude,
+        longitude: location.longitude,
+      });
     },
   });
 }

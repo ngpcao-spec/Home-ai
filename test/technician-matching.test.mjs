@@ -56,4 +56,22 @@ describe('ghép thợ cục bộ', () => {
     assert.equal(result, mockTechnicians);
     assert.equal(fallbackCalls.length, 1);
   });
+
+  it('ne replie jamais sur les mocks après une erreur Supabase avec une vraie session', async () => {
+    let fallbackCalls = 0;
+    const repository = createProgressiveTechnicianRepository(
+      { SUPABASE_URL: 'https://example.supabase.co', SUPABASE_ANON_KEY: 'anon-key' },
+      { async list() { fallbackCalls += 1; return mockTechnicians; } },
+      () => ({
+        enabled: true,
+        client: { auth: { getSession: async () => ({ data: { session: { user: { id: 'c1' } } }, error: null }) } },
+        providers: { listMatchingCandidates: async () => { throw new Error('matching unavailable'); } },
+      }),
+    );
+    await assert.rejects(() => repository.list({
+      serviceCategory: 'electricity',
+      location: { latitude: 12.24, longitude: 109.19 },
+    }), /matching unavailable/);
+    assert.equal(fallbackCalls, 0);
+  });
 });
