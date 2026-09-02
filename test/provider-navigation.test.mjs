@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { ARRIVAL_RADIUS_KM, prepareProviderNavigation } from '../src/provider/provider-navigation.js';
+import { ARRIVAL_RADIUS_KM, prepareProviderNavigation, renderProviderNavigation, usesDemoNavigationAdapters } from '../src/provider/provider-navigation.js';
 import { createMockProviderAppRepository } from '../src/provider/provider-repository.js';
 import { renderProviderDashboard } from '../src/provider/provider-app.js';
 
@@ -12,6 +12,22 @@ describe('navigation Provider App après acceptation', () => {
     assert.ok(navigation.route.distanceKm > 0);
     assert.ok(navigation.route.durationMinutes > 0);
     assert.equal(navigation.providerLocation.source, 'fallback');
+    assert.equal(navigation.route.distanceKm.toFixed(1), '1.3');
+    assert.equal(navigation.route.durationMinutes, 5);
+  });
+
+  it('réutilise Amazon Location configuré même avec les données de démonstration', () => {
+    assert.equal(usesDemoNavigationAdapters('mock', { AMAZON_LOCATION_API_KEY: 'browser-key' }), false);
+    assert.equal(usesDemoNavigationAdapters('mock', { AMAZON_LOCATION_API_KEY: '' }), true);
+  });
+
+  it('fournit au marqueur mock une distance et un ETA définis', async () => {
+    let rendered;
+    const navigation={map:{setClientLocation(){},async render(_container,view){rendered=view;}},route:{distanceKm:1.3,durationMinutes:5,points:[]},providerLocation:{latitude:12.2,longitude:109.2},destination:{latitude:12.21,longitude:109.21}};
+    await renderProviderNavigation({},navigation,{id:'p1',name:'Minh'});
+    assert.equal(rendered.technicians[0].estimatedArrivalMinutes,5);
+    assert.equal(rendered.technicians[0].distanceKm,1.3);
+    assert.doesNotMatch(JSON.stringify(rendered),/undefined/);
   });
 
   it('respecte les transitions accepted vers travelling vers arrived', async () => {

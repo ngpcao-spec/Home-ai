@@ -25,7 +25,7 @@ export function createMockMapProvider() {
       return markerPositions[seed % markerPositions.length];
     },
     render(container, state) { container.innerHTML = createMapMarkup({ provider: this, ...state }); },
-    setClientLocation(location) { this.customer = { ...location, label: 'Vị trí của bạn' }; },
+    setClientLocation(location) { this.customer = { ...location, label: location?.label ?? 'Vị trí của bạn' }; },
     setProviders() {}, moveProvider() {}, setRoute() {}, center() {}, fitBounds() {},
   };
 }
