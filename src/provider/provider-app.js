@@ -28,6 +28,10 @@ export function renderProviderLogin({ error = '', provisioning = false } = {}) {
   return `<main class="provider-auth"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><h1>${provisioning ? 'Tài khoản chưa được kích hoạt' : 'Đăng nhập đối tác'}</h1><p>${provisioning ? 'Tài khoản Google đã được xác thực. Quản trị viên HOME AI phải cấp vai trò provider, KYC và dịch vụ trước khi tiếp tục.' : 'Sử dụng tài khoản Google dành riêng cho kỹ thuật viên thử nghiệm.'}</p>${provisioning ? '<button data-provider-logout>Đăng xuất</button>' : '<button data-provider-google-login><strong>G</strong> Tiếp tục với Google</button>'}<p class="app-message" role="status">${esc(error)}</p></main>`;
 }
 
+export function renderProviderStartupError() {
+  return '<main class="provider-auth" data-provider-startup-error><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><h1>Không thể khởi động ứng dụng</h1><p>Vui lòng kiểm tra kết nối mạng rồi tải lại trang.</p><button type="button" data-provider-reload>Tải lại</button></main>';
+}
+
 export async function initialiseProviderApp(root, repositoryLoader=createProgressiveProviderAppRepository, navigationLoader=prepareProviderNavigation, auth=createProviderGoogleAuth(), heartbeatFactory=createProviderLocationHeartbeat) {
   const session=await auth.getSession();
   if(auth.enabled&&!session?.user){root.innerHTML=renderProviderLogin();root.addEventListener('click',async e=>{if(!e.target.closest('[data-provider-google-login]'))return;try{await auth.signIn();}catch{root.innerHTML=renderProviderLogin({error:'Không thể đăng nhập bằng Google. Vui lòng thử lại.'});}});return{getState:()=>null};}
@@ -48,4 +52,18 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   return {getState:()=>structuredClone(state),stop:heartbeat.stop};
 }
 
-if(typeof document!=='undefined') { initialiseProviderApp(document.querySelector('#provider-root')); if('serviceWorker' in navigator) navigator.serviceWorker.register('./provider-sw.js').catch(()=>{}); }
+export async function bootstrapProviderApp(root, initialise=initialiseProviderApp) {
+  if (!root) return null;
+  try {
+    const app=await initialise(root);
+    globalThis.__HOME_AI_PROVIDER_READY__=true;
+    return app;
+  } catch(error) {
+    console.error('[HOME AI][Provider startup]', {errorType:error?.name??'Error'});
+    root.innerHTML=renderProviderStartupError();
+    root.querySelector('[data-provider-reload]')?.addEventListener('click',()=>globalThis.location?.reload());
+    return null;
+  }
+}
+
+if(typeof document!=='undefined') { void bootstrapProviderApp(document.querySelector('#provider-root')); if('serviceWorker' in navigator) navigator.serviceWorker.register('./provider-sw.js').catch(()=>{}); }
