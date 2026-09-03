@@ -86,6 +86,22 @@ describe('C03 Google Auth Supabase', () => {
     assert.equal(profileReads, 0);
   });
 
+  it('traite une session customer expirée comme déconnectée sans charger le profil', async () => {
+    let userCalls = 0;
+    let profileReads = 0;
+    const auth = createGoogleCustomerAuth(runtime, () => ({
+      enabled: true,
+      client: { auth: {
+        getSession: async () => ({ data: { session: null }, error: { name: 'AuthInvalidTokenResponseError', status: 401 } }),
+        getUser: async () => { userCalls += 1; return { data: { user: null }, error: null }; },
+      } },
+      profiles: { getById: async () => { profileReads += 1; } },
+    }));
+    assert.equal(await auth.resume(), null);
+    assert.equal(userCalls, 0);
+    assert.equal(profileReads, 0);
+  });
+
   it('déconnecte la session Supabase réelle', async () => {
     let signedOut = 0;
     const auth = createGoogleCustomerAuth(runtime, () => ({

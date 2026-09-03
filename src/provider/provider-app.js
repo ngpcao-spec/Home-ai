@@ -28,16 +28,19 @@ export function renderProviderLogin({ error = '', provisioning = false } = {}) {
   return `<main class="provider-auth"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><h1>${provisioning ? 'Tài khoản chưa được kích hoạt' : 'Đăng nhập đối tác'}</h1><p>${provisioning ? 'Tài khoản Google đã được xác thực. Quản trị viên HOME AI phải cấp vai trò provider, KYC và dịch vụ trước khi tiếp tục.' : 'Sử dụng tài khoản Google dành riêng cho kỹ thuật viên thử nghiệm.'}</p>${provisioning ? '<button data-provider-logout>Đăng xuất</button>' : '<button data-provider-google-login><strong>G</strong> Tiếp tục với Google</button>'}<p class="app-message" role="status">${esc(error)}</p></main>`;
 }
 
-export function renderProviderStartupError() {
-  return '<main class="provider-auth" data-provider-startup-error><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><h1>Không thể khởi động ứng dụng</h1><p>Vui lòng kiểm tra kết nối mạng rồi tải lại trang.</p><button type="button" data-provider-reload>Tải lại</button></main>';
+export function renderProviderStartupError(safeStage = 'STARTUP') {
+  return `<main class="provider-auth" data-provider-startup-error><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><h1>Không thể khởi động ứng dụng</h1><p>Vui lòng tải lại trang. Nếu lỗi vẫn còn, hãy cung cấp mã chẩn đoán bên dưới.</p><small data-provider-error-stage>Mã: ${esc(safeStage)}</small><button type="button" data-provider-reload>Tải lại</button></main>`;
 }
 
 export async function initialiseProviderApp(root, repositoryLoader=createProgressiveProviderAppRepository, navigationLoader=prepareProviderNavigation, auth=createProviderGoogleAuth(), heartbeatFactory=createProviderLocationHeartbeat) {
-  const session=await auth.getSession();
+  let session;
+  try{session=await auth.getSession();}catch(error){if(!error.safeStage)error.safeStage='AUTH_SESSION';throw error;}
   if(auth.enabled&&!session?.user){root.innerHTML=renderProviderLogin();root.addEventListener('click',async e=>{if(!e.target.closest('[data-provider-google-login]'))return;try{await auth.signIn();}catch{root.innerHTML=renderProviderLogin({error:'Không thể đăng nhập bằng Google. Vui lòng thử lại.'});}});return{getState:()=>null};}
   let repository;
   try{repository=await repositoryLoader();}catch{root.innerHTML=renderProviderLogin({provisioning:true});root.addEventListener('click',async e=>{if(e.target.closest('[data-provider-logout]')){await auth.signOut();globalThis.location?.reload();}});return{getState:()=>null};}
-  let state=await repository.load(); let busy=false; let message=''; let navigation=null; let diagnosing=false;
+  let state;
+  try{state=await repository.load();}catch(error){error.safeStage='DASHBOARD_LOAD';throw error;}
+  let busy=false; let message=''; let navigation=null; let diagnosing=false;
   const draw=async()=>{root.innerHTML=renderProviderDashboard(state,{source:repository.source,busy,message,navigation,diagnosing});const map=root.querySelector('[data-provider-map]');if(navigation&&map)await renderProviderNavigation(map,navigation,state.provider).catch(()=>{});};
   const loadNavigation=async()=>{if(!['accepted','travelling'].includes(state.assignment?.status))return;try{navigation=await navigationLoader(state.assignment,{source:repository.source});}catch{message='Không thể tải lộ trình. GPS vẫn sẵn sàng để thử lại.';}};
   await loadNavigation(); await draw();
@@ -59,8 +62,9 @@ export async function bootstrapProviderApp(root, initialise=initialiseProviderAp
     globalThis.__HOME_AI_PROVIDER_READY__=true;
     return app;
   } catch(error) {
-    console.error('[HOME AI][Provider startup]', {errorType:error?.name??'Error'});
-    root.innerHTML=renderProviderStartupError();
+    const safeStage=error?.safeStage??'STARTUP';
+    console.error('[HOME AI][Provider startup]', {stage:safeStage,errorType:error?.name??'Error'});
+    root.innerHTML=renderProviderStartupError(safeStage);
     root.querySelector('[data-provider-reload]')?.addEventListener('click',()=>globalThis.location?.reload());
     return null;
   }
