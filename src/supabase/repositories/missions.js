@@ -59,9 +59,9 @@ export function createSupabaseMissionsRepository(supabase) {
     },
     async getOffers(missionId) {
       const result = await client.from('mission_offers')
-        .select('id, mission_id, provider_id, status, distance_km, rank, expires_at, created_at')
+        .select('id, mission_id, provider_id, status, straight_line_distance_km, match_rank, expires_at, created_at')
         .eq('mission_id', missionId)
-        .order('rank', { ascending: true });
+        .order('match_rank', { ascending: true });
       return Object.freeze([...(unwrap(result, 'missions.getOffers') ?? [])]);
     },
     async getQuoteHistory(missionId) {

@@ -84,6 +84,21 @@ describe('missions client Supabase', () => {
     assert.equal(snapshot.offers[0].provider_id, 'p1');
   });
 
+  it('relit les offres avec les noms de colonnes réels du schéma', async () => {
+    const calls = [];
+    const query = {
+      select(columns) { calls.push(['select', columns]); return this; },
+      eq(column, value) { calls.push(['eq', column, value]); return this; },
+      order(column, options) { calls.push(['order', column, options]); return Promise.resolve({ data: [{ id: 'o1', match_rank: 1, straight_line_distance_km: 0.066 }], error: null }); },
+    };
+    const repository = createSupabaseMissionsRepository({ from(table) { assert.equal(table, 'mission_offers'); return query; }, rpc() {} });
+    const offers = await repository.getOffers('m1');
+    assert.equal(offers[0].match_rank, 1);
+    assert.match(calls[0][1], /straight_line_distance_km/);
+    assert.match(calls[0][1], /match_rank/);
+    assert.deepEqual(calls.at(-1), ['order', 'match_rank', { ascending: true }]);
+  });
+
   it('synchronise mission, provider assigné et devis serveur puis décide via RPC', async () => {
     const mission = { id: 'm1', providerId: 'p1', status: 'quote_pending', paymentStatus: 'unpaid', serviceCategory: 'electricity' };
     const provider = { id: 'p1', name: 'Nguyễn Văn An', specialty: 'Thợ điện', verified: true };
