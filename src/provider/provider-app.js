@@ -2,6 +2,7 @@ import { createProgressiveProviderAppRepository } from './provider-repository.js
 import { prepareProviderNavigation, renderProviderNavigation } from './provider-navigation.js';
 import { createProviderGoogleAuth } from './provider-auth.js';
 import { createProviderLocationHeartbeat } from './provider-location-heartbeat.js';
+import { classifyGeolocationError, getLocationPermissionState, mountLocationPermissionGate, requestCurrentPosition } from '../location/location-permission.js';
 
 const labels = { electricity:'Điện', plumbing:'Nước', 'air-conditioning':'Điều hòa', appliances:'Điện gia dụng' };
 const esc = (v='') => String(v).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
@@ -32,7 +33,7 @@ export function renderProviderStartupError(safeStage = 'STARTUP') {
   return `<main class="provider-auth" data-provider-startup-error><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><h1>Không thể khởi động ứng dụng</h1><p>Vui lòng tải lại trang. Nếu lỗi vẫn còn, hãy cung cấp mã chẩn đoán bên dưới.</p><small data-provider-error-stage>Mã: ${esc(safeStage)}</small><button type="button" data-provider-reload>Tải lại</button></main>`;
 }
 
-export async function initialiseProviderApp(root, repositoryLoader=createProgressiveProviderAppRepository, navigationLoader=prepareProviderNavigation, auth=createProviderGoogleAuth(), heartbeatFactory=createProviderLocationHeartbeat) {
+export async function initialiseProviderApp(root, repositoryLoader=createProgressiveProviderAppRepository, navigationLoader=prepareProviderNavigation, auth=createProviderGoogleAuth(), heartbeatFactory=createProviderLocationHeartbeat, locationAccess={classifyError:classifyGeolocationError,getState:getLocationPermissionState,mount:mountLocationPermissionGate,request:requestCurrentPosition,geolocation:globalThis.navigator?.geolocation}) {
   let session;
   try{session=await auth.getSession();}catch(error){if(!error.safeStage)error.safeStage='AUTH_SESSION';throw error;}
   if(auth.enabled&&!session?.user){root.innerHTML=renderProviderLogin();root.addEventListener('click',async e=>{if(!e.target.closest('[data-provider-google-login]'))return;try{await auth.signIn();}catch{root.innerHTML=renderProviderLogin({error:'Không thể đăng nhập bằng Google. Vui lòng thử lại.'});}});return{getState:()=>null};}
@@ -40,6 +41,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   try{repository=await repositoryLoader();}catch{root.innerHTML=renderProviderLogin({provisioning:true});root.addEventListener('click',async e=>{if(e.target.closest('[data-provider-logout]')){await auth.signOut();globalThis.location?.reload();}});return{getState:()=>null};}
   let state;
   try{state=await repository.load();}catch(error){error.safeStage='DASHBOARD_LOAD';throw error;}
+  const openDashboard=async()=>{
   let busy=false; let message=''; let navigation=null; let diagnosing=false;
   const draw=async()=>{root.innerHTML=renderProviderDashboard(state,{source:repository.source,busy,message,navigation,diagnosing});const map=root.querySelector('[data-provider-map]');if(navigation&&map)await renderProviderNavigation(map,navigation,state.provider).catch(()=>{});};
   const loadNavigation=async()=>{if(!['accepted','travelling'].includes(state.assignment?.status))return;try{navigation=await navigationLoader(state.assignment,{source:repository.source});}catch{message='Không thể tải lộ trình. GPS vẫn sẵn sàng để thử lại.';}};
@@ -53,6 +55,16 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   root.addEventListener('click',async e=>{const logout=e.target.closest('[data-provider-logout]');const online=e.target.closest('[data-toggle-online]');const accept=e.target.closest('[data-accept]');const decline=e.target.closest('[data-decline]');const start=e.target.closest('[data-start-travel]');const arrived=e.target.closest('[data-mark-arrived]');const diagnose=e.target.closest('[data-start-diagnosis]');const send=e.target.closest('[data-send-quote]');const begin=e.target.closest('[data-start-intervention]');const finish=e.target.closest('[data-finish-intervention]');if(logout){heartbeat.stop();await auth.signOut();globalThis.location?.reload();return;}if(!online&&!accept&&!decline&&!start&&!arrived&&!diagnose&&!send&&!begin&&!finish)return;if(diagnose){diagnosing=true;await draw();return;}busy=true;await draw();try{if(online){const next=!state.status.online;state=await repository.setAvailability({online:next,available:next&&state.status.available});}if(accept){state=await repository.accept(accept.dataset.accept);await loadNavigation();}if(decline)state=await repository.decline(decline.dataset.decline);if(start||arrived){navigation=await navigationLoader(state.assignment,{source:repository.source});if(arrived&&!navigation.arrived)throw new Error('Provider not at destination');state=await repository.updateMissionProgress(state.assignment.id,start?'travelling':'arrived',navigation.providerLocation);}if(send){const draft={diagnosis:root.querySelector('[data-quote-diagnosis]').value,laborAmount:root.querySelector('[data-quote-labor]').value,partsAmount:root.querySelector('[data-quote-parts]').value,warrantyDays:root.querySelector('[data-quote-warranty]').value,laborDescription:'Công kiểm tra và sửa chữa',partsDescription:'Linh kiện dự kiến'};state=await repository.createQuote(state.assignment.id,draft);diagnosing=false;}if(begin)state=await repository.startIntervention(state.assignment.id);if(finish)state=await repository.finishIntervention(state.assignment.id);message='Đã cập nhật thành công.';}catch{message='Không thể cập nhật. Vui lòng thử lại.';}finally{busy=false;heartbeat.sync();await draw();}});
   root.addEventListener('change',async e=>{if(!e.target.matches('[data-toggle-available]'))return;busy=true;await draw();try{state=await repository.setAvailability({online:state.status.online,available:e.target.checked});message='Đã cập nhật khả dụng.';}catch{message='Không thể cập nhật.';}finally{busy=false;heartbeat.sync();await draw();}});
   return {getState:()=>structuredClone(state),stop:heartbeat.stop};
+  };
+  if(repository.source==='supabase'){
+    const savePosition=async position=>{state=await repository.setAvailability({online:Boolean(state.status.online),available:Boolean(state.status.available),...position});};
+    const showLocationGate=initialState=>locationAccess.mount(root,{initialState,geolocation:locationAccess.geolocation,onGranted:async position=>{await savePosition(position);return openDashboard();}});
+    const permissionState=await locationAccess.getState({geolocation:locationAccess.geolocation});
+    if(permissionState!=='granted')return showLocationGate(permissionState);
+    try{await savePosition(await locationAccess.request(locationAccess.geolocation));}
+    catch(error){return showLocationGate(locationAccess.classifyError(error));}
+  }
+  return openDashboard();
 }
 
 export async function bootstrapProviderApp(root, initialise=initialiseProviderApp) {
