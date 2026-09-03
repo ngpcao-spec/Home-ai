@@ -401,6 +401,7 @@ export function initialiseHomePage(
   let missionSynchronizer;
   let remoteMissionState;
   let stopMissionPolling;
+  let stopMissionRealtime;
   let trackingRoute;
   const trackingRoutes = createTrackingRouteSession(routingProvider);
   const getCurrentMissionRecord = () => createCompletedMissionRecord(missionState, {
@@ -789,7 +790,11 @@ export function initialiseHomePage(
     if (!mission.hidden && selectedTechnician) {
       renderMission();
     }
-    confirmation.querySelector('[data-confirmation-status]').textContent = '';
+    const eventType=snapshot.dispatchEvent?.new?.event_type;
+    confirmation.querySelector('[data-confirmation-status]').textContent=eventType==='mission.offer.declined'
+      ? 'Thợ vừa từ chối. HOME AI đang tìm thợ khác…'
+      : eventType==='mission.offer.expired' ? 'Đề nghị đã hết hạn. HOME AI đang tìm thợ khác…'
+        : eventType==='mission.offer.dispatched' ? 'HOME AI đang gửi đề nghị đến thợ phù hợp tiếp theo…' : '';
   };
   const showRemoteMissionError = () => {
     const confirmation = root.querySelector('[data-booking-confirmation]');
@@ -797,7 +802,9 @@ export function initialiseHomePage(
   };
   const startRemoteMissionPolling = (missionId) => {
     stopMissionPolling?.();
+    stopMissionRealtime?.();
     stopMissionPolling = missionSynchronizer.poll(missionId, applyRemoteMissionState, showRemoteMissionError);
+    stopMissionRealtime = missionSynchronizer.subscribe(missionId, applyRemoteMissionState, showRemoteMissionError);
   };
   bookingForm.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -1018,6 +1025,7 @@ export function initialiseHomePage(
       try {
         persistedMission = await missionRepository.cancelCurrent(persistedMission);
         stopMissionPolling?.();
+        stopMissionRealtime?.();
         confirmationStatus.textContent = 'Yêu cầu đã được hủy.';
         root.querySelector('[data-confirmation-state]').textContent = 'Đã hủy';
       } catch {
@@ -1142,7 +1150,9 @@ export function initialiseHomePage(
     }
     if (event.target.closest('[data-profile-logout]')) {
       stopMissionPolling?.();
+      stopMissionRealtime?.();
       stopMissionPolling = undefined;
+      stopMissionRealtime = undefined;
       remoteMissionState = undefined;
       missionSynchronizer = undefined;
       missionConnection = undefined;

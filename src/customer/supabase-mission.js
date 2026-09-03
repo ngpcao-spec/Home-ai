@@ -129,5 +129,22 @@ export function createCustomerMissionSynchronizer({
     };
   };
 
-  return Object.freeze({ load, create, decideQuote, poll });
+  const subscribe = (missionId, onState, onError) => {
+    if (typeof missionRepository.subscribeMission !== 'function') return () => {};
+    let active = true;
+    const receive = async (event) => {
+      try {
+        const state = await load(missionId);
+        if (active) onState(Object.freeze({ ...state, dispatchEvent: event }));
+      } catch (error) {
+        if (active) onError(error);
+      }
+    };
+    const unsubscribe = missionRepository.subscribeMission(missionId, receive, (status) => {
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') onError(new Error(`Mission Realtime: ${status}`));
+    });
+    return () => { active = false; unsubscribe?.(); };
+  };
+
+  return Object.freeze({ load, create, decideQuote, poll, subscribe });
 }

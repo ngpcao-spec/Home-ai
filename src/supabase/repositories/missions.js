@@ -64,6 +64,18 @@ export function createSupabaseMissionsRepository(supabase) {
         .order('match_rank', { ascending: true });
       return Object.freeze([...(unwrap(result, 'missions.getOffers') ?? [])]);
     },
+    subscribeMission(missionId, onChange, onStatus = () => {}) {
+      const channel = client.channel(`customer-mission:${missionId}`)
+        .on('postgres_changes', {
+          event: '*', schema: 'public', table: 'missions', filter: `id=eq.${missionId}`,
+        }, onChange)
+        .on('postgres_changes', {
+          event: 'INSERT', schema: 'public', table: 'mission_events',
+          filter: `mission_id=eq.${missionId}`,
+        }, onChange)
+        .subscribe(onStatus);
+      return () => client.removeChannel(channel);
+    },
     async getQuoteHistory(missionId) {
       const result = await client.from('quotes')
         .select('id, mission_id, parent_quote_id, version, type, status, diagnosis, total_amount, currency, warranty_days, created_at, decided_at, quote_items(id, item_type, description, amount, position)')

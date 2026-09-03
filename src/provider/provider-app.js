@@ -3,6 +3,16 @@ import { prepareProviderNavigation, renderProviderNavigation } from './provider-
 import { createProviderGoogleAuth } from './provider-auth.js';
 import { createProviderLocationHeartbeat } from './provider-location-heartbeat.js';
 import { classifyGeolocationError, getLocationPermissionState, mountLocationPermissionGate, requestCurrentPosition } from '../location/location-permission.js';
+import { createProviderDispatchController, notifyIncomingOffer, renderIncomingOffer, updateDispatchCountdown } from './provider-dispatch.js';
+
+function ensureDispatchStyles(documentRef = globalThis.document) {
+  if (!documentRef?.head || documentRef.querySelector?.('[data-provider-dispatch-styles]')) return;
+  const link = documentRef.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = './src/provider/provider-dispatch.css';
+  link.dataset.providerDispatchStyles = '';
+  documentRef.head.append(link);
+}
 
 const labels = { electricity:'Điện', plumbing:'Nước', 'air-conditioning':'Điều hòa', appliances:'Điện gia dụng' };
 const esc = (v='') => String(v).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
@@ -34,6 +44,7 @@ export function renderProviderStartupError(safeStage = 'STARTUP') {
 }
 
 export async function initialiseProviderApp(root, repositoryLoader=createProgressiveProviderAppRepository, navigationLoader=prepareProviderNavigation, auth=createProviderGoogleAuth(), heartbeatFactory=createProviderLocationHeartbeat, locationAccess={classifyError:classifyGeolocationError,getState:getLocationPermissionState,mount:mountLocationPermissionGate,request:requestCurrentPosition,geolocation:globalThis.navigator?.geolocation}) {
+  ensureDispatchStyles(root?.ownerDocument);
   let session;
   try{session=await auth.getSession();}catch(error){if(!error.safeStage)error.safeStage='AUTH_SESSION';throw error;}
   if(auth.enabled&&!session?.user){root.innerHTML=renderProviderLogin();root.addEventListener('click',async e=>{if(!e.target.closest('[data-provider-google-login]'))return;try{await auth.signIn();}catch{root.innerHTML=renderProviderLogin({error:'Không thể đăng nhập bằng Google. Vui lòng thử lại.'});}});return{getState:()=>null};}
@@ -43,18 +54,22 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   try{state=await repository.load();}catch(error){error.safeStage='DASHBOARD_LOAD';throw error;}
   const openDashboard=async()=>{
   let busy=false; let message=''; let navigation=null; let diagnosing=false;
-  const draw=async()=>{root.innerHTML=renderProviderDashboard(state,{source:repository.source,busy,message,navigation,diagnosing});const map=root.querySelector('[data-provider-map]');if(navigation&&map)await renderProviderNavigation(map,navigation,state.provider).catch(()=>{});};
+  let priorityOfferId=repository.source==='supabase' ? state.offers?.[0]?.id ?? null : null;
+  const draw=async()=>{const priorityOffer=state.offers?.find(({id})=>id===priorityOfferId);root.innerHTML=renderProviderDashboard(state,{source:repository.source,busy,message,navigation,diagnosing})+renderIncomingOffer(priorityOffer);const map=root.querySelector('[data-provider-map]');if(navigation&&map)await renderProviderNavigation(map,navigation,state.provider).catch(()=>{});};
   const loadNavigation=async()=>{if(!['accepted','travelling'].includes(state.assignment?.status))return;try{navigation=await navigationLoader(state.assignment,{source:repository.source});}catch{message='Không thể tải lộ trình. GPS vẫn sẵn sàng để thử lại.';}};
   await loadNavigation(); await draw();
   const page=root.ownerDocument??globalThis.document;
   const heartbeat=heartbeatFactory({repository,getState:()=>state,isPageActive:()=>!page?.hidden,onState:async next=>{state=next;message='Vị trí GPS đã được cập nhật.';await draw();},onError:async()=>{message='Không thể cập nhật GPS. Hãy cho phép truy cập vị trí.';await draw();}});
+  const dispatch=createProviderDispatchController({repository,getState:()=>state,onState:async next=>{state=next;priorityOfferId=next.offers?.[0]?.id??null;await draw();},onOffer:async offer=>{priorityOfferId=offer.id;notifyIncomingOffer();await draw();},onError:async()=>{message='Kết nối thời gian thực bị gián đoạn. HOME AI đang thử lại.';await draw();}});
+  dispatch.start();
+  const countdownTimer=globalThis.setInterval?.(()=>updateDispatchCountdown(root),1000);
   const syncHeartbeat=()=>heartbeat.sync();
   page?.addEventListener?.('visibilitychange',syncHeartbeat);
-  globalThis.addEventListener?.('pagehide',heartbeat.stop,{once:true});
+  globalThis.addEventListener?.('pagehide',()=>{heartbeat.stop();dispatch.stop();globalThis.clearInterval?.(countdownTimer);},{once:true});
   heartbeat.sync();
   root.addEventListener('click',async e=>{const logout=e.target.closest('[data-provider-logout]');const online=e.target.closest('[data-toggle-online]');const accept=e.target.closest('[data-accept]');const decline=e.target.closest('[data-decline]');const start=e.target.closest('[data-start-travel]');const arrived=e.target.closest('[data-mark-arrived]');const diagnose=e.target.closest('[data-start-diagnosis]');const send=e.target.closest('[data-send-quote]');const begin=e.target.closest('[data-start-intervention]');const finish=e.target.closest('[data-finish-intervention]');if(logout){heartbeat.stop();await auth.signOut();globalThis.location?.reload();return;}if(!online&&!accept&&!decline&&!start&&!arrived&&!diagnose&&!send&&!begin&&!finish)return;if(diagnose){diagnosing=true;await draw();return;}busy=true;await draw();try{if(online){const next=!state.status.online;state=await repository.setAvailability({online:next,available:next&&state.status.available});}if(accept){state=await repository.accept(accept.dataset.accept);await loadNavigation();}if(decline)state=await repository.decline(decline.dataset.decline);if(start||arrived){navigation=await navigationLoader(state.assignment,{source:repository.source});if(arrived&&!navigation.arrived)throw new Error('Provider not at destination');state=await repository.updateMissionProgress(state.assignment.id,start?'travelling':'arrived',navigation.providerLocation);}if(send){const draft={diagnosis:root.querySelector('[data-quote-diagnosis]').value,laborAmount:root.querySelector('[data-quote-labor]').value,partsAmount:root.querySelector('[data-quote-parts]').value,warrantyDays:root.querySelector('[data-quote-warranty]').value,laborDescription:'Công kiểm tra và sửa chữa',partsDescription:'Linh kiện dự kiến'};state=await repository.createQuote(state.assignment.id,draft);diagnosing=false;}if(begin)state=await repository.startIntervention(state.assignment.id);if(finish)state=await repository.finishIntervention(state.assignment.id);message='Đã cập nhật thành công.';}catch{message='Không thể cập nhật. Vui lòng thử lại.';}finally{busy=false;heartbeat.sync();await draw();}});
   root.addEventListener('change',async e=>{if(!e.target.matches('[data-toggle-available]'))return;busy=true;await draw();try{state=await repository.setAvailability({online:state.status.online,available:e.target.checked});message='Đã cập nhật khả dụng.';}catch{message='Không thể cập nhật.';}finally{busy=false;heartbeat.sync();await draw();}});
-  return {getState:()=>structuredClone(state),stop:heartbeat.stop};
+  return {getState:()=>structuredClone(state),stop:()=>{heartbeat.stop();dispatch.stop();globalThis.clearInterval?.(countdownTimer);}};
   };
   if(repository.source==='supabase'){
     const savePosition=async position=>{state=await repository.setAvailability({online:Boolean(state.status.online),available:Boolean(state.status.available),...position});};
