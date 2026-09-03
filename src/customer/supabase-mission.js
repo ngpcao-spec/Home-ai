@@ -88,12 +88,13 @@ export function createCustomerMissionSynchronizer({
   const load = async (missionId) => {
     const mission = await missionRepository.getById(missionId);
     if (!mission) throw new Error('Mission Supabase introuvable');
-    const [provider, quotes] = await Promise.all([
+    const [provider, quotes, offers] = await Promise.all([
       mission.providerId ? providerRepository.getById(mission.providerId) : null,
       missionRepository.getQuoteHistory(mission.id),
+      missionRepository.getOffers?.(mission.id) ?? [],
     ]);
     if (mission.providerId && !provider) throw new Error('Prestataire assigné introuvable');
-    return Object.freeze({ mission, provider, quotes });
+    return Object.freeze({ mission, provider, quotes, offers });
   };
 
   const create = async (draft) => {

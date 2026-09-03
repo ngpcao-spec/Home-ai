@@ -57,6 +57,13 @@ export function createSupabaseMissionsRepository(supabase) {
       });
       return Object.freeze([...(unwrap(result, 'missions.createOffers') ?? [])]);
     },
+    async getOffers(missionId) {
+      const result = await client.from('mission_offers')
+        .select('id, mission_id, provider_id, status, distance_km, rank, expires_at, created_at')
+        .eq('mission_id', missionId)
+        .order('rank', { ascending: true });
+      return Object.freeze([...(unwrap(result, 'missions.getOffers') ?? [])]);
+    },
     async getQuoteHistory(missionId) {
       const result = await client.from('quotes')
         .select('id, mission_id, parent_quote_id, version, type, status, diagnosis, total_amount, currency, warranty_days, created_at, decided_at, quote_items(id, item_type, description, amount, position)')

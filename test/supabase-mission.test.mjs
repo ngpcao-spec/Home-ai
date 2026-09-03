@@ -66,6 +66,24 @@ describe('missions client Supabase', () => {
     assert.deepEqual(calls, ['mission', 'offers']);
   });
 
+  it('persiste la mission avant le matching et recharge les offres réellement créées', async () => {
+    const calls = [];
+    const offers = [{ id: 'o1', mission_id: 'm1', provider_id: 'p1', status: 'pending' }];
+    const synchronizer = createCustomerMissionSynchronizer({
+      missionRepository: {
+        createCurrent: async () => { calls.push('mission'); return { id: 'm1', providerId: null }; },
+        createOffers: async () => { calls.push('matching'); return offers; },
+        getById: async () => { calls.push('load-mission'); return { id: 'm1', providerId: null }; },
+        getQuoteHistory: async () => [],
+        getOffers: async () => { calls.push('load-offers'); return offers; },
+      },
+      providerRepository: { getById: async () => null },
+    });
+    const snapshot = await synchronizer.create({});
+    assert.deepEqual(calls, ['mission', 'matching', 'load-mission', 'load-offers']);
+    assert.equal(snapshot.offers[0].provider_id, 'p1');
+  });
+
   it('synchronise mission, provider assigné et devis serveur puis décide via RPC', async () => {
     const mission = { id: 'm1', providerId: 'p1', status: 'quote_pending', paymentStatus: 'unpaid', serviceCategory: 'electricity' };
     const provider = { id: 'p1', name: 'Nguyễn Văn An', specialty: 'Thợ điện', verified: true };

@@ -531,12 +531,52 @@ export function initialiseHomePage(
     status.textContent = '';
     clientLocation = await getClientLocation(geolocation);
     root.querySelector('[data-location-label]').textContent = clientLocation.source === 'browser' ? 'Vị trí hiện tại' : 'Đang dùng vị trí mặc định · Nha Trang';
+    let offeredProviderIds;
+    missionConnection ??= customerMissionConnector();
+    const connection = await missionConnection;
+    if (connection.source === 'error') {
+      search.querySelector('[data-search-progress]').hidden = true;
+      search.querySelector('#map-search-title').textContent = 'Không thể tạo nhiệm vụ';
+      sheet.innerHTML = '<article class="map-bottom-sheet map-empty"><h2>Kết nối Supabase bị gián đoạn</h2><p>Nhiệm vụ chưa được tạo; không có dữ liệu mẫu nào được sử dụng.</p><div class="sheet-actions"><button type="button" data-retry-search>Thử lại</button></div></article>';
+      return;
+    }
+    if (connection.source === 'supabase') {
+      try {
+        missionRepository = connection.repository;
+        missionSynchronizer ??= createCustomerMissionSynchronizer({
+          missionRepository,
+          providerRepository: connection.providerRepository,
+          scheduleTask,
+        });
+        const draft = createCustomerMissionDraft({
+          diagnosis: currentDiagnosis,
+          problemDescription: input.value,
+          serviceCategory: diagnosedCategory,
+          address: bookingForm.elements.address.value,
+          location: clientLocation,
+        });
+        const snapshot = remoteMissionState
+          ?? (connection.activeMission
+            ? await missionSynchronizer.load(connection.activeMission.id)
+            : await missionSynchronizer.create(draft));
+        applyRemoteMissionState(snapshot);
+        startRemoteMissionPolling(snapshot.mission.id);
+        offeredProviderIds = new Set((snapshot.offers ?? []).map((offer) => offer.provider_id ?? offer.providerId));
+      } catch (error) {
+        console.error('[HOME AI][Supabase mission]', { operation: 'create-before-matching', errorType: error?.name ?? 'Error' });
+        search.querySelector('[data-search-progress]').hidden = true;
+        search.querySelector('#map-search-title').textContent = 'Không thể tạo nhiệm vụ';
+        sheet.innerHTML = '<article class="map-bottom-sheet map-empty"><h2>Không thể gửi yêu cầu</h2><p>Nhiệm vụ hoặc đề nghị chưa được lưu. Vui lòng thử lại.</p><div class="sheet-actions"><button type="button" data-retry-search>Thử lại</button></div></article>';
+        return;
+      }
+    }
     let technicians;
     try {
       technicians = await technicianRepository.list({
         location: clientLocation,
         serviceCategory: diagnosedCategory,
       });
+      if (offeredProviderIds) technicians = technicians.filter(({ id }) => offeredProviderIds.has(id));
     } catch (error) {
       console.error('[HOME AI][Supabase matching]', { operation: 'candidates', errorType: error?.name ?? 'Error' });
       search.querySelector('[data-search-progress]').hidden = true;
@@ -791,9 +831,10 @@ export function initialiseHomePage(
           location: clientLocation,
           scheduledFor,
         });
-        const snapshot = connection.activeMission
-          ? await missionSynchronizer.load(connection.activeMission.id)
-          : await missionSynchronizer.create(draft);
+        const snapshot = remoteMissionState
+          ?? (connection.activeMission
+            ? await missionSynchronizer.load(connection.activeMission.id)
+            : await missionSynchronizer.create(draft));
         applyRemoteMissionState(snapshot);
         showBookingConfirmation(snapshot.mission);
         startRemoteMissionPolling(snapshot.mission.id);
