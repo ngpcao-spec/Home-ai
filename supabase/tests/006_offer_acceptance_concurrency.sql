@@ -21,6 +21,10 @@ insert into public.provider_profiles (provider_id, specialty, kyc_status, active
   ('24000000-0000-0000-0000-000000000001', 'HVAC', 'verified', true),
   ('24000000-0000-0000-0000-000000000002', 'HVAC', 'verified', true),
   ('24000000-0000-0000-0000-000000000003', 'HVAC', 'verified', true);
+insert into public.provider_services(provider_id,service_category,enabled) values
+  ('24000000-0000-0000-0000-000000000001','hvac',true),
+  ('24000000-0000-0000-0000-000000000002','hvac',true),
+  ('24000000-0000-0000-0000-000000000003','hvac',true);
 insert into public.provider_status (provider_id, online, available, last_latitude, last_longitude, last_location_at) values
   ('24000000-0000-0000-0000-000000000001', true, true, 12.241, 109.191, now()),
   ('24000000-0000-0000-0000-000000000002', true, true, 12.242, 109.192, now()),
@@ -43,12 +47,24 @@ insert into public.missions (
   '34000000-0000-0000-0000-000000000003',
   '14000000-0000-0000-0000-000000000001', 'hvac', 'Offer deletion',
   'Nha Trang', 12.24, 109.19, 'offered'
+),
+(
+  '34000000-0000-0000-0000-000000000004',
+  '14000000-0000-0000-0000-000000000001', 'hvac', 'Same provider race one',
+  'Nha Trang', 12.24, 109.19, 'offered'
+),
+(
+  '34000000-0000-0000-0000-000000000005',
+  '14000000-0000-0000-0000-000000000001', 'hvac', 'Same provider race two',
+  'Nha Trang', 12.24, 109.19, 'offered'
 );
 insert into public.mission_offers (id, mission_id, provider_id, status, expires_at, match_rank) values
   ('44000000-0000-0000-0000-000000000001', '34000000-0000-0000-0000-000000000001', '24000000-0000-0000-0000-000000000001', 'pending', now() + interval '5 minutes', 1),
   ('44000000-0000-0000-0000-000000000002', '34000000-0000-0000-0000-000000000001', '24000000-0000-0000-0000-000000000002', 'pending', now() + interval '5 minutes', 2),
   ('44000000-0000-0000-0000-000000000003', '34000000-0000-0000-0000-000000000002', '24000000-0000-0000-0000-000000000002', 'pending', now() + interval '5 minutes', 1),
-  ('44000000-0000-0000-0000-000000000004', '34000000-0000-0000-0000-000000000003', '24000000-0000-0000-0000-000000000002', 'pending', now() + interval '5 minutes', 1);
+  ('44000000-0000-0000-0000-000000000004', '34000000-0000-0000-0000-000000000003', '24000000-0000-0000-0000-000000000002', 'pending', now() + interval '5 minutes', 1),
+  ('44000000-0000-0000-0000-000000000005', '34000000-0000-0000-0000-000000000004', '24000000-0000-0000-0000-000000000003', 'pending', now() + interval '5 minutes', 1),
+  ('44000000-0000-0000-0000-000000000006', '34000000-0000-0000-0000-000000000005', '24000000-0000-0000-0000-000000000003', 'pending', now() + interval '5 minutes', 1);
 commit;
 
 select extensions.dblink_connect('offer_one', format('host=127.0.0.1 port=%s dbname=%s user=%s', current_setting('port'), current_database(), current_user));
@@ -97,6 +113,41 @@ begin
   end if;
 end;
 $$;
+
+-- The same provider races two different missions. The provider_status row lock
+-- must serialize both transactions and allow exactly one assignment.
+select extensions.dblink_send_query('offer_one', $remote$
+  with claims as (
+    select set_config('request.jwt.claims', '{"sub":"24000000-0000-0000-0000-000000000003","role":"authenticated"}', true)
+  ), accepted as (
+    select (public.accept_current_provider_offer('44000000-0000-0000-0000-000000000005')).id from claims
+  )
+  select accepted.id from accepted cross join lateral (select pg_sleep(2)) hold_lock
+$remote$);
+select pg_sleep(0.25);
+select extensions.dblink_send_query('offer_two', $remote$
+  with claims as (
+    select set_config('request.jwt.claims', '{"sub":"24000000-0000-0000-0000-000000000003","role":"authenticated"}', true)
+  )
+  select (public.accept_current_provider_offer('44000000-0000-0000-0000-000000000006')).id from claims
+$remote$);
+do $$
+declare winner uuid; caught_state text;
+begin
+  select id into winner from extensions.dblink_get_result('offer_one') as result(id uuid);
+  begin
+    perform id from extensions.dblink_get_result('offer_two') as result(id uuid);
+    raise exception 'Same provider accepted two concurrent missions';
+  exception when others then
+    get stacked diagnostics caught_state=returned_sqlstate;
+    if caught_state<>'55000' then raise; end if;
+  end;
+  if (select count(*) from public.missions where id in
+      ('34000000-0000-0000-0000-000000000004','34000000-0000-0000-0000-000000000005')
+      and provider_id='24000000-0000-0000-0000-000000000003')<>1 then
+    raise exception 'Provider status lock did not enforce one active mission';
+  end if;
+end $$;
 
 -- A concurrent owner change commits while provider two waits on the locked offer.
 select extensions.dblink_send_query('offer_one', $remote$

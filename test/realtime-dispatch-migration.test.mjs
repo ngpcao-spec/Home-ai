@@ -17,4 +17,27 @@ describe('migration dispatch Realtime',()=>{
     assert.match(migration,/revoke all on function public\.expire_current_mission_offer_and_rematch\(uuid\) from public,anon/i);
     for(const table of ['missions','mission_offers','mission_events'])assert.match(migration,new RegExp(`alter publication supabase_realtime add table public\\.${table}`,'i'));
   });
+  it('empêche le même provider de gagner simultanément deux missions',()=>{
+    assert.match(migration,/select \* into status_row from public\.provider_status[\s\S]*for update/i);
+    assert.match(migration,/not status_row\.online or not status_row\.available[\s\S]*status_row\.current_mission_id is not null/i);
+    assert.match(migration,/mission -> profile -> provider profile -> provider status ->[\s\S]*service -> offer/i);
+  });
+  it('refuse un provider devenu indisponible avant acceptation',()=>{
+    assert.match(migration,/not status_row\.online or not status_row\.available/i);
+    assert.match(migration,/status_row\.current_mission_id is not null/i);
+  });
+  it('refuse KYC révoqué, profil ou provider désactivé et service désactivé',()=>{
+    assert.match(migration,/profile_row\.status<>'active'/i);
+    assert.match(migration,/not provider_row\.active or provider_row\.kyc_status<>'verified'/i);
+    assert.match(migration,/service_row\.id is null or not service_row\.enabled/i);
+  });
+  it('refuse une offre expirée ou une mission devenue non attribuable',()=>{
+    assert.match(migration,/offer_row\.status<>'pending' or offer_row\.expires_at<=statement_timestamp\(\)/i);
+    assert.match(migration,/mission_row\.provider_id is not null or mission_row\.status not in \('searching','offered'\)/i);
+  });
+  it('programme une expiration autonome Supabase Cron',()=>{
+    assert.match(migration,/create extension if not exists pg_cron/i);
+    assert.match(migration,/cron\.schedule\([\s\S]*home_ai_expire_mission_offers[\s\S]*10 seconds/i);
+    assert.match(migration,/expire_due_mission_offers[\s\S]*for update skip locked[\s\S]*status='expired'[\s\S]*dispatch_next_mission_offer/i);
+  });
 });

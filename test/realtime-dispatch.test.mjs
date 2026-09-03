@@ -22,16 +22,11 @@ describe('dispatch Provider Realtime', () => {
     controller.stop();
   });
 
-  it('déclenche la RPC serveur au timeout, jamais une décision locale', async () => {
-    let state={offers:[{id:'o1',expiresAt:new Date(1000).toISOString()}]}; const tasks=[]; const expired=[];
-    const repository={source:'supabase',subscribeDispatch(){return()=>{};},async load(){return state;},
-      async expire(id){expired.push(id);state={offers:[]};return state;}};
-    const controller=createProviderDispatchController({repository,getState:()=>state,onState:next=>{state=next;},
-      scheduleTask:(task,delay)=>{tasks.push({task,delay});return tasks.length;},clearTask(){},now:()=>0});
+  it('ne dépend d’aucune RPC navigateur pour expirer une offre', () => {
+    const repository={source:'supabase',subscribeDispatch(){return()=>{};},async load(){return{offers:[]};}};
+    const controller=createProviderDispatchController({repository,getState:()=>({offers:[{id:'o1'}]}),onState(){}});
     controller.start();
-    assert.equal(tasks[0].delay,1050);
-    await tasks[0].task();
-    assert.deepEqual(expired,['o1']);
+    assert.equal('expire' in repository,false);
     controller.stop();
   });
 

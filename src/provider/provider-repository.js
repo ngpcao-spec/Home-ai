@@ -62,7 +62,6 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
     subscribeDispatch(onChange, onStatus) {
       return repositories.offers.subscribeProviderDispatch(initial.provider.id, onChange, onStatus);
     },
-    async expire(id) { await repositories.offers.expireCurrentProviderOffer(id); return loadDashboard(); },
     async setAvailability(next) { await repositories.offers.setProviderAvailability(next); return loadDashboard(); },
     async accept(id) { await repositories.offers.acceptCurrentProviderOffer(id); return loadDashboard(); },
     async decline(id) { await repositories.offers.declineCurrentProviderOffer(id); return loadDashboard(); },

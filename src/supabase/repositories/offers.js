@@ -17,11 +17,6 @@ export function createSupabaseOffersRepository(supabase) {
     async declineCurrentProviderOffer(offerId) {
       return unwrap(await client.rpc('decline_current_provider_offer', { target_offer_id: offerId }), 'offers.declineCurrentProviderOffer');
     },
-    async expireCurrentProviderOffer(offerId) {
-      return unwrap(await client.rpc('expire_current_mission_offer_and_rematch', {
-        target_offer_id: offerId,
-      }), 'offers.expireCurrentProviderOffer');
-    },
     subscribeProviderDispatch(providerId, onChange, onStatus = () => {}) {
       const channel = client.channel(`provider-dispatch:${providerId}`)
         .on('postgres_changes', {

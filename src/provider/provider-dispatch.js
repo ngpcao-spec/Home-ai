@@ -41,33 +41,19 @@ export function notifyIncomingOffer(environment = globalThis) {
 
 export function createProviderDispatchController({
   repository, getState, onState, onOffer = () => {}, onError = () => {},
-  scheduleTask = globalThis.setTimeout, clearTask = globalThis.clearTimeout,
-  now = () => Date.now(),
 }) {
-  let stopped = false; let expiryTimer; let unsubscribe = () => {};
+  let stopped = false; let unsubscribe = () => {};
   let knownOfferIds = new Set((getState()?.offers ?? []).map(({ id }) => id));
-  const scheduleExpiry = () => {
-    if (expiryTimer !== undefined) clearTask(expiryTimer);
-    const offer = (getState()?.offers ?? []).filter(({ expiresAt }) => new Date(expiresAt).getTime() > now())
-      .sort((a, b) => new Date(a.expiresAt) - new Date(b.expiresAt))[0];
-    if (!offer || stopped) return;
-    expiryTimer = scheduleTask(async () => {
-      try { if (!stopped) onState(await repository.expire(offer.id)); }
-      catch (error) { if (!stopped) onError(error); }
-      if (!stopped) scheduleExpiry();
-    }, Math.max(0, new Date(offer.expiresAt).getTime() - now() + 50));
-  };
   const refresh = async () => {
     try {
       const next = await repository.load();
       const incoming = (next.offers ?? []).find(({ id }) => !knownOfferIds.has(id));
       knownOfferIds = new Set((next.offers ?? []).map(({ id }) => id));
-      if (!stopped) { onState(next); if (incoming) onOffer(incoming); scheduleExpiry(); }
+      if (!stopped) { onState(next); if (incoming) onOffer(incoming); }
     } catch (error) { if (!stopped) onError(error); }
   };
   const stop = () => {
     stopped = true;
-    if (expiryTimer !== undefined) clearTask(expiryTimer);
     unsubscribe();
   };
   const start = () => {
@@ -75,7 +61,6 @@ export function createProviderDispatchController({
     unsubscribe = repository.subscribeDispatch(refresh, (status) => {
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') onError(new Error(`Provider Realtime: ${status}`));
     });
-    scheduleExpiry();
     return stop;
   };
   return Object.freeze({ start, stop, refresh });
