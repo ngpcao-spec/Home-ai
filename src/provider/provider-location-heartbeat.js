@@ -14,11 +14,16 @@ export function createProviderLocationHeartbeat({
   intervalMs = 60000,
   scheduleTask = globalThis.setTimeout,
   clearTask = globalThis.clearTimeout,
+  isPageActive = () => !globalThis.document?.hidden,
   onState = () => {},
   onError = () => {},
 }) {
   let timer;
   let stopped = false;
+  const eligible = () => repository.source === 'supabase'
+    && getState()?.status?.online
+    && getState()?.status?.available
+    && isPageActive();
 
   const clear = () => {
     if (timer !== undefined) clearTask(timer);
@@ -26,12 +31,12 @@ export function createProviderLocationHeartbeat({
   };
   const schedule = () => {
     clear();
-    if (!stopped && repository.source === 'supabase' && getState()?.status?.online) {
+    if (!stopped && eligible()) {
       timer = scheduleTask(refresh, intervalMs);
     }
   };
   const refresh = async () => {
-    if (stopped || repository.source !== 'supabase' || !getState()?.status?.online) return null;
+    if (stopped || !eligible()) return null;
     try {
       const position = await readPosition(geolocation);
       const current = getState();
@@ -51,7 +56,7 @@ export function createProviderLocationHeartbeat({
   };
   const sync = () => {
     clear();
-    if (!stopped && repository.source === 'supabase' && getState()?.status?.online) void refresh();
+    if (!stopped && eligible()) void refresh();
   };
   const stop = () => { stopped = true; clear(); };
 

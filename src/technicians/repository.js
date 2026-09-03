@@ -30,9 +30,9 @@ export function createProgressiveTechnicianRepository(
       if (!repositories.enabled) {
         return fallback.list({ location });
       }
-      const { data, error } = await repositories.client.auth.getSession();
+      const { data, error } = await repositories.client.auth.getUser();
       if (error) throw error;
-      if (!data?.session?.user) {
+      if (!data?.user) {
         return fallback.list({ location });
       }
       if (!serviceCategory || !Number.isFinite(location?.latitude) || !Number.isFinite(location?.longitude)) {

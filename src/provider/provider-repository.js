@@ -46,9 +46,9 @@ export function createMockProviderAppRepository(seed = mockProviderDashboard) {
 export async function createProgressiveProviderAppRepository(runtimeConfig = globalThis.__HOME_AI_CONFIG__, fallback = createMockProviderAppRepository(), repositoryFactory = createOptionalSupabaseRepositories) {
   const repositories = repositoryFactory(runtimeConfig);
   if (!repositories.enabled) return fallback;
-  const { data, error } = await repositories.client.auth.getSession();
+  const { data, error } = await repositories.client.auth.getUser();
   if (error) throw error;
-  if (!data?.session?.user) return fallback;
+  if (!data?.user) return fallback;
   const initial = await repositories.offers.getProviderDashboard();
   if (!initial?.provider?.id) throw new Error('Authenticated provider is not provisioned');
   const loadDashboard = async () => {

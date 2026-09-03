@@ -37,11 +37,16 @@ export function createGoogleCustomerAuth(
   return Object.freeze({
     enabled: true,
     async resume() {
-      const { data, error } = await repositories.client.auth.getSession();
-      if (error) throw error;
-      const session = data?.session ?? null;
-      if (!session?.user) return null;
-      const profile = await ensureCustomerProfile(session.user);
+      const [{ data: sessionData, error: sessionError }, { data: userData, error: userError }] = await Promise.all([
+        repositories.client.auth.getSession(),
+        repositories.client.auth.getUser(),
+      ]);
+      if (sessionError) throw sessionError;
+      if (userError) throw userError;
+      const session = sessionData?.session ?? null;
+      const user = userData?.user ?? null;
+      if (!session?.user || !user || session.user.id !== user.id) return null;
+      const profile = await ensureCustomerProfile(user);
       return Object.freeze({ authenticated: true, session, profile });
     },
     async signIn() {

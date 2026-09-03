@@ -64,7 +64,7 @@ describe('ghép thợ cục bộ', () => {
       { async list() { fallbackCalls += 1; return mockTechnicians; } },
       () => ({
         enabled: true,
-        client: { auth: { getSession: async () => ({ data: { session: { user: { id: 'c1' } } }, error: null }) } },
+        client: { auth: { getUser: async () => ({ data: { user: { id: 'c1' } }, error: null }) } },
         providers: { listMatchingCandidates: async () => { throw new Error('matching unavailable'); } },
       }),
     );
@@ -73,5 +73,23 @@ describe('ghép thợ cục bộ', () => {
       location: { latitude: 12.24, longitude: 109.19 },
     }), /matching unavailable/);
     assert.equal(fallbackCalls, 0);
+  });
+
+  it('ne lance aucun RPC réel quand getUser ne confirme pas la session locale', async () => {
+    let rpcCalls = 0;
+    let fallbackCalls = 0;
+    const repository = createProgressiveTechnicianRepository(
+      { SUPABASE_URL: 'https://example.supabase.co', SUPABASE_ANON_KEY: 'anon-key' },
+      { async list() { fallbackCalls += 1; return mockTechnicians; } },
+      () => ({
+        enabled: true,
+        client: { auth: { getUser: async () => ({ data: { user: null }, error: null }) } },
+        providers: { listMatchingCandidates: async () => { rpcCalls += 1; return []; } },
+      }),
+    );
+    const result = await repository.list({ serviceCategory: 'electricity', location: { latitude: 12.24, longitude: 109.19 } });
+    assert.equal(result, mockTechnicians);
+    assert.equal(fallbackCalls, 1);
+    assert.equal(rpcCalls, 0);
   });
 });

@@ -13,9 +13,14 @@ export function createProviderGoogleAuth(
   return Object.freeze({
     enabled: true,
     async getSession() {
-      const { data, error } = await repositories.client.auth.getSession();
-      if (error) throw error;
-      return data?.session ?? null;
+      const [{ data: sessionData, error: sessionError }, { data: userData, error: userError }] = await Promise.all([
+        repositories.client.auth.getSession(),
+        repositories.client.auth.getUser(),
+      ]);
+      if (sessionError) throw sessionError;
+      if (userError) throw userError;
+      const session = sessionData?.session ?? null;
+      return session?.user?.id && session.user.id === userData?.user?.id ? session : null;
     },
     async signIn() {
       const { data, error } = await repositories.client.auth.signInWithOAuth({
