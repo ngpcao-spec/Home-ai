@@ -7,6 +7,7 @@ import {
   createCustomerMissionDraft,
   createCustomerMissionStateFromServer,
   createCustomerMissionSynchronizer,
+  listCustomerMatchingProviders,
 } from '../src/customer/supabase-mission.js';
 import { createSupabaseMissionsRepository } from '../src/supabase/repositories/missions.js';
 
@@ -48,6 +49,34 @@ describe('missions client Supabase', () => {
     assert.equal(result.activeMission, activeMission);
     assert.equal(result.repository, repository);
     assert.equal(typeof result.providerRepository.getById, 'function');
+  });
+
+  it('réutilise l’identité déjà validée sans second getUser Safari', async () => {
+    let authChecks=0;
+    const result=await connectSupabaseCustomerMissions({runtimeConfig:runtime,verifiedUserId:'customer-1',repositoryLoader:async()=>({
+      profiles:{getCurrentUserId:async()=>{authChecks+=1;throw new Error('Safari auth lock');}},
+      missions:{getActiveCurrent:async()=>null},providers:{listMatchingCandidates:async()=>[]},
+    })});
+    assert.equal(result.source,'supabase');
+    assert.equal(authChecks,0);
+  });
+
+  it('C08 réutilise le repository authentifié sans rappeler technicianRepository Auth', async () => {
+    const calls=[];
+    const providers=await listCustomerMatchingProviders({connection:{source:'supabase',providerRepository:{
+      listMatchingCandidates:async args=>{calls.push(args);return[{id:'p1'}];},
+    }},technicianRepository:{list:async()=>assert.fail('second Supabase client/auth check')},
+    location:{latitude:12.24,longitude:109.19},serviceCategory:'electricity'});
+    assert.equal(providers[0].id,'p1');
+    assert.deepEqual(calls[0],{serviceCategory:'electricity',latitude:12.24,longitude:109.19});
+  });
+
+  it('C08 distingue une session absente sans revenir aux providers mock', async () => {
+    let mockCalls=0;
+    await assert.rejects(()=>listCustomerMatchingProviders({connection:{source:'mock',reason:'no-session'},
+      technicianRepository:{list:async()=>{mockCalls+=1;return[];}},location:{latitude:12.24,longitude:109.19},serviceCategory:'electricity'}),
+    error=>error.code==='CUSTOMER_SESSION_REQUIRED');
+    assert.equal(mockCalls,0);
   });
 
   it('crée la mission et les offres sans masquer une erreur serveur', async () => {

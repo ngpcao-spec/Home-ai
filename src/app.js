@@ -34,6 +34,7 @@ import {
   createCustomerMissionDraft,
   createCustomerMissionStateFromServer,
   createCustomerMissionSynchronizer,
+  listCustomerMatchingProviders,
 } from './customer/supabase-mission.js';
 import { createCustomerProfileMarkup } from './customer/profile-view.js';
 import { legalContent, supportFaqs } from './customer/support.js';
@@ -284,6 +285,7 @@ export function initialiseHomePage(
   let loginPhone = '';
   let openHomeView = () => {};
   let browserStorage;
+  let verifiedCustomerUserId = null;
   try { browserStorage = globalThis.localStorage; } catch { browserStorage = undefined; }
   const renderLogin = (options = {}) => {
     startupFlow.innerHTML = createLoginMarkup({ phone: loginPhone, ...options });
@@ -303,6 +305,7 @@ export function initialiseHomePage(
     try {
       const oauthSession = await customerAuth.resume();
       oauthAuthenticated = Boolean(oauthSession?.authenticated);
+      verifiedCustomerUserId = oauthSession?.session?.user?.id ?? null;
     } catch {
       // Keep the local phone/OTP fallback available if OAuth recovery fails.
     }
@@ -533,12 +536,18 @@ export function initialiseHomePage(
     clientLocation = await getClientLocation(geolocation);
     root.querySelector('[data-location-label]').textContent = clientLocation.source === 'browser' ? 'Vị trí hiện tại' : 'Đang dùng vị trí mặc định · Nha Trang';
     let offeredProviderIds;
-    missionConnection ??= customerMissionConnector();
+    missionConnection ??= customerMissionConnector({ verifiedUserId: verifiedCustomerUserId });
     const connection = await missionConnection;
     if (connection.source === 'error') {
       search.querySelector('[data-search-progress]').hidden = true;
       search.querySelector('#map-search-title').textContent = 'Không thể tạo nhiệm vụ';
       sheet.innerHTML = '<article class="map-bottom-sheet map-empty"><h2>Kết nối Supabase bị gián đoạn</h2><p>Nhiệm vụ chưa được tạo; không có dữ liệu mẫu nào được sử dụng.</p><div class="sheet-actions"><button type="button" data-retry-search>Thử lại</button></div></article>';
+      return;
+    }
+    if (connection.source === 'mock' && connection.reason === 'no-session') {
+      search.querySelector('[data-search-progress]').hidden = true;
+      search.querySelector('#map-search-title').textContent = 'Phiên đăng nhập đã hết hạn';
+      sheet.innerHTML = '<article class="map-bottom-sheet map-empty"><h2>Cần đăng nhập lại</h2><p>Phiên Supabase của bạn không còn hợp lệ. Vui lòng đăng nhập lại bằng Google trước khi tìm thợ.</p></article>';
       return;
     }
     if (connection.source === 'supabase') {
@@ -571,16 +580,17 @@ export function initialiseHomePage(
     }
     let technicians;
     try {
-      technicians = await technicianRepository.list({
-        location: clientLocation,
-        serviceCategory: diagnosedCategory,
-      });
+      technicians = await listCustomerMatchingProviders({ connection, technicianRepository,
+        location: clientLocation, serviceCategory: diagnosedCategory });
       if (offeredProviderIds) technicians = technicians.filter(({ id }) => offeredProviderIds.has(id));
     } catch (error) {
       console.error('[HOME AI][Supabase matching]', { operation: 'candidates', errorType: error?.name ?? 'Error' });
       search.querySelector('[data-search-progress]').hidden = true;
-      search.querySelector('#map-search-title').textContent = 'Không thể tải danh sách thợ';
-      sheet.innerHTML = '<article class="map-bottom-sheet map-empty"><h2>Kết nối Supabase bị gián đoạn</h2><p>Không có dữ liệu mẫu nào được sử dụng. Vui lòng thử lại.</p><div class="sheet-actions"><button type="button" data-retry-search>Thử lại</button></div></article>';
+      const sessionMissing = error?.code === 'CUSTOMER_SESSION_REQUIRED';
+      search.querySelector('#map-search-title').textContent = sessionMissing ? 'Phiên đăng nhập đã hết hạn' : 'Không thể tải danh sách thợ';
+      sheet.innerHTML = sessionMissing
+        ? '<article class="map-bottom-sheet map-empty"><h2>Cần đăng nhập lại</h2><p>Phiên Supabase của bạn không còn hợp lệ. Vui lòng đăng nhập lại bằng Google trước khi tìm thợ.</p></article>'
+        : '<article class="map-bottom-sheet map-empty"><h2>Kết nối Supabase bị gián đoạn</h2><p>Không có dữ liệu mẫu nào được sử dụng. Vui lòng thử lại.</p><div class="sheet-actions"><button type="button" data-retry-search>Thử lại</button></div></article>';
       return;
     }
     const routingCandidates = getRouteMatrixCandidates(technicians, diagnosedCategory);

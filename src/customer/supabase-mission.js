@@ -59,11 +59,12 @@ export function createCustomerMissionStateFromServer({ mission, quotes }) {
 
 export async function connectSupabaseCustomerMissions({
   runtimeConfig = globalThis.__HOME_AI_CONFIG__, repositoryLoader = defaultRepositoryLoader,
+  verifiedUserId = null,
 } = {}) {
   try {
     if (!readSupabaseConfig(runtimeConfig)) return Object.freeze({ source: 'mock', reason: 'not-configured' });
     const repositories = await repositoryLoader(runtimeConfig);
-    const userId = await repositories.profiles.getCurrentUserId();
+    const userId = verifiedUserId ?? await repositories.profiles.getCurrentUserId();
     if (!userId) return Object.freeze({ source: 'mock', reason: 'no-session' });
     return Object.freeze({
       source: 'supabase',
@@ -74,6 +75,21 @@ export async function connectSupabaseCustomerMissions({
   } catch (error) {
     return Object.freeze({ source: 'error', reason: 'repository-error', error });
   }
+}
+
+export async function listCustomerMatchingProviders({ connection, technicianRepository, location, serviceCategory }) {
+  if (connection?.source === 'supabase') {
+    if (!connection.providerRepository) throw new Error('Supabase provider repository unavailable');
+    return connection.providerRepository.listMatchingCandidates({
+      serviceCategory, latitude: location?.latitude, longitude: location?.longitude,
+    });
+  }
+  if (connection?.reason === 'no-session') {
+    const error = new Error('Customer Supabase session required');
+    error.code = 'CUSTOMER_SESSION_REQUIRED';
+    throw error;
+  }
+  return technicianRepository.list({ location, serviceCategory });
 }
 
 export function createCustomerMissionSynchronizer({
