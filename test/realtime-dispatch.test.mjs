@@ -30,6 +30,30 @@ describe('dispatch Provider Realtime', () => {
     controller.stop();
   });
 
+  it('utilise un polling court lorsque la page Provider est active', async () => {
+    let state={offers:[]}; const received=[]; const tasks=[];
+    const repository={source:'supabase',subscribeDispatch(){return()=>{};},async load(){return state;}};
+    const controller=createProviderDispatchController({repository,getState:()=>state,onState:next=>{state=next;},
+      onOffer:offer=>received.push(offer),scheduleTask:(task,delay)=>{tasks.push({task,delay});return tasks.length;},clearTask(){},intervalMs:2500,isPageActive:()=>true});
+    controller.start();
+    assert.equal(tasks[0].delay,2500);
+    state={offers:[{id:'poll-offer'}]};
+    await tasks.shift().task();
+    assert.equal(received[0].id,'poll-offer');
+    controller.stop();
+  });
+
+  it('ne charge pas le dashboard en polling quand la page est inactive', async () => {
+    let loads=0; const tasks=[];
+    const repository={source:'supabase',subscribeDispatch(){return()=>{};},async load(){loads+=1;return{offers:[]};}};
+    const controller=createProviderDispatchController({repository,getState:()=>({offers:[]}),onState(){},
+      scheduleTask:(task)=>{tasks.push(task);return tasks.length;},clearTask(){},isPageActive:()=>false});
+    controller.start();
+    await tasks.shift()();
+    assert.equal(loads,0);
+    controller.stop();
+  });
+
   it('abonne provider et client avec des filtres RLS sans service_role', () => {
     const channels=[]; const client={rpc(){},from(){return{};},channel(name){const registrations=[];const channel={name,on(...args){registrations.push(args);return channel;},subscribe(){return channel;},registrations};channels.push(channel);return channel;},removeChannel(){}};
     const offers=createSupabaseOffersRepository(client);

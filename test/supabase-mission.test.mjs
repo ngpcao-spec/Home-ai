@@ -84,6 +84,30 @@ describe('missions client Supabase', () => {
     assert.equal(snapshot.offers[0].provider_id, 'p1');
   });
 
+  it('annule une ancienne recherche avant de créer et matcher une nouvelle demande', async () => {
+    const calls=[];
+    const previous={id:'old',status:'searching',version:3};
+    const synchronizer=createCustomerMissionSynchronizer({
+      missionRepository:{
+        cancelCurrent:async mission=>{calls.push(['cancel',mission.id]);return{...mission,status:'cancelled'};},
+        createCurrent:async()=>{calls.push(['create']);return{id:'new',providerId:null};},
+        createOffers:async id=>{calls.push(['offers',id]);return[];},
+        getById:async()=>({id:'new',providerId:null,status:'searching'}),
+        getQuoteHistory:async()=>[],getOffers:async()=>[],
+      },providerRepository:{getById:async()=>null},
+    });
+    await synchronizer.create({}, {replaceMission:previous});
+    assert.deepEqual(calls,[['cancel','old'],['create'],['offers','new']]);
+  });
+
+  it('refuse de remplacer côté client une mission déjà attribuée', async () => {
+    const synchronizer=createCustomerMissionSynchronizer({
+      missionRepository:{cancelCurrent:async()=>assert.fail('cancel must not run')},
+      providerRepository:{getById:async()=>null},
+    });
+    await assert.rejects(()=>synchronizer.create({}, {replaceMission:{id:'m1',status:'accepted'}}),/déjà attribuée/);
+  });
+
   it('relit les offres avec les noms de colonnes réels du schéma', async () => {
     const calls = [];
     const query = {

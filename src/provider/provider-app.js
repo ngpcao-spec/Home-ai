@@ -60,7 +60,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   await loadNavigation(); await draw();
   const page=root.ownerDocument??globalThis.document;
   const heartbeat=heartbeatFactory({repository,getState:()=>state,isPageActive:()=>!page?.hidden,onState:async next=>{state=next;message='Vị trí GPS đã được cập nhật.';await draw();},onError:async()=>{message='Không thể cập nhật GPS. Hãy cho phép truy cập vị trí.';await draw();}});
-  const dispatch=createProviderDispatchController({repository,getState:()=>state,onState:async next=>{state=next;priorityOfferId=next.offers?.[0]?.id??null;await draw();},onOffer:async offer=>{priorityOfferId=offer.id;notifyIncomingOffer();await draw();},onError:async()=>{message='Kết nối thời gian thực bị gián đoạn. HOME AI đang thử lại.';await draw();}});
+  const dispatch=createProviderDispatchController({repository,getState:()=>state,isPageActive:()=>!page?.hidden,onState:async next=>{state=next;priorityOfferId=next.offers?.[0]?.id??null;await draw();},onOffer:async offer=>{priorityOfferId=offer.id;notifyIncomingOffer();await draw();},onError:async()=>{message='Kết nối thời gian thực bị gián đoạn. HOME AI đang thử lại.';await draw();}});
   dispatch.start();
   const countdownTimer=globalThis.setInterval?.(()=>updateDispatchCountdown(root),1000);
   const syncHeartbeat=()=>heartbeat.sync();

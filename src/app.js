@@ -556,10 +556,8 @@ export function initialiseHomePage(
           address: bookingForm.elements.address.value,
           location: clientLocation,
         });
-        const snapshot = remoteMissionState
-          ?? (connection.activeMission
-            ? await missionSynchronizer.load(connection.activeMission.id)
-            : await missionSynchronizer.create(draft));
+        const replaceMission = remoteMissionState?.mission ?? connection.activeMission;
+        const snapshot = await missionSynchronizer.create(draft, { replaceMission });
         applyRemoteMissionState(snapshot);
         startRemoteMissionPolling(snapshot.mission.id);
         offeredProviderIds = new Set((snapshot.offers ?? []).map((offer) => offer.provider_id ?? offer.providerId));

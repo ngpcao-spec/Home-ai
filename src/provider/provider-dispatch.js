@@ -41,10 +41,12 @@ export function notifyIncomingOffer(environment = globalThis) {
 
 export function createProviderDispatchController({
   repository, getState, onState, onOffer = () => {}, onError = () => {},
+  scheduleTask = globalThis.setTimeout, clearTask = globalThis.clearTimeout,
+  intervalMs = 2500, isPageActive = () => true,
 }) {
-  let stopped = false; let unsubscribe = () => {};
+  let stopped = false; let unsubscribe = () => {}; let pollTimer; let refreshPromise;
   let knownOfferIds = new Set((getState()?.offers ?? []).map(({ id }) => id));
-  const refresh = async () => {
+  const performRefresh = async () => {
     try {
       const next = await repository.load();
       const incoming = (next.offers ?? []).find(({ id }) => !knownOfferIds.has(id));
@@ -52,15 +54,29 @@ export function createProviderDispatchController({
       if (!stopped) { onState(next); if (incoming) onOffer(incoming); }
     } catch (error) { if (!stopped) onError(error); }
   };
+  const refresh = () => {
+    if (!refreshPromise) refreshPromise = performRefresh().finally(() => { refreshPromise = undefined; });
+    return refreshPromise;
+  };
+  const poll = async () => {
+    if (!isPageActive()) return;
+    await refresh();
+  };
+  const schedulePoll = () => {
+    if (stopped) return;
+    pollTimer = scheduleTask(async () => { await poll(); schedulePoll(); }, intervalMs);
+  };
   const stop = () => {
     stopped = true;
     unsubscribe();
+    if (pollTimer !== undefined) clearTask(pollTimer);
   };
   const start = () => {
     if (repository.source !== 'supabase' || typeof repository.subscribeDispatch !== 'function') return () => {};
     unsubscribe = repository.subscribeDispatch(refresh, (status) => {
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') onError(new Error(`Provider Realtime: ${status}`));
     });
+    schedulePoll();
     return stop;
   };
   return Object.freeze({ start, stop, refresh });

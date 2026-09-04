@@ -97,7 +97,13 @@ export function createCustomerMissionSynchronizer({
     return Object.freeze({ mission, provider, quotes, offers });
   };
 
-  const create = async (draft) => {
+  const create = async (draft, { replaceMission = null } = {}) => {
+    if (replaceMission) {
+      if (!['requested', 'searching', 'offered'].includes(replaceMission.status)) {
+        throw new Error('Une mission déjà attribuée ne peut pas être remplacée');
+      }
+      await missionRepository.cancelCurrent(replaceMission);
+    }
     const mission = await missionRepository.createCurrent(draft);
     await missionRepository.createOffers(mission.id);
     return load(mission.id);
