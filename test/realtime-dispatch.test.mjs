@@ -76,4 +76,23 @@ describe('dispatch Provider Realtime', () => {
     assert.equal(states[0].mission.status,'searching');
     assert.equal(states[0].dispatchEvent.new.event_type,'mission.offer.declined');
   });
+
+  it('couvre customer → mission → mission_offer → réception Provider', async () => {
+    const calls=[]; let realtime; let providerState={offers:[]}; const received=[];
+    const missionRepository={
+      createCurrent:async()=>{calls.push('mission');return{id:'m1',providerId:null};},
+      createOffers:async()=>{calls.push('matching+offer');providerState={offers:[{id:'o1',providerId:'p1',status:'pending'}]};return providerState.offers;},
+      getById:async()=>({id:'m1',providerId:null,status:'offered'}),getQuoteHistory:async()=>[],getOffers:async()=>providerState.offers,
+    };
+    const customer=createCustomerMissionSynchronizer({missionRepository,providerRepository:{getById:async()=>null}});
+    const providerRepository={source:'supabase',load:async()=>providerState,subscribeDispatch:callback=>{realtime=callback;return()=>{};}};
+    const dispatch=createProviderDispatchController({repository:providerRepository,getState:()=>({offers:[]}),onState:()=>{},onOffer:offer=>received.push(offer),scheduleTask:()=>1,clearTask(){}});
+    dispatch.start();
+    const snapshot=await customer.create({serviceCategory:'electricity'});
+    await realtime({eventType:'INSERT',new:{id:'o1'}});
+    assert.deepEqual(calls,['mission','matching+offer']);
+    assert.equal(snapshot.offers[0].id,'o1');
+    assert.equal(received[0].id,'o1');
+    dispatch.stop();
+  });
 });

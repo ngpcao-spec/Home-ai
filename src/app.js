@@ -557,7 +557,7 @@ export function initialiseHomePage(
           location: clientLocation,
         });
         const replaceMission = remoteMissionState?.mission ?? connection.activeMission;
-        const snapshot = await missionSynchronizer.create(draft, { replaceMission });
+        const snapshot = await missionSynchronizer.createOrResume(draft, replaceMission);
         applyRemoteMissionState(snapshot);
         startRemoteMissionPolling(snapshot.mission.id);
         offeredProviderIds = new Set((snapshot.offers ?? []).map((offer) => offer.provider_id ?? offer.providerId));

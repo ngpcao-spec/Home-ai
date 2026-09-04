@@ -108,6 +108,34 @@ describe('missions client Supabase', () => {
     await assert.rejects(()=>synchronizer.create({}, {replaceMission:{id:'m1',status:'accepted'}}),/déjà attribuée/);
   });
 
+  it('reprend après reload une recherche récente sans créer de mission en double', async () => {
+    const calls=[]; const active={id:'m1',providerId:null,status:'searching',requestedAt:'2026-09-04T00:00:00Z'};
+    const synchronizer=createCustomerMissionSynchronizer({missionRepository:{
+      createCurrent:async()=>assert.fail('mission duplicate'),cancelCurrent:async()=>assert.fail('cancel recent mission'),
+      createOffers:async id=>{calls.push(['offers',id]);return[];},getById:async()=>active,
+      getQuoteHistory:async()=>[],getOffers:async()=>[{id:'o1',provider_id:'p1',status:'pending'}],
+    },providerRepository:{getById:async()=>null}});
+    const snapshot=await synchronizer.createOrResume({},active,{now:new Date('2026-09-04T00:02:00Z').getTime()});
+    assert.deepEqual(calls,[['offers','m1']]);
+    assert.equal(snapshot.offers[0].provider_id,'p1');
+  });
+
+  it('mutualise deux lancements concurrents en une seule mission et une seule offre', async () => {
+    const calls=[]; let release;
+    const gate=new Promise(resolve=>{release=resolve;});
+    const synchronizer=createCustomerMissionSynchronizer({missionRepository:{
+      createCurrent:async()=>{calls.push('mission');await gate;return{id:'m1',providerId:null};},
+      createOffers:async()=>{calls.push('offer');return[];},getById:async()=>({id:'m1',providerId:null,status:'searching'}),
+      getQuoteHistory:async()=>[],getOffers:async()=>[],
+    },providerRepository:{getById:async()=>null}});
+    const first=synchronizer.create({serviceCategory:'electricity'});
+    const second=synchronizer.create({serviceCategory:'electricity'});
+    release();
+    const [a,b]=await Promise.all([first,second]);
+    assert.deepEqual(calls,['mission','offer']);
+    assert.equal(a.mission.id,b.mission.id);
+  });
+
   it('relit les offres avec les noms de colonnes réels du schéma', async () => {
     const calls = [];
     const query = {

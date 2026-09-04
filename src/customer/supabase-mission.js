@@ -84,6 +84,7 @@ export function createCustomerMissionSynchronizer({
   intervalMs = 3000,
 }) {
   if (!missionRepository || !providerRepository) throw new TypeError('Supabase mission and provider repositories are required');
+  let dispatchPromise;
 
   const load = async (missionId) => {
     const mission = await missionRepository.getById(missionId);
@@ -97,16 +98,33 @@ export function createCustomerMissionSynchronizer({
     return Object.freeze({ mission, provider, quotes, offers });
   };
 
-  const create = async (draft, { replaceMission = null } = {}) => {
-    if (replaceMission) {
-      if (!['requested', 'searching', 'offered'].includes(replaceMission.status)) {
-        throw new Error('Une mission déjà attribuée ne peut pas être remplacée');
+  const create = (draft, { replaceMission = null } = {}) => {
+    if (dispatchPromise) return dispatchPromise;
+    dispatchPromise = (async () => {
+      if (replaceMission) {
+        if (!['requested', 'searching', 'offered'].includes(replaceMission.status)) {
+          throw new Error('Une mission déjà attribuée ne peut pas être remplacée');
+        }
+        await missionRepository.cancelCurrent(replaceMission);
       }
-      await missionRepository.cancelCurrent(replaceMission);
-    }
-    const mission = await missionRepository.createCurrent(draft);
-    await missionRepository.createOffers(mission.id);
-    return load(mission.id);
+      const mission = await missionRepository.createCurrent(draft);
+      await missionRepository.createOffers(mission.id);
+      return load(mission.id);
+    })().finally(() => { dispatchPromise = undefined; });
+    return dispatchPromise;
+  };
+
+  const createOrResume = async (draft, activeMission, { now = Date.now(), reuseWindowMs = 300000 } = {}) => {
+    const requestedAt = new Date(activeMission?.requestedAt ?? '').getTime();
+    const reusable = activeMission && ['requested', 'searching', 'offered'].includes(activeMission.status)
+      && Number.isFinite(requestedAt) && now - requestedAt >= 0 && now - requestedAt <= reuseWindowMs;
+    if (!reusable) return create(draft, { replaceMission: activeMission });
+    if (dispatchPromise) return dispatchPromise;
+    dispatchPromise = (async () => {
+      await missionRepository.createOffers(activeMission.id);
+      return load(activeMission.id);
+    })().finally(() => { dispatchPromise = undefined; });
+    return dispatchPromise;
   };
 
   const decideQuote = async (quoteId, decision) => {
@@ -152,5 +170,5 @@ export function createCustomerMissionSynchronizer({
     return () => { active = false; unsubscribe?.(); };
   };
 
-  return Object.freeze({ load, create, decideQuote, poll, subscribe });
+  return Object.freeze({ load, create, createOrResume, decideQuote, poll, subscribe });
 }
