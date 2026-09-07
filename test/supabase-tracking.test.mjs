@@ -77,11 +77,11 @@ it('refreshes assigned GPS via realtime and polling fallback', async () => {
 
 it('keeps sending actual device GPS during an assigned mission without making provider available', async () => {
   const writes = [];
-  const heartbeat = createProviderLocationHeartbeat({ repository: { source: 'supabase', setAvailability: async value => { writes.push(value); return {}; } },
+  const heartbeat = createProviderLocationHeartbeat({ repository: { source: 'supabase', updateLocation: async value => { writes.push(value); return {}; } },
     getState: () => ({ status: { online: true, available: false }, assignment: { id: 'm1' } }),
     geolocation: { getCurrentPosition: success => success({ coords: { latitude: 12.2, longitude: 109.1 } }) },
     scheduleTask: () => 1, clearTask() {},
   });
   await heartbeat.refresh(); heartbeat.stop();
-  assert.deepEqual(writes, [{ online: true, available: false, latitude: 12.2, longitude: 109.1 }]);
+  assert.deepEqual(writes, [{ latitude: 12.2, longitude: 109.1 }]);
 });

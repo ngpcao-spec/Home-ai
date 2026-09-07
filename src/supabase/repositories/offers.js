@@ -29,11 +29,15 @@ export function createSupabaseOffersRepository(supabase) {
         .subscribe(onStatus);
       return () => client.removeChannel(channel);
     },
-    async setProviderAvailability({ online, available, latitude = null, longitude = null }) {
+    async setProviderAvailability({ online }) {
       return unwrap(await client.rpc('set_current_provider_availability', {
-        new_online: online, new_available: available,
-        new_latitude: latitude, new_longitude: longitude,
+        new_online: online, new_available: online,
       }), 'offers.setProviderAvailability');
+    },
+    async updateProviderLocation({ latitude, longitude }) {
+      return unwrap(await client.rpc('update_current_provider_location', {
+        new_latitude: latitude, new_longitude: longitude,
+      }), 'offers.updateProviderLocation');
     },
     async updateProviderMissionProgress(missionId, status, { latitude, longitude }) {
       return unwrap(await client.rpc('update_current_provider_mission_progress', {

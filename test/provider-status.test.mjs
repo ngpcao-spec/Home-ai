@@ -77,3 +77,13 @@ it('retains server release on completion, pre-assignment cancellation and busy m
   assert.match(dispatch, /pst.online and pst.available and pst.current_mission_id is null/);
   assert.match(dispatch, /set available=false,current_mission_id=mission_row.id/);
 });
+
+it('separates GPS heartbeats from atomic server-controlled availability', async () => {
+  const migration = await readFile(new URL('../supabase/migrations/20260907001100_provider_location_heartbeat.sql', import.meta.url), 'utf8');
+  const locationFunction = migration.match(/create or replace function public\.update_current_provider_location[\s\S]*?end \$\$;/)?.[0] ?? '';
+  assert.match(locationFunction, /set last_latitude = new_latitude,[\s\S]*last_longitude = new_longitude,[\s\S]*last_location_at = statement_timestamp\(\)/);
+  assert.doesNotMatch(locationFunction, /\b(?:online|available|current_mission_id)\s*=/);
+  assert.match(migration, /available = new_online and current_mission_id is null/);
+  assert.match(migration, /security definer[\s\S]*set search_path = ''/);
+  assert.match(migration, /revoke all on function public\.update_current_provider_location[\s\S]*from public, anon/);
+});

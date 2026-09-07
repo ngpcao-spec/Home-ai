@@ -40,12 +40,7 @@ export function createProviderLocationHeartbeat({
     try {
       const position = await readPosition(geolocation);
       if (stopped || !eligible()) return null;
-      const current = getState();
-      const next = await repository.setAvailability({
-        online: true,
-        available: Boolean(current.status.available),
-        ...position,
-      });
+      const next = await repository.updateLocation(position);
       onState(next);
       return next;
     } catch (error) {

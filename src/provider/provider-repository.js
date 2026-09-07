@@ -7,6 +7,7 @@ export function createMockProviderAppRepository(seed = mockProviderDashboard) {
   return Object.freeze({
     source: 'mock', async load() { return clone(state); },
     async setAvailability(next) { state.status = { ...state.status, ...next }; return clone(state); },
+    async updateLocation(position) { state.status = { ...state.status, ...position, lastLocationAt: new Date().toISOString() }; return clone(state); },
     async accept(offerId) {
       const offer = state.offers.find(({ id }) => id === offerId);
       if (!offer) throw new Error('Offer unavailable');
@@ -63,6 +64,7 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
       return repositories.offers.subscribeProviderDispatch(initial.provider.id, onChange, onStatus);
     },
     async setAvailability(next) { await repositories.offers.setProviderAvailability(next); return loadDashboard(); },
+    async updateLocation(position) { await repositories.offers.updateProviderLocation(position); return loadDashboard(); },
     async accept(id) { await repositories.offers.acceptCurrentProviderOffer(id); return loadDashboard(); },
     async decline(id) { await repositories.offers.declineCurrentProviderOffer(id); return loadDashboard(); },
     async updateMissionProgress(id, status, location) { await repositories.offers.updateProviderMissionProgress(id, status, location); return loadDashboard(); },

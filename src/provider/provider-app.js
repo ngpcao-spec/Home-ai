@@ -71,7 +71,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   return {getState:()=>structuredClone(state),stop:()=>{heartbeat.stop();dispatch.stop();globalThis.clearInterval?.(countdownTimer);}};
   };
   if(repository.source==='supabase'){
-    const savePosition=async position=>{state=await repository.setAvailability({online:Boolean(state.status.online),available:Boolean(state.status.available),...position});};
+    const savePosition=async position=>{state=await repository.updateLocation(position);};
     const showLocationGate=initialState=>locationAccess.mount(root,{initialState,geolocation:locationAccess.geolocation,onGranted:async position=>{await savePosition(position);return openDashboard();}});
     const permissionState=await locationAccess.getState({geolocation:locationAccess.geolocation});
     if(permissionState!=='granted')return showLocationGate(permissionState);
