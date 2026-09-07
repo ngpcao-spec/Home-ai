@@ -55,6 +55,18 @@ export function createSupabaseOffersRepository(supabase) {
         new_warranty_days: Number(draft.warrantyDays), new_items: items, target_parent_quote_id: null,
       }), 'offers.createCurrentProviderQuote');
     },
+    async createCurrentProviderSupplement(missionId, parent, discovery) {
+      if (parent?.status !== 'accepted') throw new Error('Accepted parent required');
+      return unwrap(await client.rpc('create_current_provider_quote_version', {
+        target_mission_id: missionId, target_parent_quote_id: parent.id,
+        new_diagnosis: discovery.finding, new_warranty_days: parent.warrantyDays,
+        new_items: [
+          { item_type: 'service', description: `Công việc đã chấp nhận V${parent.version}`, amount: Number(parent.totalAmount) },
+          { item_type: 'part', description: discovery.finding, amount: discovery.additionalPartsAmount },
+          { item_type: 'labor', description: 'Công bổ sung', amount: discovery.additionalLaborAmount },
+        ],
+      }), 'offers.createCurrentProviderSupplement');
+    },
     async startIntervention(missionId, version) {
       return adaptMissionRow(unwrap(await client.rpc('start_current_provider_intervention', {
         target_mission_id: missionId, expected_version: version,

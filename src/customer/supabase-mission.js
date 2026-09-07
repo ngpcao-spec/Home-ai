@@ -41,16 +41,23 @@ export function createCustomerMissionStateFromServer({ mission, quotes }) {
   const statusForTimeline = mission.status === 'completed' ? 'completed_pending_payment' : mission.status;
   const timelineStatus = ['quote_pending', 'supplement_pending'].includes(statusForTimeline) ? 'in_progress' : statusForTimeline;
   const statusIndex = missionStatuses.findIndex(({ id }) => id === timelineStatus);
-  const quoteHistory = Object.freeze([...(quotes ?? [])]);
+  const quoteHistory = Object.freeze((quotes ?? []).map(quote => {
+    const parent = quotes.find(item => item.id === quote.parentQuoteId);
+    return parent ? { ...quote, supplementAmount: quote.totalAmount - parent.totalAmount,
+      additionalPartsAmount: quote.items.filter(item => item.type === 'part').reduce((sum,item)=>sum+item.amount,0),
+      additionalLaborAmount: quote.items.filter(item => item.type === 'labor').reduce((sum,item)=>sum+item.amount,0) } : quote;
+  }));
   const quote = quoteHistory.at(-1) ?? null;
   const interventionPhase = !quote ? 'idle'
     : quote.status === 'pending' ? 'quote_pending'
+      : quote.type === 'supplement' ? 'repairing'
       : quote.status === 'declined' ? 'quote_declined'
         : mission.status === 'quote_pending' ? 'quote_accepted'
           : quote.status === 'accepted' ? 'repairing' : 'idle';
   return {
     ...state,
     statusIndex,
+    source: 'supabase',
     missionStatus: mission.status,
     paymentStatus: mission.paymentStatus,
     interventionPhase,

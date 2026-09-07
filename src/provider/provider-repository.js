@@ -40,6 +40,16 @@ export function createMockProviderAppRepository(seed = mockProviderDashboard) {
     },
     async startIntervention(missionId) { if (state.assignment?.id !== missionId || state.assignment.quote?.status !== 'accepted') throw new Error('Accepted quote required'); state.assignment.status='in_progress'; return clone(state); },
     async finishIntervention(missionId) { if (state.assignment?.id !== missionId || state.assignment.status !== 'in_progress') throw new Error('Mission is not in progress'); state.assignment.status='completed_pending_payment'; return clone(state); },
+    async createSupplement(id, discovery) {
+      const parent = state.assignment?.quote;
+      if(state.assignment?.id !== id || state.assignment.status !== 'in_progress' || parent?.status !== 'accepted') throw new Error('Accepted intervention required');
+      state.assignment = { ...state.assignment, status: 'supplement_pending', quote: {
+        id: `quote-demo-v${parent.version + 1}`, parentQuoteId: parent.id,
+        version: parent.version + 1, status: 'supplement_pending', diagnosis: discovery.finding,
+        totalAmount: parent.totalAmount + discovery.additionalPartsAmount + discovery.additionalLaborAmount,
+      } };
+      return clone(state);
+    },
     async getHistory() { return clone(state.history ?? []); },
   });
 }
@@ -71,6 +81,12 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
     async createQuote(id, draft) { await repositories.offers.createCurrentProviderQuote(id, draft); return loadDashboard(); },
     async startIntervention(id) { const current=await loadDashboard(); await repositories.offers.startIntervention(id,current.assignment.version); return loadDashboard(); },
     async finishIntervention(id) { const current=await loadDashboard(); await repositories.offers.finishIntervention(id,current.assignment.version); return loadDashboard(); },
+    async createSupplement(id, discovery) {
+      const current = await loadDashboard();
+      if(current.assignment?.id !== id || current.assignment.status !== 'in_progress') throw new Error('Intervention required');
+      await repositories.offers.createCurrentProviderSupplement(id, current.assignment.quote, discovery);
+      return loadDashboard();
+    },
     async getHistory() { return repositories.offers.getMissionHistory(); },
   });
 }

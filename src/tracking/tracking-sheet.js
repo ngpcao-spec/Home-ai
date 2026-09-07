@@ -45,7 +45,13 @@ const quoteStatusLabel = {
 };
 
 export function createInterventionProgressMarkup(state) {
-  const [initial, supplement] = state.quoteHistory ?? [];
+  const historyQuotes = state.quoteHistory ?? [];
+  const supplement = state.source === 'supabase'
+    ? historyQuotes.filter(q => q.type === 'supplement').at(-1)
+    : historyQuotes[1];
+  const initial = supplement?.parentQuoteId
+    ? historyQuotes.find(q => q.id === supplement.parentQuoteId)
+    : historyQuotes.find(q => q.status === 'accepted');
   if (!initial || initial.status !== 'accepted') return '';
   const authorizedTotal = supplement?.status === 'accepted' ? supplement.totalAmount : initial.totalAmount;
   const supplementPanel = supplement
@@ -66,6 +72,7 @@ export function createInterventionProgressMarkup(state) {
         ? '<div class="quote-actions"><button type="button" data-supplement-quote-decision="accepted">Đồng ý chi phí phát sinh</button><button type="button" data-supplement-quote-decision="rejected">Từ chối</button></div>'
         : `<p class="quote-decision ${supplement.status === 'accepted' ? 'quote-decision--accepted' : 'quote-decision--declined'}" role="status">${supplement.status === 'accepted' ? 'Đã đồng ý chi phí phát sinh.' : 'Đã từ chối chi phí phát sinh.'}</p>`}
     </section>`
+    : state.source === 'supabase' ? '<p>Thợ sẽ gửi đề xuất nếu phát hiện chi phí phát sinh. Chỉ thực hiện sau khi bạn chấp nhận.</p>'
     : '<button class="discover-supplement" type="button" data-discover-supplement>Mô phỏng phát hiện chi phí phát sinh</button>';
   const history = state.quoteHistory.map((version) => `<li><strong>v${version.version}</strong><span>${formatPrice(version.totalAmount)}</span><em>${quoteStatusLabel[version.status] ?? version.status}</em></li>`).join('');
   const canComplete = !supplement || ['accepted', 'rejected'].includes(supplement.status);
@@ -79,7 +86,7 @@ export function createInterventionProgressMarkup(state) {
     </dl>
     ${supplementPanel}
     <div class="quote-history"><p class="quote-eyebrow">LỊCH SỬ BÁO GIÁ</p><ol>${history}</ol></div>
-    ${canComplete ? '<button class="complete-repair" type="button" data-complete-repair>Hoàn thành sửa chữa</button>' : ''}
+    ${canComplete && state.source !== 'supabase' ? '<button class="complete-repair" type="button" data-complete-repair>Hoàn thành sửa chữa</button>' : ''}
   </section>`;
 }
 
@@ -135,7 +142,7 @@ export function updateInterventionQuotePresentation(container, state) {
   container.querySelector('[data-tracking-metrics]').hidden = true;
   container.querySelector('[data-start-repair]').hidden = true;
   quote.hidden = false;
-  quote.innerHTML = createInterventionQuoteMarkup(state.quote, phase)
+  quote.innerHTML = createInterventionQuoteMarkup(phase === 'repairing' ? state.quoteHistory.filter(q=>q.status==='accepted').at(-1) ?? state.quote : state.quote, phase)
     + (phase === 'repairing' ? createInterventionProgressMarkup(state) : '');
   if (phase === 'repairing') {
     status.textContent = 'Đang sửa chữa';

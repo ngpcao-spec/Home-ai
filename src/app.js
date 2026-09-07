@@ -405,6 +405,7 @@ export function initialiseHomePage(
   let missionConnection;
   let missionSynchronizer;
   let remoteMissionState;
+  let supplementDecisionPending=false;
   let stopMissionPolling;
   let stopMissionRealtime;
   let trackingRoute;
