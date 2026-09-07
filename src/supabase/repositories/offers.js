@@ -59,7 +59,7 @@ export function createSupabaseOffersRepository(supabase) {
       if (parent?.status !== 'accepted') throw new Error('Accepted parent required');
       return unwrap(await client.rpc('create_current_provider_quote_version', {
         target_mission_id: missionId, target_parent_quote_id: parent.id,
-        new_diagnosis: discovery.finding, new_warranty_days: parent.warrantyDays,
+        new_diagnosis: discovery.finding, new_warranty_days: discovery.warrantyDays ?? parent.warrantyDays,
         new_items: [
           { item_type: 'service', description: `Công việc đã chấp nhận V${parent.version}`, amount: Number(parent.totalAmount) },
           { item_type: 'part', description: discovery.finding, amount: discovery.additionalPartsAmount },

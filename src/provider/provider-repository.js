@@ -84,6 +84,7 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
     async createSupplement(id, discovery) {
       const current = await loadDashboard();
       if(current.assignment?.id !== id || current.assignment.status !== 'in_progress') throw new Error('Intervention required');
+      if(current.assignment.quote?.id !== discovery.parentQuoteId) throw new Error('Accepted quote changed during editing');
       await repositories.offers.createCurrentProviderSupplement(id, current.assignment.quote, discovery);
       return loadDashboard();
     },
