@@ -1,4 +1,5 @@
 import { createMockDiagnostic } from './diagnostic/mock-diagnostic.js';
+import { getCustomerDispatchState, renderCustomerDispatchState } from './customer/dispatch-state.js';
 import { getMatchReasons, getRouteMatrixCandidates } from './technicians/matching.js';
 import { createProgressiveTechnicianRepository } from './technicians/repository.js';
 import { createProviderProfile } from './technicians/provider-profile.js';
@@ -535,7 +536,6 @@ export function initialiseHomePage(
     status.textContent = '';
     clientLocation = await getClientLocation(geolocation);
     root.querySelector('[data-location-label]').textContent = clientLocation.source === 'browser' ? 'Vị trí hiện tại' : 'Đang dùng vị trí mặc định · Nha Trang';
-    let offeredProviderIds;
     missionConnection ??= customerMissionConnector({ verifiedUserId: verifiedCustomerUserId });
     const connection = await missionConnection;
     if (connection.source === 'error') {
@@ -569,7 +569,9 @@ export function initialiseHomePage(
         const snapshot = await missionSynchronizer.createOrResume(draft, replaceMission);
         applyRemoteMissionState(snapshot);
         startRemoteMissionPolling(snapshot.mission.id);
-        offeredProviderIds = new Set((snapshot.offers ?? []).map((offer) => offer.provider_id ?? offer.providerId));
+        // Supabase dispatch owns selection and acceptance; never run the demo
+        // candidate animation or treat an offer as an assigned technician.
+        return;
       } catch (error) {
         console.error('[HOME AI][Supabase mission]', { operation: 'create-before-matching', errorType: error?.name ?? 'Error' });
         search.querySelector('[data-search-progress]').hidden = true;
@@ -582,7 +584,6 @@ export function initialiseHomePage(
     try {
       technicians = await listCustomerMatchingProviders({ connection, technicianRepository,
         location: clientLocation, serviceCategory: diagnosedCategory });
-      if (offeredProviderIds) technicians = technicians.filter(({ id }) => offeredProviderIds.has(id));
     } catch (error) {
       console.error('[HOME AI][Supabase matching]', { operation: 'candidates', errorType: error?.name ?? 'Error' });
       search.querySelector('[data-search-progress]').hidden = true;
@@ -770,7 +771,8 @@ export function initialiseHomePage(
     const confirmation = root.querySelector('[data-booking-confirmation]');
     const estimate = bookingPanel.querySelector('[data-booking-estimate]').textContent;
     const remoteSearching = remoteMission && ['requested', 'searching', 'offered'].includes(remoteMission.status);
-    confirmation.querySelector('[data-confirmation-title]').textContent = remoteSearching ? 'Yêu cầu đang tìm kỹ thuật viên' : 'Thợ đã nhận yêu cầu!';
+    confirmation.querySelector('[data-confirmation-title]').textContent = remoteMission
+      ? getCustomerDispatchState(remoteMissionState ?? { mission: remoteMission }).title : 'Thợ đã nhận yêu cầu!';
     confirmation.querySelector('[data-confirmation-technician]').textContent = remoteSearching || !selectedTechnician ? 'Đang chờ xác nhận' : selectedTechnician.name;
     confirmation.querySelector('[data-confirmation-arrival]').textContent = remoteSearching || !selectedTechnician?.estimatedArrivalMinutes ? 'Đang cập nhật' : `Khoảng ${selectedTechnician.estimatedArrivalMinutes} phút`;
     confirmation.querySelector('[data-confirmation-address]').textContent = remoteMission?.address ?? bookingForm.elements.address.value;
@@ -788,13 +790,22 @@ export function initialiseHomePage(
     confirmation.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   };
   const applyRemoteMissionState = (snapshot) => {
+    if (remoteMissionState?.mission.id === snapshot.mission.id
+        && remoteMissionState.mission.version > snapshot.mission.version) return;
+    const wasAssigned = remoteMissionState && getCustomerDispatchState(remoteMissionState).phase === 'accepted';
     remoteMissionState = snapshot;
     persistedMission = snapshot.mission;
     const assignedTechnician = createAssignedCustomerTechnician(snapshot.provider, snapshot.mission);
-    if (assignedTechnician) selectedTechnician = assignedTechnician;
+    const dispatchState = getCustomerDispatchState(snapshot);
+    selectedTechnician = dispatchState.phase === 'accepted' ? assignedTechnician : null;
     missionState = createCustomerMissionStateFromServer(snapshot);
     const confirmation = root.querySelector('[data-booking-confirmation]');
-    if (!confirmation.hidden) showBookingConfirmation(snapshot.mission);
+    const search = root.querySelector('[data-map-search]');
+    search.querySelector('[data-search-progress]').hidden = true;
+    search.querySelector('#map-search-title').textContent = dispatchState.title;
+    search.querySelector('[data-technician-sheet]').innerHTML = renderCustomerDispatchState(snapshot);
+    if ((!confirmation.hidden || (!search.hidden && !wasAssigned)) && selectedTechnician) showBookingConfirmation(snapshot.mission);
+    else if (!confirmation.hidden) showBookingConfirmation(snapshot.mission);
     if (!mission.hidden && selectedTechnician) {
       renderMission();
     }
@@ -928,6 +939,7 @@ export function initialiseHomePage(
   };
   root.querySelector('[data-track-technician]').addEventListener('click', () => {
     if (!selectedTechnician) return;
+    if (remoteMissionState && getCustomerDispatchState(remoteMissionState).phase !== 'accepted') return;
     if (!remoteMissionState) missionState = advanceMission(createMissionState());
     mission.querySelector('[data-mission-initials]').textContent = selectedTechnician.initials;
     mission.querySelector('[data-mission-technician]').textContent = selectedTechnician.name;

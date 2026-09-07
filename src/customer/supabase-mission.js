@@ -1,5 +1,6 @@
 import { readSupabaseConfig } from '../supabase/config.js';
 import { createMissionState, missionStatuses } from '../mission/tracker.js';
+import { getCustomerDispatchState } from './dispatch-state.js';
 
 const defaultRepositoryLoader = async (runtimeConfig) => {
   const { createOptionalSupabaseRepositories } = await import('../supabase/repositories/index.js');
@@ -19,7 +20,8 @@ export function createCustomerMissionDraft({ diagnosis, problemDescription, serv
 }
 
 export function createAssignedCustomerTechnician(provider, mission) {
-  if (!provider || !mission?.providerId || provider.id !== mission.providerId) return null;
+  if (!provider || !mission?.providerId || provider.id !== mission.providerId
+      || getCustomerDispatchState({ mission }).phase !== 'accepted') return null;
   const name = provider.name || 'Đối tác HOME AI';
   return Object.freeze({
     ...provider,
@@ -36,7 +38,7 @@ export function createAssignedCustomerTechnician(provider, mission) {
 
 export function createCustomerMissionStateFromServer({ mission, quotes }) {
   const state = createMissionState();
-  const statusForTimeline = ['requested', 'searching', 'offered'].includes(mission.status) ? 'accepted' : mission.status;
+  const statusForTimeline = mission.status === 'completed' ? 'completed_pending_payment' : mission.status;
   const timelineStatus = ['quote_pending', 'supplement_pending'].includes(statusForTimeline) ? 'in_progress' : statusForTimeline;
   const statusIndex = missionStatuses.findIndex(({ id }) => id === timelineStatus);
   const quoteHistory = Object.freeze([...(quotes ?? [])]);
@@ -48,7 +50,7 @@ export function createCustomerMissionStateFromServer({ mission, quotes }) {
           : quote.status === 'accepted' ? 'repairing' : 'idle';
   return {
     ...state,
-    statusIndex: Math.max(0, statusIndex),
+    statusIndex,
     missionStatus: mission.status,
     paymentStatus: mission.paymentStatus,
     interventionPhase,

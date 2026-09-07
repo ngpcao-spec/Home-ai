@@ -70,6 +70,9 @@ export function createSupabaseMissionsRepository(supabase) {
           event: '*', schema: 'public', table: 'missions', filter: `id=eq.${missionId}`,
         }, onChange)
         .on('postgres_changes', {
+          event: '*', schema: 'public', table: 'mission_offers', filter: `mission_id=eq.${missionId}`,
+        }, onChange)
+        .on('postgres_changes', {
           event: 'INSERT', schema: 'public', table: 'mission_events',
           filter: `mission_id=eq.${missionId}`,
         }, onChange)
