@@ -52,6 +52,10 @@ export function createAmazonLocationMapProvider({ apiKey, region = 'ap-southeast
       this.setProviders(view.technicians ?? [], { selectedId: view.selectedId });
       this.setRadius(view.radiusKm, view.searching);
       if (view.route?.length) this.setRoute(view.route);
+      else {
+        state.map.getSource('route')?.setData(featureCollection());
+        this.fitBounds([view.clientLocation ?? this.customer, ...(view.technicians ?? [])].filter(Boolean));
+      }
     },
     setClientLocation(location) {
       if (!location || !state.map) return;
@@ -74,7 +78,7 @@ export function createAmazonLocationMapProvider({ apiKey, region = 'ap-southeast
         if (!marker) {
           const element = documentObject.createElement('button');
           element.className = 'amazon-technician-marker'; element.type = 'button'; element.dataset.mapTechnician = technician.id; element.textContent = technician.initials;
-          marker = new globalThis.maplibregl.Marker({ element }).setLngLat(point(technician)).setPopup(new globalThis.maplibregl.Popup({ offset: 18 }).setText(technician.name)).addTo(state.map);
+          marker = new globalThis.maplibregl.Marker({ element, offset: [18, -18] }).setLngLat(point(technician)).setPopup(new globalThis.maplibregl.Popup({ offset: 18 }).setText(technician.name)).addTo(state.map);
           state.markers.set(technician.id, marker);
         }
         marker.setLngLat(point(technician));

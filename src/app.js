@@ -8,6 +8,7 @@ import { createMapProvider } from './map/map-provider.js';
 import { getClientLocation } from './location/client-location.js';
 import { createRouteService } from './routing/routing-provider.js';
 import { createMockProviderLocationSource } from './tracking/location-stream.js';
+import { prepareSupabaseTracking } from './tracking/supabase-tracking.js';
 import { createTrackingRouteSession } from './tracking/route-session.js';
 import { createInterventionQuote } from './mission/intervention-quote.js';
 import { createCompletionSummaryMarkup, createPaidExternalMarkup, createProviderReviewMarkup } from './mission/completion-summary.js';
@@ -407,6 +408,7 @@ export function initialiseHomePage(
   let stopMissionPolling;
   let stopMissionRealtime;
   let trackingRoute;
+  let remoteTrackingGeneration = 0;
   const trackingRoutes = createTrackingRouteSession(routingProvider);
   const getCurrentMissionRecord = () => createCompletedMissionRecord(missionState, {
     problem: currentDiagnosis?.summary ?? '',
@@ -899,13 +901,50 @@ export function initialiseHomePage(
       in_progress: createTrackingStageMarkup(selectedTechnician),
       completed_pending_payment: completedMarkup,
     };
-    stage.innerHTML = stageMarkup[status.id];
+    const trackingStageKey = `${remoteMissionState?.mission.id}:${status.id}`;
+    if (!remoteMissionState || stage.dataset.trackingStage !== trackingStageKey) {
+      stage.innerHTML = stageMarkup[status.id];
+      stage.dataset.trackingStage = trackingStageKey;
+    }
     if (status.id === 'in_progress' && missionState.quote) {
       mission.querySelector('[data-mission-status-badge]').textContent = updateInterventionQuotePresentation(stage, missionState);
     }
     mission.querySelector('[data-mission-next]').hidden = ['travelling', 'arrived', 'in_progress', 'completed_pending_payment'].includes(status.id);
+    if (remoteMissionState) {
+      if (['travelling', 'arrived'].includes(status.id)) void startTrackingMap();
+      else remoteTrackingGeneration++;
+    }
   };
   const startTrackingMap = async () => {
+    if (remoteMissionState) {
+      const snapshot = remoteMissionState;
+      const generation = ++remoteTrackingGeneration;
+      if (!['travelling', 'arrived'].includes(snapshot.mission.status)) return;
+      stopLocationStream?.();
+      stopLocationStream = undefined;
+      const stage = mission.querySelector('[data-mission-stage]');
+      try {
+        const tracking = await prepareSupabaseTracking(snapshot, trackingRoutes);
+        if (generation !== remoteTrackingGeneration || mission.hidden) return;
+        updateTrackingPresentation(stage, tracking.position);
+        stage.querySelector('[data-start-repair]').hidden = true;
+        mission.querySelector('[data-mission-arrival]').textContent = tracking.position.near ? '< 1 phút' : `${tracking.position.etaMinutes} phút`;
+        await mapProviderReady;
+        if (generation !== remoteTrackingGeneration || mission.hidden) return;
+        await mapProvider.render(stage.querySelector('[data-tracking-map]'), {
+          clientLocation: tracking.destination,
+          technicians: [{ ...selectedTechnician, ...tracking.origin }], selectedId: snapshot.mission.providerId,
+          searching: false, route: tracking.route?.points ?? [],
+        });
+        mapProvider.moveProvider(snapshot.mission.providerId, tracking.origin);
+      } catch {
+        if (generation !== remoteTrackingGeneration || mission.hidden) return;
+        stage.querySelector('[data-tracking-status]').textContent = 'Chưa thể cập nhật GPS hoặc tuyến đường';
+        stage.querySelector('[data-tracking-eta]').textContent = 'Chưa có dữ liệu';
+        stage.querySelector('[data-tracking-distance]').textContent = 'Chưa có dữ liệu';
+      }
+      return;
+    }
     if (missionStatuses[missionState.statusIndex].id !== 'travelling') return;
     const stage = mission.querySelector('[data-mission-stage]');
     let trackingPhase = 'route';
@@ -947,7 +986,7 @@ export function initialiseHomePage(
     mission.querySelector('[data-mission-problem]').textContent = currentDiagnosis.summary;
     mission.querySelector('[data-mission-address]').textContent = bookingForm.elements.address.value;
     mission.querySelector('[data-mission-price]').textContent = bookingPanel.querySelector('[data-booking-estimate]').textContent;
-    mission.querySelector('[data-mission-arrival]').textContent = `Khoảng ${selectedTechnician.estimatedArrivalMinutes} phút`;
+    mission.querySelector('[data-mission-arrival]').textContent = selectedTechnician.estimatedArrivalMinutes == null ? 'Đang cập nhật GPS' : `Khoảng ${selectedTechnician.estimatedArrivalMinutes} phút`;
     mission.hidden = false;
     root.querySelector('[data-booking-confirmation]').hidden = true;
     renderMission();

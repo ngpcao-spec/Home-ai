@@ -110,8 +110,8 @@ export function createTrackingStageMarkup(technician) {
 
 export function updateTrackingPresentation(container, position) {
   container.querySelector('[data-tracking-status]').textContent = position.status;
-  container.querySelector('[data-tracking-eta]').textContent = position.arrived ? '0 phút' : `${position.etaMinutes} phút`;
-  container.querySelector('[data-tracking-distance]').textContent = formatDistance(position.remainingDistanceKm);
+  container.querySelector('[data-tracking-eta]').textContent = position.near ? '< 1 phút' : position.arrived ? '0 phút' : `${position.etaMinutes} phút`;
+  container.querySelector('[data-tracking-distance]').textContent = position.near ? '< 0.1 km' : formatDistance(position.remainingDistanceKm);
   container.querySelector('[data-start-repair]').hidden = !position.arrived;
   const message = container.querySelector('[data-tracking-message]');
   message.textContent = position.arrived ? 'Thợ đã đến địa điểm của bạn.' : '';

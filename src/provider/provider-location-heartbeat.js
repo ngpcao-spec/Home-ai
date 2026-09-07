@@ -22,7 +22,7 @@ export function createProviderLocationHeartbeat({
   let stopped = false;
   const eligible = () => repository.source === 'supabase'
     && getState()?.status?.online
-    && getState()?.status?.available
+    && (getState()?.status?.available || Boolean(getState()?.assignment))
     && isPageActive();
 
   const clear = () => {
@@ -39,6 +39,7 @@ export function createProviderLocationHeartbeat({
     if (stopped || !eligible()) return null;
     try {
       const position = await readPosition(geolocation);
+      if (stopped || !eligible()) return null;
       const current = getState();
       const next = await repository.setAvailability({
         online: true,

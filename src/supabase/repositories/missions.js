@@ -18,6 +18,16 @@ export function createSupabaseMissionsRepository(supabase) {
       const result = await client.from('missions').select(missionColumns).eq('id', missionId).maybeSingle();
       return adaptMissionRow(unwrap(result, 'missions.getById'));
     },
+    async getAssignedProviderLocation(mission) {
+      if (!mission.providerId) return null;
+      const result = await client.from('provider_status')
+        .select('provider_id,current_mission_id,last_latitude,last_longitude,last_location_at')
+        .eq('provider_id', mission.providerId).eq('current_mission_id', mission.id).maybeSingle();
+      const row = unwrap(result, 'missions.getAssignedProviderLocation');
+      if (!row || row.provider_id !== mission.providerId || row.current_mission_id !== mission.id) return null;
+      return { providerId: row.provider_id, missionId: row.current_mission_id,
+        latitude: row.last_latitude, longitude: row.last_longitude, recordedAt: row.last_location_at };
+    },
     async listForClient(clientId) {
       const result = await client.from('missions')
         .select(missionColumns)
@@ -66,6 +76,9 @@ export function createSupabaseMissionsRepository(supabase) {
     },
     subscribeMission(missionId, onChange, onStatus = () => {}) {
       const channel = client.channel(`customer-mission:${missionId}`)
+        .on('postgres_changes', {
+          event: 'UPDATE', schema: 'public', table: 'provider_status', filter: `current_mission_id=eq.${missionId}`,
+        }, onChange)
         .on('postgres_changes', {
           event: '*', schema: 'public', table: 'missions', filter: `id=eq.${missionId}`,
         }, onChange)

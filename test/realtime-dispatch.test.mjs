@@ -61,8 +61,8 @@ describe('dispatch Provider Realtime', () => {
     offers.subscribeProviderDispatch('p1',()=>{});
     missions.subscribeMission('m1',()=>{});
     assert.match(channels[0].registrations[0][1].filter,/provider_id=eq.p1/);
-    assert.match(channels[1].registrations[0][1].filter,/id=eq.m1/);
-    assert.match(channels[1].registrations[1][1].filter,/mission_id=eq.m1/);
+    assert.ok(channels[1].registrations.some(([, spec]) => spec.table === 'missions' && spec.filter === 'id=eq.m1'));
+    assert.ok(channels[1].registrations.some(([, spec]) => spec.table === 'provider_status' && spec.filter === 'current_mission_id=eq.m1'));
   });
 
   it('recharge immédiatement le client lors des changements mission et événements', async () => {
