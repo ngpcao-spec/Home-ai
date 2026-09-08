@@ -167,6 +167,30 @@ export function showRestoredCustomerMission(root, status) {
   return getRestoredMissionDestination(status);
 }
 
+export function resetCustomerRequestView(root) {
+  root.querySelector('[data-new-request-flow]').hidden = false;
+  root.querySelectorAll('[data-new-request-only]').forEach((section) => { section.hidden = false; });
+  for (const selector of [
+    '[data-diagnostic-result]', '[data-map-search]', '[data-booking-panel]',
+    '[data-booking-confirmation]', '[data-mission-tracker]', '[data-provider-profile]',
+  ]) {
+    const node = root.querySelector(selector);
+    if (node) node.hidden = true;
+  }
+  root.querySelector('[data-request-form]')?.reset();
+  root.querySelector('[data-booking-form]')?.reset();
+  root.querySelectorAll('[data-prompt]').forEach((button) => {
+    button.classList.remove('is-selected');
+    button.setAttribute('aria-pressed', 'false');
+  });
+  const technicianSheet = root.querySelector('[data-technician-sheet]');
+  if (technicianSheet) technicianSheet.innerHTML = '';
+  for (const selector of ['[data-form-status]', '[data-booking-status]', '[data-confirmation-status]']) {
+    const node = root.querySelector(selector);
+    if (node) node.textContent = '';
+  }
+}
+
 export function getProductionSupabaseConfigError(
   runtimeConfig = globalThis.__HOME_AI_CONFIG__,
   hostname = globalThis.location?.hostname,
@@ -822,12 +846,24 @@ export function initialiseHomePage(
         if (result.cancelled) {
           stopMissionPolling?.();
           stopMissionRealtime?.();
+          stopLocationStream?.();
+          stopMissionPolling = undefined;
+          stopMissionRealtime = undefined;
+          stopLocationStream = undefined;
           remoteMissionState = null;
           persistedMission = null;
           searchGeneration += 1;
-          root.querySelector('[data-map-search]').hidden = true;
+          selectedCategory = undefined;
+          diagnosedCategory = undefined;
+          selectedTechnician = undefined;
+          currentDiagnosis = undefined;
+          matchedTechnicians = [];
+          clientLocation = undefined;
+          trackingRoute = undefined;
+          missionState = createMissionState();
+          resetCustomerRequestView(root);
           openHomeView();
-          root.querySelector('[data-diagnosis-input]')?.focus();
+          root.querySelector('#service-request')?.focus();
           return;
         }
         applyRemoteMissionState(result.snapshot);

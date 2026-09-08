@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { createBookingTechnicianMarkup, createHomeAiMarkup, createMissionMarkup, createProductionConfigErrorMarkup, getEstimatedPriceRange, getProductionSupabaseConfigError, serviceCategories, showRestoredCustomerMission } from '../src/app.js';
+import { createBookingTechnicianMarkup, createHomeAiMarkup, createMissionMarkup, createProductionConfigErrorMarkup, getEstimatedPriceRange, getProductionSupabaseConfigError, resetCustomerRequestView, serviceCategories, showRestoredCustomerMission } from '../src/app.js';
 import { createCompletionSummaryMarkup } from '../src/mission/completion-summary.js';
 import { mockTechnicians } from '../src/technicians/mock-technicians.js';
 
@@ -98,6 +98,43 @@ describe('HOME AI C04 marketplace home page', () => {
     assert.match(createCompletionSummaryMarkup({ completedWork: [], finalAuthorizedAmount: 300000, warrantyDays: 30 }, [
       { version: 2, status: 'accepted', totalAmount: 300000 },
     ]), /Thanh toán trực tiếp cho thợ/);
+  });
+
+  it('restaure un C04 complet après recherche puis annulation', () => {
+    const nodes = new Map();
+    const makeNode = (extra = {}) => ({ hidden: false, textContent: 'ancien état', innerHTML: 'ancienne offre', ...extra });
+    const newRequestFlow = makeNode({ hidden: true });
+    const newRequestSections = [makeNode({ hidden: true }), makeNode({ hidden: true })];
+    const resetForms = [];
+    for (const selector of [
+      '[data-diagnostic-result]', '[data-map-search]', '[data-booking-panel]', '[data-booking-confirmation]',
+      '[data-mission-tracker]', '[data-provider-profile]', '[data-technician-sheet]', '[data-form-status]',
+      '[data-booking-status]', '[data-confirmation-status]',
+    ]) nodes.set(selector, makeNode());
+    nodes.set('[data-new-request-flow]', newRequestFlow);
+    nodes.set('[data-request-form]', makeNode({ reset() { resetForms.push('request'); } }));
+    nodes.set('[data-booking-form]', makeNode({ reset() { resetForms.push('booking'); } }));
+    const prompt = { classList: { remove(value) { assert.equal(value, 'is-selected'); } }, setAttribute(name, value) { assert.deepEqual([name, value], ['aria-pressed', 'false']); } };
+    const root = {
+      querySelector: selector => nodes.get(selector) ?? null,
+      querySelectorAll(selector) {
+        if (selector === '[data-new-request-only]') return newRequestSections;
+        if (selector === '[data-prompt]') return [prompt];
+        throw new Error(`Unexpected selector ${selector}`);
+      },
+    };
+
+    resetCustomerRequestView(root);
+
+    assert.equal(newRequestFlow.hidden, false);
+    assert.equal(newRequestSections.every(section => !section.hidden), true);
+    assert.equal(nodes.get('[data-map-search]').hidden, true);
+    assert.equal(nodes.get('[data-mission-tracker]').hidden, true);
+    assert.equal(nodes.get('[data-technician-sheet]').innerHTML, '');
+    assert.deepEqual(resetForms, ['request', 'booking']);
+    for (const selector of ['[data-form-status]', '[data-booking-status]', '[data-confirmation-status]']) {
+      assert.equal(nodes.get(selector).textContent, '');
+    }
   });
 
   it('bloque explicitement le fallback mock si Supabase manque sur GitHub Pages', () => {
