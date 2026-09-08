@@ -36,6 +36,7 @@ import {
   createCustomerMissionDraft,
   createCustomerMissionStateFromServer,
   createCustomerMissionSynchronizer,
+  decidePendingCustomerSupplement,
   listCustomerMatchingProviders,
 } from './customer/supabase-mission.js';
 import { createCustomerProfileMarkup } from './customer/profile-view.js';
@@ -909,6 +910,7 @@ export function initialiseHomePage(
     }
     if (status.id === 'in_progress' && missionState.quote) {
       mission.querySelector('[data-mission-status-badge]').textContent = updateInterventionQuotePresentation(stage, missionState);
+      stage.querySelectorAll('[data-supplement-quote-decision]').forEach(button => { button.disabled = supplementDecisionPending; });
     }
     mission.querySelector('[data-mission-next]').hidden = ['travelling', 'arrived', 'in_progress', 'completed_pending_payment'].includes(status.id);
     if (remoteMissionState) {
@@ -1031,6 +1033,24 @@ export function initialiseHomePage(
       } else {
         missionState = decideRepairQuote(missionState, quoteDecision);
         mission.querySelector('[data-mission-status-badge]').textContent = updateInterventionQuotePresentation(mission.querySelector('[data-mission-stage]'), missionState);
+      }
+      return;
+    }
+    const remoteSupplementDecision = event.target.closest('[data-supplement-quote-decision]')?.dataset.supplementQuoteDecision;
+    if (remoteMissionState && remoteSupplementDecision) {
+      if (supplementDecisionPending) return;
+      supplementDecisionPending = true;
+      renderMission();
+      try {
+        applyRemoteMissionState(await decidePendingCustomerSupplement(
+          remoteMissionState, remoteSupplementDecision, missionSynchronizer,
+        ));
+      } catch (error) {
+        console.error('[HOME AI][Supabase supplement]', { operation: 'decide', errorType: error?.name ?? 'Error' });
+        mission.querySelector('[data-mission-status-badge]').textContent = 'Không thể gửi quyết định chi phí phát sinh';
+      } finally {
+        supplementDecisionPending = false;
+        renderMission();
       }
       return;
     }

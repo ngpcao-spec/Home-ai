@@ -66,6 +66,17 @@ export function createCustomerMissionStateFromServer({ mission, quotes }) {
   };
 }
 
+export async function decidePendingCustomerSupplement(snapshot, decision, missionSynchronizer) {
+  if (!snapshot?.mission?.id || !['accepted', 'rejected'].includes(decision)) {
+    throw new TypeError('Invalid customer supplement decision');
+  }
+  const pending = snapshot.quotes?.find(quote => quote.type === 'supplement'
+    && quote.status === 'supplement_pending'
+    && quote.missionId === snapshot.mission.id);
+  if (!pending) throw new Error('Pending supplement unavailable');
+  return missionSynchronizer.decideQuote(pending.id, decision === 'rejected' ? 'declined' : 'accepted');
+}
+
 export async function connectSupabaseCustomerMissions({
   runtimeConfig = globalThis.__HOME_AI_CONFIG__, repositoryLoader = defaultRepositoryLoader,
   verifiedUserId = null,
