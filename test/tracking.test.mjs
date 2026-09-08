@@ -185,8 +185,11 @@ describe('suivi C13', () => {
       { version: 1, status: 'accepted', totalAmount: 290000 },
       { version: 2, status: 'accepted', totalAmount: 390000, supplementAmount: 100000 },
     ];
-    const markup = createCompletionSummaryMarkup(completion, history);
-    ['Sửa chữa hoàn tất', 'Kỹ thuật viên đã hoàn thành công việc.', 'Thay dây điện nguồn', 'Giá ban đầu đã chấp nhận', '290.000đ', 'Chi phí phát sinh đã chấp nhận', '+100.000đ', 'TỔNG THANH TOÁN', '390.000đ', 'Bảo hành', '30 ngày', 'Tiếp tục thanh toán', 'v1', 'v2'].forEach((text) => assert.match(markup, new RegExp(text.replace('+', '\\+'))));
+    const markup = createCompletionSummaryMarkup(completion, history, {
+      providerName: 'Provider Test Nha Trang', problem: 'Máy lạnh không mát',
+    });
+    ['Sửa chữa hoàn tất', 'Kỹ thuật viên đã hoàn thành công việc.', 'Provider Test Nha Trang', 'Máy lạnh không mát', 'Hoàn thành', 'Thay dây điện nguồn', 'Báo giá cuối cùng đã chấp nhận', '390.000đ', 'TỔNG THANH TOÁN', 'Bảo hành', '30 ngày', 'Thanh toán trực tiếp cho thợ', 'Tôi đã thanh toán', 'v1', 'v2'].forEach((text) => assert.match(markup, new RegExp(text)));
+    assert.doesNotMatch(markup, /stripe|paypal|thẻ|checkout/i);
   });
 
   it('utilise le total serveur du dernier devis accepté pour une mission terminée', () => {

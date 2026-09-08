@@ -40,6 +40,12 @@ export function createSupabaseMissionsRepository(supabase) {
         .in('status', activeStatuses).order('created_at', { ascending: false }).limit(1).maybeSingle();
       return adaptMissionRow(unwrap(result, 'missions.getActiveCurrent'));
     },
+    async getLatestCompletedAwaitingReview() {
+      const history = await this.getCurrentUserHistory();
+      const latest = history.find((mission) => mission.status === 'completed'
+        && mission.paymentStatus === 'paid_external' && !mission.review);
+      return latest ? this.getById(latest.id) : null;
+    },
     async createCurrent(draft) {
       const result = await client.rpc('create_current_customer_mission', {
         new_service_category: draft.serviceCategory,
@@ -98,6 +104,16 @@ export function createSupabaseMissionsRepository(supabase) {
         .eq('mission_id', missionId)
         .order('version', { ascending: true });
       return Object.freeze((unwrap(result, 'missions.getQuoteHistory') ?? []).map(adaptQuoteRow));
+    },
+    async getReview(missionId) {
+      const result = await client.from('reviews')
+        .select('id, mission_id, rating, comment, created_at')
+        .eq('mission_id', missionId).maybeSingle();
+      const review = unwrap(result, 'missions.getReview');
+      return review ? Object.freeze({
+        id: review.id, missionId: review.mission_id, rating: review.rating,
+        comment: review.comment ?? '', createdAt: review.created_at,
+      }) : null;
     },
     async decideCurrentQuote(quoteId, decision) {
       const result = await client.rpc('decide_current_customer_quote', {

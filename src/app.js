@@ -406,9 +406,12 @@ export function initialiseHomePage(
   let missionBookedAt;
   let persistedMission;
   let missionRepository;
+  let providerRepository;
   let missionConnection;
   let missionSynchronizer;
   let remoteMissionState;
+  let supabaseMissionMode = false;
+  let remoteMissionHistory = [];
   let supplementDecisionPending=false;
   let stopMissionPolling;
   let stopMissionRealtime;
@@ -416,13 +419,33 @@ export function initialiseHomePage(
   let remoteTrackingGeneration = 0;
   const trackingRoutes = createTrackingRouteSession(routingProvider);
   const getCurrentMissionRecord = () => createCompletedMissionRecord(missionState, {
-    problem: currentDiagnosis?.summary ?? '',
-    service: currentDiagnosis?.service ?? '',
-    address: bookingForm?.elements.address.value ?? '',
+    problem: persistedMission?.problemDescription ?? currentDiagnosis?.summary ?? '',
+    service: persistedMission?.serviceCategory ?? currentDiagnosis?.service ?? '',
+    address: persistedMission?.address ?? bookingForm?.elements.address.value ?? '',
     bookedAt: missionBookedAt,
     technician: selectedTechnician ?? {},
   });
-  const getMissionHistory = () => getClientMissionHistory(getCurrentMissionRecord());
+  const getMissionHistory = () => getClientMissionHistory(
+    getCurrentMissionRecord(),
+    supabaseMissionMode ? remoteMissionHistory.filter(({ missionId }) => missionId !== getCurrentMissionRecord()?.missionId) : undefined,
+  );
+  const loadRemoteMissionHistory = async () => {
+    if (!supabaseMissionMode || !missionRepository || !providerRepository || !missionSynchronizer) return;
+    const summaries = await missionRepository.getCurrentUserHistory();
+    const snapshots = await Promise.all(summaries
+      .filter(({ status }) => status === 'completed')
+      .map(({ id }) => missionSynchronizer.load(id)));
+    remoteMissionHistory = snapshots.map((snapshot) => {
+      const state = createCustomerMissionStateFromServer(snapshot);
+      return createCompletedMissionRecord(state, {
+        problem: snapshot.mission.problemDescription,
+        service: snapshot.mission.serviceCategory,
+        address: snapshot.mission.address,
+        bookedAt: snapshot.mission.requestedAt,
+        technician: createAssignedCustomerTechnician(snapshot.provider, snapshot.mission) ?? snapshot.provider,
+      });
+    }).filter(Boolean);
+  };
   const renderCustomerProfile = () => {
     root.querySelector('[data-app-view="profile"]').innerHTML = createCustomerProfileMarkup(customerProfile, {
       addressFormOpen,
@@ -461,7 +484,15 @@ export function initialiseHomePage(
     return profileLoadAttempt;
   };
   const showAppView = (view, missionId) => {
-    if (view === 'history') root.querySelector('[data-app-view="history"]').innerHTML = createMissionHistoryMarkup(getMissionHistory());
+    if (view === 'history') {
+      const historyView = root.querySelector('[data-app-view="history"]');
+      historyView.innerHTML = createMissionHistoryMarkup(getMissionHistory());
+      if (supabaseMissionMode) void loadRemoteMissionHistory().then(() => {
+        if (!historyView.hidden) historyView.innerHTML = createMissionHistoryMarkup(getMissionHistory());
+      }).catch(() => {
+        if (!historyView.hidden) historyView.insertAdjacentHTML('beforeend', '<p role="status">Không thể tải lịch sử Supabase.</p>');
+      });
+    }
     if (view === 'profile') {
       renderCustomerProfile();
       void loadRealCustomerProfile();
@@ -799,6 +830,9 @@ export function initialiseHomePage(
   const applyRemoteMissionState = (snapshot) => {
     if (remoteMissionState?.mission.id === snapshot.mission.id
         && remoteMissionState.mission.version > snapshot.mission.version) return;
+    const reviewDraft = remoteMissionState?.mission.id === snapshot.mission.id && !missionState.reviewSent
+      ? { rating: missionState.rating, reviewComment: mission.querySelector('[data-review-comment]')?.value ?? missionState.reviewComment }
+      : null;
     const wasAssigned = remoteMissionState && getCustomerDispatchState(remoteMissionState).phase === 'accepted';
     remoteMissionState = snapshot;
     persistedMission = snapshot.mission;
@@ -806,6 +840,9 @@ export function initialiseHomePage(
     const dispatchState = getCustomerDispatchState(snapshot);
     selectedTechnician = dispatchState.phase === 'accepted' ? assignedTechnician : null;
     missionState = createCustomerMissionStateFromServer(snapshot);
+    if (reviewDraft && missionState.reviewStage === 'rating' && !missionState.reviewSent) {
+      missionState = { ...missionState, ...reviewDraft };
+    }
     const confirmation = root.querySelector('[data-booking-confirmation]');
     const search = root.querySelector('[data-map-search]');
     search.querySelector('[data-search-progress]').hidden = true;
@@ -846,10 +883,12 @@ export function initialiseHomePage(
     }
     if (connection.source === 'supabase') {
       try {
+        supabaseMissionMode = true;
         missionRepository = connection.repository;
+        providerRepository = connection.providerRepository;
         missionSynchronizer = createCustomerMissionSynchronizer({
           missionRepository,
-          providerRepository: connection.providerRepository,
+          providerRepository,
           scheduleTask,
         });
         const scheduled = bookingForm.elements.schedule.value === 'scheduled';
@@ -905,7 +944,10 @@ export function initialiseHomePage(
       ? createProviderReviewMarkup(selectedTechnician, missionState)
       : missionState.paymentStatus === 'paid_external'
         ? createPaidExternalMarkup(missionState.completion)
-        : createCompletionSummaryMarkup(missionState.completion, missionState.quoteHistory);
+        : createCompletionSummaryMarkup(missionState.completion, missionState.quoteHistory, {
+          providerName: selectedTechnician?.name,
+          problem: persistedMission?.problemDescription ?? currentDiagnosis?.summary,
+        });
     const stageMarkup = {
       accepted: '<h3>Thợ đã nhận yêu cầu</h3><p>Thợ đang chuẩn bị dụng cụ cho nhiệm vụ.</p>',
       travelling: createTrackingStageMarkup(selectedTechnician),
@@ -913,7 +955,7 @@ export function initialiseHomePage(
       in_progress: createTrackingStageMarkup(selectedTechnician),
       completed_pending_payment: completedMarkup,
     };
-    const trackingStageKey = `${remoteMissionState?.mission.id}:${status.id}`;
+    const trackingStageKey = `${remoteMissionState?.mission.id}:${status.id}:${missionState.paymentStatus}:${missionState.reviewStage}:${missionState.reviewSent}:${missionState.rating}`;
     if (!remoteMissionState || stage.dataset.trackingStage !== trackingStageKey) {
       stage.innerHTML = stageMarkup[status.id];
       stage.dataset.trackingStage = trackingStageKey;
@@ -993,9 +1035,14 @@ export function initialiseHomePage(
     try {
       missionConnection ??= customerMissionConnector({ verifiedUserId: verifiedCustomerUserId });
       const connection = await missionConnection;
+      if (connection.source === 'supabase') {
+        supabaseMissionMode = true;
+        missionRepository = connection.repository;
+        providerRepository = connection.providerRepository;
+        missionSynchronizer ??= createCustomerMissionSynchronizer({ missionRepository, providerRepository, scheduleTask });
+      }
       const restored = await restoreActiveCustomerMission(connection, { scheduleTask });
       if (!restored) return false;
-      missionRepository = connection.repository;
       missionSynchronizer = restored.synchronizer;
       currentDiagnosis = {
         summary: restored.snapshot.mission.diagnosticSummary ?? restored.snapshot.mission.problemDescription,
@@ -1098,6 +1145,38 @@ export function initialiseHomePage(
         supplementDecisionPending = false;
         renderMission();
       }
+      return;
+    }
+    if (remoteMissionState && event.target.closest('[data-continue-payment]')) {
+      try {
+        applyRemoteMissionState(await missionSynchronizer.completeExternalPayment(remoteMissionState.mission));
+      } catch (error) {
+        console.error('[HOME AI][Supabase payment]', { operation: 'confirm-external', errorType: error?.name ?? 'Error' });
+        mission.querySelector('[data-payment-preparation-status]').textContent = 'Không thể xác nhận thanh toán. Vui lòng thử lại.';
+      }
+      return;
+    }
+    const remoteRating = Number(event.target.closest('[data-rating]')?.dataset.rating);
+    if (remoteMissionState && remoteRating && !missionState.reviewSent) {
+      missionState = { ...missionState, rating: remoteRating, reviewComment: mission.querySelector('[data-review-comment]')?.value ?? missionState.reviewComment };
+      renderMission();
+      return;
+    }
+    if (remoteMissionState && event.target.closest('[data-send-review]')) {
+      try {
+        applyRemoteMissionState(await missionSynchronizer.createReview(
+          remoteMissionState.mission.id,
+          missionState.rating,
+          mission.querySelector('[data-review-comment]')?.value,
+        ));
+      } catch (error) {
+        console.error('[HOME AI][Supabase review]', { operation: 'create', errorType: error?.name ?? 'Error' });
+        mission.querySelector('[data-mission-status-badge]').textContent = 'Không thể gửi đánh giá';
+      }
+      return;
+    }
+    if (remoteMissionState && event.target.closest('[data-view-mission-detail]')) {
+      showAppView('mission-detail', remoteMissionState.mission.id);
       return;
     }
     if (remoteMissionState) return;

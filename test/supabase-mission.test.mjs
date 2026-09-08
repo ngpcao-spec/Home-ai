@@ -284,7 +284,7 @@ describe('missions client Supabase', () => {
   }
 
   it('ne crée jamais une nouvelle mission lorsqu’une mission active existe', async () => {
-    for (const status of ['requested', 'searching', 'offered', 'accepted', 'travelling', 'arrived', 'quote_pending', 'in_progress', 'supplement_pending', 'completed_pending_payment']) {
+    for (const status of ['requested', 'searching', 'offered', 'accepted', 'travelling', 'arrived', 'quote_pending', 'in_progress', 'supplement_pending', 'completed_pending_payment', 'completed']) {
       const calls = [];
       const active = { id: `mission-${status}`, providerId: status === 'searching' ? null : 'p1', status };
       const synchronizer = createCustomerMissionSynchronizer({ missionRepository: {
@@ -296,5 +296,40 @@ describe('missions client Supabase', () => {
       assert.equal(snapshot.mission.id, active.id);
       assert.deepEqual(calls, ['requested', 'searching', 'offered'].includes(status) ? [['offers', active.id]] : []);
     }
+  });
+
+  it('restaure une mission terminée à évaluer avec son montant et ses devis serveur', async () => {
+    const state = createCustomerMissionStateFromServer({
+      mission: { id: 'm1', status: 'completed', paymentStatus: 'paid_external', completedAt: '2026-09-08T10:00:00Z', currency: 'VND' },
+      quotes: [
+        { id: 'q1', version: 1, status: 'accepted', totalAmount: 200000, recommendedTasks: ['Diagnostic'], warrantyDays: 30 },
+        { id: 'q2', version: 2, status: 'accepted', totalAmount: 300000, recommendedTasks: ['Pièce supplémentaire'], warrantyDays: 30 },
+      ],
+    });
+    assert.equal(state.completion.finalAuthorizedAmount, 300000);
+    assert.equal(state.completion.acceptedQuoteId, 'q2');
+    assert.equal(state.reviewStage, 'rating');
+    assert.equal(state.reviewSent, false);
+  });
+
+  it('confirme le paiement externe puis crée une seule review via les RPC du repository', async () => {
+    let mission = { id: 'm1', providerId: 'p1', status: 'completed_pending_payment', version: 7 };
+    let review = null;
+    const calls = [];
+    const sync = createCustomerMissionSynchronizer({
+      missionRepository: {
+        getById: async () => mission,
+        getQuoteHistory: async () => [{ id: 'q2', missionId: 'm1', version: 2, status: 'accepted', totalAmount: 300000 }],
+        getOffers: async () => [], getReview: async () => review,
+        completeExternalPayment: async current => { calls.push(['payment', current.id, current.version]); mission = { ...mission, status: 'completed', paymentStatus: 'paid_external', version: 8 }; return mission; },
+        createReview: async (id, rating, comment) => { calls.push(['review', id, rating, comment]); review = { rating, comment }; return review; },
+      },
+      providerRepository: { getById: async () => ({ id: 'p1', name: 'Provider Test Nha Trang' }) },
+    });
+    const paid = await sync.completeExternalPayment(mission);
+    assert.equal(paid.mission.status, 'completed');
+    const reviewed = await sync.createReview('m1', 5, 'Très bien');
+    assert.equal(reviewed.review.rating, 5);
+    assert.deepEqual(calls, [['payment', 'm1', 7], ['review', 'm1', 5, 'Très bien']]);
   });
 });
