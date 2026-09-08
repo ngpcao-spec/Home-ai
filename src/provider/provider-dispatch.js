@@ -19,6 +19,25 @@ export function renderIncomingOffer(offer, now = Date.now()) {
   </section>`;
 }
 
+export function createIncomingOfferLayer(root) {
+  const doc = root.ownerDocument;
+  if (!doc?.createElement || !doc.body) return null;
+  const host = doc.createElement('div');
+  host.dataset.providerOfferLayer = '';
+  doc.body.append(host);
+  let currentId = null;
+  return {
+    host,
+    sync(offer) {
+      const id = offer?.id ?? null;
+      if (id === currentId && (!id || host.firstElementChild)) return;
+      currentId = id;
+      host.innerHTML = renderIncomingOffer(offer);
+    },
+    stop() { host.remove(); },
+  };
+}
+
 export function updateDispatchCountdown(root, now = Date.now()) {
   const element=root?.querySelector?.('[data-dispatch-countdown]');
   if (!element) return null;

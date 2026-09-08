@@ -4,7 +4,7 @@ import { prepareProviderNavigation, renderProviderNavigation } from './provider-
 import { createProviderGoogleAuth } from './provider-auth.js';
 import { createProviderLocationHeartbeat } from './provider-location-heartbeat.js';
 import { classifyGeolocationError, getLocationPermissionState, mountLocationPermissionGate, requestCurrentPosition } from '../location/location-permission.js';
-import { createProviderDispatchController, createProviderOfferAlert, renderIncomingOffer, updateDispatchCountdown } from './provider-dispatch.js';
+import { createIncomingOfferLayer, createProviderDispatchController, createProviderOfferAlert, renderIncomingOffer, updateDispatchCountdown } from './provider-dispatch.js';
 import { prepareProviderHistory, renderProviderIncome, renderProviderMissionHistory } from './provider-history.js';
 
 function ensureDispatchStyles(documentRef = globalThis.document) {
@@ -66,14 +66,24 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   let priorityOfferId=repository.source==='supabase' ? state.offers?.[0]?.id ?? null : null;
   const page=root.ownerDocument??globalThis.document;
   const offerAlert=createProviderOfferAlert();
+  const offerLayer=createIncomingOfferLayer(root);
+  const syncOfferLayer=()=>{
+    const offer=repository.source==='supabase'&&!page?.hidden&&!busy
+      ? state.offers?.find(o=>(!o.status||o.status==='pending')&&new Date(o.expiresAt).getTime()>Date.now()) : null;
+    priorityOfferId=offer?.id??null;
+    offerLayer?.sync(offer);
+    if(offer)offerAlert.start(offer);else offerAlert.stop();
+    return offer;
+  };
   const renderDashboard=async()=>{
+    syncOfferLayer();
     if(currentView==='missions'||currentView==='income'){
       const content=currentView==='missions'?renderProviderMissionHistory(history,{loading:historyLoading,error:historyError,selectedMissionId}):renderProviderIncome(history,{loading:historyLoading,error:historyError});
       const priorityOffer=state.offers?.find(({id})=>id===priorityOfferId);
-      root.innerHTML=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0]??'P')}</button></header>${content}${renderProviderNav(currentView)}${renderIncomingOffer(priorityOffer)}`;
+      root.innerHTML=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0]??'P')}</button></header>${content}${renderProviderNav(currentView)}${offerLayer?'':renderIncomingOffer(priorityOffer)}`;
       return;
     }
-    const priorityOffer=state.offers?.find(({id})=>id===priorityOfferId);root.innerHTML=renderProviderDashboard(state,{source:repository.source,busy,message,navigation,diagnosing,supplementParent})+renderIncomingOffer(priorityOffer);const map=root.querySelector('[data-provider-map]');if(navigation&&map)await renderProviderNavigation(map,navigation,state.provider).catch(()=>{});
+    const priorityOffer=state.offers?.find(({id})=>id===priorityOfferId);root.innerHTML=renderProviderDashboard(state,{source:repository.source,busy,message,navigation,diagnosing,supplementParent})+(offerLayer?'':renderIncomingOffer(priorityOffer));const map=root.querySelector('[data-provider-map]');if(navigation&&map)await renderProviderNavigation(map,navigation,state.provider).catch(()=>{});
   };
   const loadHistory=async()=>{historyLoading=true;historyError='';await renderDashboard();try{history=prepareProviderHistory(await repository.getHistory(),state.provider.id);}catch(error){history=[];historyError=error?.message??'Lỗi không xác định';}finally{historyLoading=false;await renderDashboard();}};
   const canSendQuote=()=>state.assignment?.id===editingMissionId
@@ -83,6 +93,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
     && state.assignment?.status==='in_progress' && state.assignment.quote?.status==='accepted'
     && state.assignment.quote.id===supplementParent?.id;
   const draw=async()=>{
+    syncOfferLayer();
     if(supplementParent && root.querySelector('[data-supplement-form]')){
       updateSupplementForm(root,supplementParent,canSendSupplement(),busy);
       const notice=root.querySelector('.app-message');
@@ -103,7 +114,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   const loadNavigation=async()=>{if(!['accepted','travelling'].includes(state.assignment?.status))return;try{navigation=await navigationLoader(state.assignment,{source:repository.source});}catch{message='Không thể tải lộ trình. GPS vẫn sẵn sàng để thử lại.';}};
   await loadNavigation(); await draw();
   if(repository.source==='supabase'&&!page?.hidden)offerAlert.start(state.offers?.find(({id})=>id===priorityOfferId));
-  const heartbeat=heartbeatFactory({repository,getState:()=>state,isPageActive:()=>!page?.hidden,onState:async next=>{state=next;message='Vị trí GPS đã được cập nhật.';if(currentView==='home')await draw();},onError:async()=>{message='Không thể cập nhật GPS. Hãy cho phép truy cập vị trí.';if(currentView==='home')await draw();}});
+  const heartbeat=heartbeatFactory({repository,getState:()=>state,isPageActive:()=>!page?.hidden,onState:async next=>{state=next;syncOfferLayer();message='Vị trí GPS đã được cập nhật.';if(currentView==='home')await draw();},onError:async()=>{message='Không thể cập nhật GPS. Hãy cho phép truy cập vị trí.';if(currentView==='home')await draw();}});
   const dispatch=createProviderDispatchController({repository,getState:()=>state,isPageActive:()=>!page?.hidden,onState:async next=>{
     const previousAssignment=`${state.assignment?.id??''}:${state.assignment?.status??''}`;
     const previousOffers=(state.offers??[]).map(({id,status})=>`${id}:${status}`).join('|');
@@ -115,13 +126,13 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
     else if(currentView==='home'||offersChanged)await draw();
   },onOffer:async offer=>{priorityOfferId=offer.id;if(page?.hidden)return;offerAlert.start(offer);if(!root.querySelector?.(`[data-dispatch-offer-id="${offer.id}"]`))await draw();},onError:async()=>{message='Kết nối thời gian thực bị gián đoạn. HOME AI đang thử lại.';if(currentView==='home'&&!page?.hidden)await draw();}});
   dispatch.start();
-  const countdownTimer=globalThis.setInterval?.(()=>{const remaining=updateDispatchCountdown(root);if(remaining===0&&priorityOfferId){const expiredId=priorityOfferId;priorityOfferId=null;offerAlert.stop(expiredId);void draw();}},1000);
-  const syncHeartbeat=()=>{heartbeat.sync();if(page?.hidden){offerAlert.stop();return;}const offer=state.offers?.find(({id,expiresAt,status})=>id===priorityOfferId&&(!status||status==='pending')&&new Date(expiresAt).getTime()>Date.now());if(offer&&offerAlert.start(offer))void draw();};
+  const countdownTimer=globalThis.setInterval?.(()=>{const remaining=updateDispatchCountdown(offerLayer?.host??root);if(remaining===0&&priorityOfferId){const expiredId=priorityOfferId;priorityOfferId=null;offerAlert.stop(expiredId);void draw();}},1000);
+  const syncHeartbeat=()=>{heartbeat.sync();syncOfferLayer();};
   page?.addEventListener?.('visibilitychange',syncHeartbeat);
   globalThis.addEventListener?.('pagehide',()=>{heartbeat.stop();dispatch.stop();globalThis.clearInterval?.(countdownTimer);},{once:true});
   heartbeat.sync();
   root.addEventListener('input',()=>{if(supplementParent)updateSupplementForm(root,supplementParent,canSendSupplement(),busy);});
-  root.addEventListener('click',async e=>{
+  const handleProviderClick=async e=>{
     if(e.target.closest('[data-enable-offer-audio]')){await offerAlert.unlock();return;}
     if(!e.target.closest('[data-accept]')&&!e.target.closest('[data-decline]'))void offerAlert.unlock();
     const view=e.target.closest('[data-provider-view]');
@@ -150,8 +161,10 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
       finally{busy=false; await draw();}
       return;
     }
-    const logout=e.target.closest('[data-provider-logout]');const online=e.target.closest('[data-toggle-online]');const accept=e.target.closest('[data-accept]');const decline=e.target.closest('[data-decline]');const start=e.target.closest('[data-start-travel]');const arrived=e.target.closest('[data-mark-arrived]');const diagnose=e.target.closest('[data-start-diagnosis]');const send=e.target.closest('[data-send-quote]');const begin=e.target.closest('[data-start-intervention]');const finish=e.target.closest('[data-finish-intervention]');const supplement=e.target.closest('[data-provider-supplement]');if(logout){offerAlert.stop();heartbeat.stop();await auth.signOut();globalThis.location?.reload();return;}if(busy||(!online&&!accept&&!decline&&!start&&!arrived&&!diagnose&&!send&&!begin&&!finish&&!supplement))return;if(diagnose){editingMissionId=state.assignment?.id;diagnosing=true;await draw();return;}let respondingOffer=null;if(accept||decline){respondingOffer=state.offers?.find(({id})=>id===(accept?.dataset.accept??decline?.dataset.decline));if(!respondingOffer||new Date(respondingOffer.expiresAt).getTime()<=Date.now()){priorityOfferId=null;offerAlert.stop();await draw();return;}offerAlert.stop(respondingOffer.id);}busy=true;await draw();try{if(online){const next=!state.status.online;state=await repository.setAvailability({online:next,available:next&&!state.assignment});}if(accept){state=await repository.accept(accept.dataset.accept);priorityOfferId=null;await loadNavigation();}if(decline){state=await repository.decline(decline.dataset.decline);priorityOfferId=null;}if(start||arrived){navigation=await navigationLoader(state.assignment,{source:repository.source});if(arrived&&!navigation.arrived)throw new Error('Provider not at destination');state=await repository.updateMissionProgress(state.assignment.id,start?'travelling':'arrived',navigation.providerLocation);}if(send){if(!canSendQuote())throw new Error('Mission is no longer ready for this quote');const draft={diagnosis:root.querySelector('[data-quote-diagnosis]').value,laborAmount:root.querySelector('[data-quote-labor]').value,partsAmount:root.querySelector('[data-quote-parts]').value,warrantyDays:root.querySelector('[data-quote-warranty]').value,laborDescription:'Công kiểm tra và sửa chữa',partsDescription:'Linh kiện dự kiến'};state=await repository.createQuote(editingMissionId,draft);diagnosing=false;}if(begin)state=await repository.startIntervention(state.assignment.id);if(finish)state=await repository.finishIntervention(state.assignment.id);message='Đã cập nhật thành công.';}catch{message='Không thể cập nhật. Vui lòng thử lại.';if(respondingOffer&&new Date(respondingOffer.expiresAt).getTime()>Date.now()){priorityOfferId=respondingOffer.id;offerAlert.start(respondingOffer);}}finally{busy=false;heartbeat.sync();await draw();}});
-  return {getState:()=>structuredClone(state),stop:()=>{offerAlert.stop();heartbeat.stop();dispatch.stop();globalThis.clearInterval?.(countdownTimer);}};
+    const logout=e.target.closest('[data-provider-logout]');const online=e.target.closest('[data-toggle-online]');const accept=e.target.closest('[data-accept]');const decline=e.target.closest('[data-decline]');const start=e.target.closest('[data-start-travel]');const arrived=e.target.closest('[data-mark-arrived]');const diagnose=e.target.closest('[data-start-diagnosis]');const send=e.target.closest('[data-send-quote]');const begin=e.target.closest('[data-start-intervention]');const finish=e.target.closest('[data-finish-intervention]');const supplement=e.target.closest('[data-provider-supplement]');if(logout){offerAlert.stop();heartbeat.stop();await auth.signOut();globalThis.location?.reload();return;}if(busy||(!online&&!accept&&!decline&&!start&&!arrived&&!diagnose&&!send&&!begin&&!finish&&!supplement))return;if(diagnose){editingMissionId=state.assignment?.id;diagnosing=true;await draw();return;}let respondingOffer=null;if(accept||decline){respondingOffer=state.offers?.find(({id})=>id===(accept?.dataset.accept??decline?.dataset.decline));if(!respondingOffer||new Date(respondingOffer.expiresAt).getTime()<=Date.now()){priorityOfferId=null;offerAlert.stop();await draw();return;}offerAlert.stop(respondingOffer.id);}busy=true;await draw();try{if(online){const next=!state.status.online;state=await repository.setAvailability({online:next,available:next&&!state.assignment});}if(accept){state=await repository.accept(accept.dataset.accept);priorityOfferId=null;await loadNavigation();}if(decline){state=await repository.decline(decline.dataset.decline);priorityOfferId=null;}if(start||arrived){navigation=await navigationLoader(state.assignment,{source:repository.source});if(arrived&&!navigation.arrived)throw new Error('Provider not at destination');state=await repository.updateMissionProgress(state.assignment.id,start?'travelling':'arrived',navigation.providerLocation);}if(send){if(!canSendQuote())throw new Error('Mission is no longer ready for this quote');const draft={diagnosis:root.querySelector('[data-quote-diagnosis]').value,laborAmount:root.querySelector('[data-quote-labor]').value,partsAmount:root.querySelector('[data-quote-parts]').value,warrantyDays:root.querySelector('[data-quote-warranty]').value,laborDescription:'Công kiểm tra và sửa chữa',partsDescription:'Linh kiện dự kiến'};state=await repository.createQuote(editingMissionId,draft);diagnosing=false;}if(begin)state=await repository.startIntervention(state.assignment.id);if(finish)state=await repository.finishIntervention(state.assignment.id);message='Đã cập nhật thành công.';}catch{message='Không thể cập nhật. Vui lòng thử lại.';if(respondingOffer&&new Date(respondingOffer.expiresAt).getTime()>Date.now()){priorityOfferId=respondingOffer.id;offerAlert.start(respondingOffer);}}finally{busy=false;heartbeat.sync();await draw();}};
+  root.addEventListener('click',handleProviderClick);
+  offerLayer?.host.addEventListener('click',handleProviderClick);
+  return {getState:()=>structuredClone(state),stop:()=>{offerLayer?.stop();offerAlert.stop();heartbeat.stop();dispatch.stop();globalThis.clearInterval?.(countdownTimer);}};
   };
   if(repository.source==='supabase'){
     const savePosition=async position=>{state=await repository.updateLocation(position);};
