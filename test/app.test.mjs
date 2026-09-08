@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { createBookingTechnicianMarkup, createHomeAiMarkup, createMissionMarkup, getEstimatedPriceRange, serviceCategories, showRestoredCustomerMission } from '../src/app.js';
+import { createBookingTechnicianMarkup, createHomeAiMarkup, createMissionMarkup, createProductionConfigErrorMarkup, getEstimatedPriceRange, getProductionSupabaseConfigError, serviceCategories, showRestoredCustomerMission } from '../src/app.js';
 import { createCompletionSummaryMarkup } from '../src/mission/completion-summary.js';
 import { mockTechnicians } from '../src/technicians/mock-technicians.js';
 
@@ -98,5 +98,16 @@ describe('HOME AI C04 marketplace home page', () => {
     assert.match(createCompletionSummaryMarkup({ completedWork: [], finalAuthorizedAmount: 300000, warrantyDays: 30 }, [
       { version: 2, status: 'accepted', totalAmount: 300000 },
     ]), /Thanh toán trực tiếp cho thợ/);
+  });
+
+  it('bloque explicitement le fallback mock si Supabase manque sur GitHub Pages', () => {
+    assert.equal(getProductionSupabaseConfigError({}, 'ngpcao-spec.github.io'), 'Cấu hình Supabase bắt buộc đang bị thiếu.');
+    assert.equal(getProductionSupabaseConfigError({}, 'localhost'), null);
+    assert.equal(getProductionSupabaseConfigError({
+      SUPABASE_REQUIRED: true,
+      SUPABASE_URL: 'https://example.supabase.co',
+      SUPABASE_ANON_KEY: 'public-anon-key',
+    }, 'ngpcao-spec.github.io'), null);
+    assert.match(createProductionConfigErrorMarkup('Cấu hình Supabase bắt buộc đang bị thiếu.'), /Không thể khởi động HOME AI/);
   });
 });

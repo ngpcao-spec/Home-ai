@@ -17,10 +17,12 @@ const readRuntimeString = (name) => {
     throw new Error('Production runtime configuration is invalid');
   }
 };
+const readRuntimeBoolean = (name) => source.match(new RegExp(`${name}\\s*:\\s*(true|false)`))?.[1] === 'true';
 
 const runtimeKey = readRuntimeString('AMAZON_LOCATION_API_KEY');
 const runtimeSupabaseUrl = readRuntimeString('SUPABASE_URL');
 const runtimeSupabaseAnonKey = readRuntimeString('SUPABASE_ANON_KEY');
+const runtimeSupabaseRequired = readRuntimeBoolean('SUPABASE_REQUIRED');
 
 const expectedKey = process.env.AMAZON_LOCATION_API_KEY?.trim() ?? '';
 if (!expectedKey) throw new Error('AMAZON_LOCATION_API_KEY is not configured');
@@ -29,6 +31,13 @@ if (runtimeKey !== expectedKey) throw new Error('Production runtime configuratio
 
 const expectedSupabaseUrl = process.env.SUPABASE_URL?.trim() ?? '';
 const expectedSupabaseAnonKey = process.env.SUPABASE_ANON_KEY?.trim() ?? '';
+const supabaseRequired = process.env.REQUIRE_SUPABASE_CONFIG === 'true';
+if (supabaseRequired && (!expectedSupabaseUrl || !expectedSupabaseAnonKey)) {
+  throw new Error('Supabase production build configuration is missing');
+}
+if (supabaseRequired && (!runtimeSupabaseUrl || !runtimeSupabaseAnonKey || !runtimeSupabaseRequired)) {
+  throw new Error('Supabase production runtime configuration is missing');
+}
 if (Boolean(expectedSupabaseUrl) !== Boolean(expectedSupabaseAnonKey)) {
   throw new Error('Supabase build configuration must contain both public values');
 }
@@ -39,4 +48,4 @@ if (runtimeSupabaseUrl !== expectedSupabaseUrl || runtimeSupabaseAnonKey !== exp
   throw new Error('Supabase runtime configuration does not match the build environment');
 }
 
-console.log(`Runtime configuration verified (values redacted; Supabase: ${runtimeSupabaseUrl ? 'configured' : 'mock fallback'}).`);
+console.log(`Runtime configuration verified (values redacted; Supabase: ${runtimeSupabaseUrl ? 'configured' : 'local fallback only'}).`);

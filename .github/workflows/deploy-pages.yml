@@ -36,11 +36,14 @@ jobs:
       - name: Build static site
         run: |
           test -n "$AMAZON_LOCATION_API_KEY" || { echo "AMAZON_LOCATION_API_KEY is not configured" >&2; exit 1; }
+          test -n "$SUPABASE_URL" || { echo "SUPABASE_URL is not configured" >&2; exit 1; }
+          test -n "$SUPABASE_ANON_KEY" || { echo "SUPABASE_ANON_KEY is not configured" >&2; exit 1; }
           npm run build
         env:
           AMAZON_LOCATION_API_KEY: ${{ secrets.AMAZON_LOCATION_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          REQUIRE_SUPABASE_CONFIG: 'true'
 
       - name: Verify production runtime configuration
         run: node scripts/verify-runtime-config.mjs
@@ -48,6 +51,7 @@ jobs:
           AMAZON_LOCATION_API_KEY: ${{ secrets.AMAZON_LOCATION_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          REQUIRE_SUPABASE_CONFIG: 'true'
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

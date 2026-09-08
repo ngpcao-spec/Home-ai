@@ -30,6 +30,7 @@ import {
 } from './customer/profile.js';
 import { loadSupabaseCustomerProfile } from './customer/supabase-profile.js';
 import { createGoogleCustomerAuth } from './customer/google-auth.js';
+import { readSupabaseConfig } from './supabase/config.js';
 import {
   connectSupabaseCustomerMissions,
   createAssignedCustomerTechnician,
@@ -164,6 +165,23 @@ export function showRestoredCustomerMission(root, status) {
   root.querySelectorAll('[data-new-request-only]').forEach((section) => { section.hidden = true; });
   root.querySelector('[data-mission-tracker]').scrollIntoView?.({ behavior: 'auto', block: 'start' });
   return getRestoredMissionDestination(status);
+}
+
+export function getProductionSupabaseConfigError(
+  runtimeConfig = globalThis.__HOME_AI_CONFIG__,
+  hostname = globalThis.location?.hostname,
+) {
+  const required = runtimeConfig?.SUPABASE_REQUIRED === true || hostname === 'ngpcao-spec.github.io';
+  if (!required) return null;
+  try {
+    return readSupabaseConfig(runtimeConfig) ? null : 'Cấu hình Supabase bắt buộc đang bị thiếu.';
+  } catch {
+    return 'Cấu hình Supabase production không hợp lệ.';
+  }
+}
+
+export function createProductionConfigErrorMarkup(message) {
+  return `<section class="startup-card" role="alert"><h1>Không thể khởi động HOME AI</h1><p>${message}</p><p>Vui lòng liên hệ quản trị viên.</p></section>`;
 }
 
 export function createHomeAiMarkup() {
@@ -325,6 +343,11 @@ export function initialiseHomePage(
     renderLogin();
   };
   scheduleTask(async () => {
+    const productionConfigError = getProductionSupabaseConfigError();
+    if (productionConfigError) {
+      startupFlow.innerHTML = createProductionConfigErrorMarkup(productionConfigError);
+      return;
+    }
     let oauthAuthenticated = false;
     try {
       const oauthSession = await customerAuth.resume();
