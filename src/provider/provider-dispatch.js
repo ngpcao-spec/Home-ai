@@ -1,18 +1,21 @@
 export function renderIncomingOffer(offer, now = Date.now()) {
   if (!offer) return '';
+  const serviceLabels={electricity:'Điện',plumbing:'Nước','air-conditioning':'Điều hòa',appliances:'Điện gia dụng'};
   const remaining = Math.max(0, Math.ceil((new Date(offer.expiresAt).getTime() - now) / 1000));
   const minutes = String(Math.floor(remaining / 60)).padStart(2, '0');
   const seconds = String(remaining % 60).padStart(2, '0');
   const safe = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[char]));
-  return `<section class="dispatch-offer" role="dialog" aria-modal="true" aria-labelledby="dispatch-title">
+  return `<section class="dispatch-offer" data-dispatch-offer-id="${safe(offer.id)}" role="dialog" aria-modal="true" aria-labelledby="dispatch-title">
     <div class="dispatch-pulse">HOME AI</div><p>NHIỆM VỤ MỚI</p>
-    <h1 id="dispatch-title">${safe(offer.serviceCategory)}</h1>
+    <h1 id="dispatch-title">${safe(offer.serviceLabel ?? serviceLabels[offer.serviceCategory] ?? offer.serviceCategory)}</h1>
     <strong class="dispatch-countdown" data-dispatch-countdown data-expires-at="${safe(offer.expiresAt)}">${minutes}:${seconds}</strong>
     <div class="dispatch-facts"><span>${Number(offer.distanceKm).toFixed(1)} km</span><span>ETA ${offer.etaMinutes} phút</span></div>
     <h2>${safe(offer.approximateAddress)}</h2><p class="dispatch-request">${safe(offer.request)}</p>
-    <div class="dispatch-actions"><button data-decline="${safe(offer.id)}">Từ chối</button><button data-accept="${safe(offer.id)}">Chấp nhận</button></div>
+    ${offer.indicativeAmount != null ? `<div class="dispatch-price"><small>GIÁ THAM KHẢO</small><strong>${new Intl.NumberFormat('vi-VN').format(offer.indicativeAmount)}${offer.currency === 'VND' || !offer.currency ? 'đ' : ` ${safe(offer.currency)}`}</strong></div>` : ''}
+    <button class="dispatch-audio" data-enable-offer-audio>🔊 Chạm để bật âm thanh</button>
+    <div class="dispatch-actions"><button data-decline="${safe(offer.id)}">Từ chối</button><button data-accept="${safe(offer.id)}">Nhận việc</button></div>
   </section>`;
 }
 
@@ -24,19 +27,57 @@ export function updateDispatchCountdown(root, now = Date.now()) {
   return remaining;
 }
 
+export function createProviderOfferAlert({
+  environment = globalThis, repeatMs = 1800,
+  scheduleRepeat = environment.setInterval?.bind(environment),
+  clearRepeat = environment.clearInterval?.bind(environment),
+} = {}) {
+  let activeOfferId = null; let timer; let audioContext;
+  const pulse = () => {
+    try {
+      const AudioContext = environment.AudioContext || environment.webkitAudioContext;
+      audioContext ??= AudioContext ? new AudioContext() : null;
+      if (audioContext?.state !== 'running') return false;
+      [784, 988].forEach((frequency, index) => {
+        const oscillator=audioContext.createOscillator(); const gain=audioContext.createGain();
+        oscillator.frequency.value=frequency; gain.gain.value=0.11;
+        oscillator.connect(gain); gain.connect(audioContext.destination);
+        oscillator.start(audioContext.currentTime+index*0.2); oscillator.stop(audioContext.currentTime+0.16+index*0.2);
+      });
+    } catch { /* iOS may keep audio suspended until a user gesture. */ }
+    try { environment.navigator?.vibrate?.([240,100,240]); } catch { /* Optional capability. */ }
+    return true;
+  };
+  const stop = (offerId = activeOfferId) => {
+    if (offerId && activeOfferId && offerId !== activeOfferId) return false;
+    if (timer !== undefined) clearRepeat?.(timer);
+    timer=undefined; activeOfferId=null;
+    try { environment.navigator?.vibrate?.(0); } catch { /* Optional capability. */ }
+    return true;
+  };
+  const start = (offer) => {
+    if (!offer?.id || offer.status && offer.status !== 'pending' || new Date(offer.expiresAt).getTime() <= Date.now()) return false;
+    if (activeOfferId === offer.id) return false;
+    stop(); activeOfferId=offer.id; pulse();
+    timer=scheduleRepeat?.(pulse,repeatMs);
+    return true;
+  };
+  const unlock = async () => {
+    try {
+      const AudioContext=environment.AudioContext||environment.webkitAudioContext;
+      audioContext??=AudioContext?new AudioContext():null;
+      await audioContext?.resume?.();
+      if(activeOfferId)pulse();
+      return audioContext?.state==='running';
+    } catch { return false; }
+  };
+  return Object.freeze({start,stop,unlock,getActiveOfferId:()=>activeOfferId});
+}
+
 export function notifyIncomingOffer(environment = globalThis) {
-  try {
-    const AudioContext = environment.AudioContext || environment.webkitAudioContext;
-    if (AudioContext) {
-      const context = new AudioContext();
-      const oscillator = context.createOscillator();
-      const gain = context.createGain();
-      oscillator.frequency.value = 880; gain.gain.value = 0.08;
-      oscillator.connect(gain); gain.connect(context.destination);
-      oscillator.start(); oscillator.stop(context.currentTime + 0.18);
-    }
-  } catch { /* Audio requires a prior user gesture on some browsers. */ }
-  try { environment.navigator?.vibrate?.([180, 90, 180]); } catch { /* Optional capability. */ }
+  const alert=createProviderOfferAlert({environment,scheduleRepeat:()=>undefined});
+  alert.start({id:'one-shot',status:'pending',expiresAt:new Date(Date.now()+1000).toISOString()});
+  alert.stop();
 }
 
 export function createProviderDispatchController({
