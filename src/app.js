@@ -454,6 +454,7 @@ export function initialiseHomePage(
   let supabaseMissionMode = false;
   let remoteMissionHistory = [];
   let supplementDecisionPending=false;
+  let reviewSubmissionPending=false;
   let stopMissionPolling;
   let stopMissionRealtime;
   let trackingRoute;
@@ -1204,6 +1205,8 @@ export function initialiseHomePage(
       return;
     }
     if (remoteMissionState && event.target.closest('[data-send-review]')) {
+      if (reviewSubmissionPending || missionState.reviewSent) return;
+      reviewSubmissionPending = true;
       try {
         applyRemoteMissionState(await missionSynchronizer.createReview(
           remoteMissionState.mission.id,
@@ -1213,6 +1216,8 @@ export function initialiseHomePage(
       } catch (error) {
         console.error('[HOME AI][Supabase review]', { operation: 'create', errorType: error?.name ?? 'Error' });
         mission.querySelector('[data-mission-status-badge]').textContent = 'Không thể gửi đánh giá';
+      } finally {
+        reviewSubmissionPending = false;
       }
       return;
     }

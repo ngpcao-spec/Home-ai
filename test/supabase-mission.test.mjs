@@ -300,7 +300,7 @@ describe('missions client Supabase', () => {
 
   it('restaure une mission terminée à évaluer avec son montant et ses devis serveur', async () => {
     const state = createCustomerMissionStateFromServer({
-      mission: { id: 'm1', status: 'completed', paymentStatus: 'paid_external', completedAt: '2026-09-08T10:00:00Z', currency: 'VND' },
+      mission: { id: 'm1', status: 'completed', paymentStatus: 'paid_external', completedAt: '2026-09-08T10:00:00Z', finalAuthorizedAmount: 300000, currency: 'VND' },
       quotes: [
         { id: 'q1', version: 1, status: 'accepted', totalAmount: 200000, recommendedTasks: ['Diagnostic'], warrantyDays: 30 },
         { id: 'q2', version: 2, status: 'accepted', totalAmount: 300000, recommendedTasks: ['Pièce supplémentaire'], warrantyDays: 30 },

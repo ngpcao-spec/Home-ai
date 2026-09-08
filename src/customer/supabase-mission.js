@@ -77,7 +77,7 @@ export function createCustomerMissionStateFromServer({ mission, quotes, review =
         .filter(({ status }) => status === 'accepted')
         .flatMap(({ recommendedTasks = [] }) => recommendedTasks)),
       acceptedQuoteId: acceptedQuote.id,
-      finalAuthorizedAmount: acceptedQuote.totalAmount,
+      finalAuthorizedAmount: mission.finalAuthorizedAmount,
       currency: acceptedQuote.currency ?? mission.currency,
       warrantyDays: acceptedQuote.warrantyDays,
     }) : null,
