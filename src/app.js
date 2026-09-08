@@ -324,6 +324,8 @@ export function initialiseHomePage(
   let restoreActiveMission = async () => false;
   let browserStorage;
   let verifiedCustomerUserId = null;
+  const requiresSupabaseSession = globalThis.__HOME_AI_CONFIG__?.SUPABASE_REQUIRED === true
+    || globalThis.location?.hostname === 'ngpcao-spec.github.io';
   try { browserStorage = globalThis.localStorage; } catch { browserStorage = undefined; }
   const renderLogin = (options = {}) => {
     startupFlow.innerHTML = createLoginMarkup({ phone: loginPhone, ...options });
@@ -356,7 +358,9 @@ export function initialiseHomePage(
     } catch {
       // Keep the local phone/OTP fallback available if OAuth recovery fails.
     }
-    const startupSession = resolveCustomerStartupSession(browserStorage, oauthAuthenticated);
+    const startupSession = resolveCustomerStartupSession(browserStorage, oauthAuthenticated, {
+      supabaseRequired: requiresSupabaseSession,
+    });
     if (startupSession.authenticated) await showApplication();
     else if (startupSession.oauthFailed) renderLogin({ error: 'Đăng nhập Google chưa hoàn tất. Vui lòng thử lại.' });
     else startupFlow.innerHTML = isOnboardingCompleted(browserStorage) ? createLoginMarkup() : createOnboardingMarkup(onboardingIndex);
@@ -403,6 +407,10 @@ export function initialiseHomePage(
       return;
     }
     if (event.target.matches('[data-login-otp-form]')) {
+      if (requiresSupabaseSession) {
+        renderLogin({ error: 'Vui lòng đăng nhập bằng Google để sử dụng dữ liệu HOME AI.' });
+        return;
+      }
       if (!isValidMockOtp(event.target.elements.otp.value)) {
         renderLogin({ step: 'otp', phone: maskVietnamesePhone(loginPhone), error: 'Mã xác thực không đúng. Vui lòng thử lại.' });
         return;
@@ -541,7 +549,7 @@ export function initialiseHomePage(
   const showAppView = (view, missionId) => {
     if (view === 'history') {
       const historyView = root.querySelector('[data-app-view="history"]');
-      const expectsSupabase = supabaseMissionMode || Boolean(verifiedCustomerUserId);
+      const expectsSupabase = requiresSupabaseSession || supabaseMissionMode || Boolean(verifiedCustomerUserId);
       historyView.innerHTML = expectsSupabase
         ? '<p role="status">Đang tải lịch sử Supabase…</p>'
         : createMissionHistoryMarkup(getMissionHistory());

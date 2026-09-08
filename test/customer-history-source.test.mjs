@@ -34,7 +34,7 @@ describe('C19 avec une session Supabase', () => {
   it('charge Supabase independamment de la restauration de mission et refuse le fallback mock sur erreur', async () => {
     const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
     assert.match(app, /const ensureSupabaseMissionBackend = async/);
-    assert.match(app, /supabaseMissionMode \|\| Boolean\(verifiedCustomerUserId\)/);
+    assert.match(app, /requiresSupabaseSession \|\| supabaseMissionMode \|\| Boolean\(verifiedCustomerUserId\)/);
     assert.match(app, /connection\.source !== 'supabase'.*throw/s);
     assert.match(app, /Impossible|Không thể tải lịch sử Supabase/);
   });

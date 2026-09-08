@@ -80,7 +80,7 @@ export function clearGoogleOAuthAttempt(storage) {
   }
 }
 
-export function resolveCustomerStartupSession(storage, oauthAuthenticated = false) {
+export function resolveCustomerStartupSession(storage, oauthAuthenticated = false, { supabaseRequired = false } = {}) {
   let oauthAttempted = false;
   try { oauthAttempted = Boolean(storage?.getItem(googleOAuthAttemptStorageKey)); } catch { /* Ignore unavailable storage. */ }
 
@@ -92,6 +92,9 @@ export function resolveCustomerStartupSession(storage, oauthAuthenticated = fals
     clearGoogleOAuthAttempt(storage);
     clearCustomerSession(storage);
     return Object.freeze({ authenticated: false, kind: null, oauthFailed: true });
+  }
+  if (supabaseRequired) {
+    return Object.freeze({ authenticated: false, kind: null, oauthFailed: false });
   }
   const mockSession = readCustomerSession(storage);
   return Object.freeze({

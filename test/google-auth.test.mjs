@@ -141,4 +141,14 @@ describe('C03 Google Auth Supabase', () => {
     assert.deepEqual(startup, { authenticated: true, kind: 'supabase-google', oauthFailed: false });
     assert.equal(storage.getItem(googleOAuthAttemptStorageKey), null);
   });
+
+  it('ignore une ancienne session mock lorsque Supabase est obligatoire en production', () => {
+    const storage = createStorage();
+    saveCustomerSession(storage, createMockCustomerSession('+84901234567'));
+
+    const startup = resolveCustomerStartupSession(storage, false, { supabaseRequired: true });
+
+    assert.deepEqual(startup, { authenticated: false, kind: null, oauthFailed: false });
+    assert.notEqual(storage.getItem('customerSession'), null);
+  });
 });
