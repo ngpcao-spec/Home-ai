@@ -88,6 +88,12 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
       await repositories.offers.createCurrentProviderSupplement(id, current.assignment.quote, discovery);
       return loadDashboard();
     },
-    async getHistory() { return repositories.offers.getMissionHistory(); },
+    async getHistory() {
+      const history = await repositories.offers.getMissionHistory();
+      const clientIds = [...new Set(history.map(({ clientId }) => clientId).filter(Boolean))];
+      const clients = await Promise.all(clientIds.map(async (clientId) => [clientId, await repositories.profiles.getById(clientId)]));
+      const names = new Map(clients.map(([clientId, profile]) => [clientId, profile?.name]));
+      return history.map((mission) => ({ ...mission, clientName: names.get(mission.clientId) ?? null }));
+    },
   });
 }

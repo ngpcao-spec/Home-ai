@@ -5,6 +5,7 @@ import { createProviderGoogleAuth } from './provider-auth.js';
 import { createProviderLocationHeartbeat } from './provider-location-heartbeat.js';
 import { classifyGeolocationError, getLocationPermissionState, mountLocationPermissionGate, requestCurrentPosition } from '../location/location-permission.js';
 import { createProviderDispatchController, notifyIncomingOffer, renderIncomingOffer, updateDispatchCountdown } from './provider-dispatch.js';
+import { prepareProviderHistory, renderProviderIncome, renderProviderMissionHistory } from './provider-history.js';
 
 function ensureDispatchStyles(documentRef = globalThis.document) {
   if (!documentRef?.head || documentRef.querySelector?.('[data-provider-dispatch-styles]')) return;
@@ -35,7 +36,11 @@ export function renderProviderDashboard(state, { source='mock', busy=false, mess
   <section class="status-card"><div><p>Trạng thái hoạt động</p><strong>${state.status?.online?'Đang trực tuyến':'Đang ngoại tuyến'}</strong></div><button class="switch ${state.status?.online?'on':''}" data-toggle-online aria-label="Đang trực tuyến" aria-pressed="${Boolean(state.status?.online)}" ${busy?'disabled':''}><span></span></button></section>
   ${assignment?`<section class="assignment"><p>NHIỆM VỤ ĐANG THỰC HIỆN</p><h2>${esc(labels[assignment.serviceCategory]??assignment.serviceCategory)}</h2><strong>${esc(assignment.address)}</strong><p>${esc(assignment.request)}</p><span>● ${statusLabel[assignment.status]??assignment.status}</span>${['accepted','travelling'].includes(assignment.status)?`<div class="provider-map" data-provider-map aria-label="Bản đồ đường đến khách hàng"></div>${navigation?`<div class="route-summary"><strong>${Number(navigation.route.distanceKm).toFixed(1)} km</strong><span>ETA ${navigation.route.durationMinutes} phút</span><small>GPS: ${navigation.providerLocation.latitude.toFixed(5)}, ${navigation.providerLocation.longitude.toFixed(5)}</small></div>`:'<div class="route-loading">Đang chuẩn bị lộ trình…</div>'}`:''}<div class="mission-actions">${assignment.status==='accepted'?`<button data-start-travel ${busy?'disabled':''}>Bắt đầu di chuyển</button>`:''}${assignment.status==='travelling'?`<button data-mark-arrived ${busy||!navigation?.arrived?'disabled':''}>Tôi đã đến</button>${!navigation?.arrived?'<small>Nút được mở khi bạn ở trong phạm vi 150 m.</small>':''}`:''}</div>${renderQuoteWorkflow(assignment,{diagnosing,busy,supplementParent})}</section>`:''}
   <section class="offers"><div class="section-title"><div><p>CƠ HỘI GẦN BẠN</p><h2>Đề nghị nhiệm vụ</h2></div><span>${offers.length}</span></div>${offers.length?offers.map(o=>`<article class="offer-card"><div class="offer-top"><span class="service-icon">${o.serviceCategory==='electricity'?'⚡':'🛠'}</span><div><h3>${esc(labels[o.serviceCategory]??o.serviceCategory)}</h3><p>${esc(o.approximateAddress)}</p></div><strong>${Number(o.distanceKm).toFixed(1)} km</strong></div><p class="request">${esc(o.request)}</p><div class="facts"><span>◷ ${o.etaMinutes} phút</span><span>⌖ Địa chỉ gần đúng</span></div><div class="actions"><button data-decline="${esc(o.id)}" ${busy?'disabled':''}>Từ chối</button><button data-accept="${esc(o.id)}" ${busy||assignment?'disabled':''}>Chấp nhận</button></div></article>`).join(''):`<div class="empty">Không có đề nghị mới.<small>Hãy duy trì trạng thái trực tuyến để nhận việc.</small></div>`}</section><p class="app-message" role="status">${esc(message)}</p></main>
-  <nav><button class="active">⌂<span>Trang chủ</span></button><button>▤<span>Nhiệm vụ</span></button><button>◎<span>Thu nhập</span></button><button>○<span>Hồ sơ</span></button></nav>`;
+  ${renderProviderNav('home')}`;
+}
+
+function renderProviderNav(activeView) {
+  return `<nav aria-label="Điều hướng Provider"><button data-provider-view="home" class="${activeView==='home'?'active':''}">⌂<span>Trang chủ</span></button><button data-provider-view="missions" class="${activeView==='missions'?'active':''}">▤<span>Nhiệm vụ</span></button><button data-provider-view="income" class="${activeView==='income'?'active':''}">◎<span>Thu nhập</span></button><button data-provider-view="profile" class="${activeView==='profile'?'active':''}">○<span>Hồ sơ</span></button></nav>`;
 }
 
 export function renderProviderLogin({ error = '', provisioning = false } = {}) {
@@ -57,8 +62,17 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   try{state=await repository.load();}catch(error){error.safeStage='DASHBOARD_LOAD';throw error;}
   const openDashboard=async()=>{
   let busy=false; let message=''; let navigation=null; let diagnosing=false; let editingMissionId=null; let supplementParent=null;
+  let currentView='home'; let history=[]; let historyLoading=false; let historyError=''; let selectedMissionId=null;
   let priorityOfferId=repository.source==='supabase' ? state.offers?.[0]?.id ?? null : null;
-  const renderDashboard=async()=>{const priorityOffer=state.offers?.find(({id})=>id===priorityOfferId);root.innerHTML=renderProviderDashboard(state,{source:repository.source,busy,message,navigation,diagnosing,supplementParent})+renderIncomingOffer(priorityOffer);const map=root.querySelector('[data-provider-map]');if(navigation&&map)await renderProviderNavigation(map,navigation,state.provider).catch(()=>{});};
+  const renderDashboard=async()=>{
+    if(currentView==='missions'||currentView==='income'){
+      const content=currentView==='missions'?renderProviderMissionHistory(history,{loading:historyLoading,error:historyError,selectedMissionId}):renderProviderIncome(history,{loading:historyLoading,error:historyError});
+      root.innerHTML=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0]??'P')}</button></header>${content}${renderProviderNav(currentView)}`;
+      return;
+    }
+    const priorityOffer=state.offers?.find(({id})=>id===priorityOfferId);root.innerHTML=renderProviderDashboard(state,{source:repository.source,busy,message,navigation,diagnosing,supplementParent})+renderIncomingOffer(priorityOffer);const map=root.querySelector('[data-provider-map]');if(navigation&&map)await renderProviderNavigation(map,navigation,state.provider).catch(()=>{});
+  };
+  const loadHistory=async()=>{historyLoading=true;historyError='';await renderDashboard();try{history=prepareProviderHistory(await repository.getHistory(),state.provider.id);}catch(error){history=[];historyError=error?.message??'Lỗi không xác định';}finally{historyLoading=false;await renderDashboard();}};
   const canSendQuote=()=>state.assignment?.id===editingMissionId
     && state.assignment.status==='arrived'
     && (!state.assignment.quote || ['declined','rejected'].includes(state.assignment.quote.status));
@@ -87,7 +101,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   await loadNavigation(); await draw();
   const page=root.ownerDocument??globalThis.document;
   const heartbeat=heartbeatFactory({repository,getState:()=>state,isPageActive:()=>!page?.hidden,onState:async next=>{state=next;message='Vị trí GPS đã được cập nhật.';await draw();},onError:async()=>{message='Không thể cập nhật GPS. Hãy cho phép truy cập vị trí.';await draw();}});
-  const dispatch=createProviderDispatchController({repository,getState:()=>state,isPageActive:()=>!page?.hidden,onState:async next=>{state=next;priorityOfferId=next.offers?.[0]?.id??null;await draw();},onOffer:async offer=>{priorityOfferId=offer.id;notifyIncomingOffer();await draw();},onError:async()=>{message='Kết nối thời gian thực bị gián đoạn. HOME AI đang thử lại.';await draw();}});
+  const dispatch=createProviderDispatchController({repository,getState:()=>state,isPageActive:()=>!page?.hidden,onState:async next=>{state=next;priorityOfferId=next.offers?.[0]?.id??null;if(currentView==='missions'||currentView==='income')await loadHistory();else await draw();},onOffer:async offer=>{priorityOfferId=offer.id;notifyIncomingOffer();await draw();},onError:async()=>{message='Kết nối thời gian thực bị gián đoạn. HOME AI đang thử lại.';await draw();}});
   dispatch.start();
   const countdownTimer=globalThis.setInterval?.(()=>updateDispatchCountdown(root),1000);
   const syncHeartbeat=()=>heartbeat.sync();
@@ -96,6 +110,11 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   heartbeat.sync();
   root.addEventListener('input',()=>{if(supplementParent)updateSupplementForm(root,supplementParent,canSendSupplement(),busy);});
   root.addEventListener('click',async e=>{
+    const view=e.target.closest('[data-provider-view]');
+    if(view){currentView=view.dataset.providerView;selectedMissionId=null;if(currentView==='missions'||currentView==='income')await loadHistory();else await draw();return;}
+    const mission=e.target.closest('[data-history-mission]');if(mission){selectedMissionId=mission.dataset.historyMission;await draw();return;}
+    if(e.target.closest('[data-history-back]')){selectedMissionId=null;await draw();return;}
+    if(e.target.closest('[data-history-retry]')){await loadHistory();return;}
     if(e.target.closest('[data-provider-supplement]')){
       if(busy || supplementParent || state.assignment?.status!=='in_progress' || state.assignment.quote?.status!=='accepted')return;
       editingMissionId=state.assignment.id; supplementParent=structuredClone(state.assignment.quote);
