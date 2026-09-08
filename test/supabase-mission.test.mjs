@@ -8,6 +8,7 @@ import {
   createCustomerMissionStateFromServer,
   createCustomerMissionSynchronizer,
   listCustomerMatchingProviders,
+  restoreActiveCustomerMission,
 } from '../src/customer/supabase-mission.js';
 import { createSupabaseMissionsRepository } from '../src/supabase/repositories/missions.js';
 
@@ -258,5 +259,42 @@ describe('missions client Supabase', () => {
     assert.equal('status' in calls[0][1], false);
     assert.equal('provider_id' in calls[2][1], false);
     assert.deepEqual(calls[3][1], { target_quote_id: 'q1', new_decision: 'accepted' });
+  });
+
+  for (const status of ['accepted', 'travelling', 'supplement_pending']) {
+    it(`restaure après reload une mission ${status}, son provider et ses devis`, async () => {
+      const activeMission = { id: 'm1', providerId: 'p1', status };
+      const provider = { id: 'p1', name: 'Provider Test Nha Trang' };
+      const quotes = status === 'supplement_pending'
+        ? [{ id: 'q1', status: 'accepted' }, { id: 'q2', status: 'supplement_pending' }]
+        : [{ id: 'q1', status: 'accepted' }];
+      const calls = [];
+      const restored = await restoreActiveCustomerMission({
+        source: 'supabase', activeMission, repository: { name: 'missions' }, providerRepository: { name: 'providers' },
+      }, { synchronizerFactory: options => {
+        assert.equal(options.missionRepository.name, 'missions');
+        assert.equal(options.providerRepository.name, 'providers');
+        return { load: async id => { calls.push(['load', id]); return { mission: activeMission, provider, quotes }; } };
+      } });
+      assert.deepEqual(calls, [['load', 'm1']]);
+      assert.equal(restored.snapshot.mission.status, status);
+      assert.equal(restored.snapshot.provider.id, 'p1');
+      assert.deepEqual(restored.snapshot.quotes, quotes);
+    });
+  }
+
+  it('ne crée jamais une nouvelle mission lorsqu’une mission active existe', async () => {
+    for (const status of ['requested', 'searching', 'offered', 'accepted', 'travelling', 'arrived', 'quote_pending', 'in_progress', 'supplement_pending', 'completed_pending_payment']) {
+      const calls = [];
+      const active = { id: `mission-${status}`, providerId: status === 'searching' ? null : 'p1', status };
+      const synchronizer = createCustomerMissionSynchronizer({ missionRepository: {
+        createCurrent: async () => assert.fail(`duplicate mission for ${status}`),
+        createOffers: async id => { calls.push(['offers', id]); return []; },
+        getById: async () => active, getQuoteHistory: async () => [], getOffers: async () => [],
+      }, providerRepository: { getById: async id => ({ id }) } });
+      const snapshot = await synchronizer.createOrResume({}, active);
+      assert.equal(snapshot.mission.id, active.id);
+      assert.deepEqual(calls, ['requested', 'searching', 'offered'].includes(status) ? [['offers', active.id]] : []);
+    }
   });
 });

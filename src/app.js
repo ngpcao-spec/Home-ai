@@ -38,6 +38,7 @@ import {
   createCustomerMissionSynchronizer,
   decidePendingCustomerSupplement,
   listCustomerMatchingProviders,
+  restoreActiveCustomerMission,
 } from './customer/supabase-mission.js';
 import { createCustomerProfileMarkup } from './customer/profile-view.js';
 import { legalContent, supportFaqs } from './customer/support.js';
@@ -287,17 +288,19 @@ export function initialiseHomePage(
   let onboardingIndex = 0;
   let loginPhone = '';
   let openHomeView = () => {};
+  let restoreActiveMission = async () => false;
   let browserStorage;
   let verifiedCustomerUserId = null;
   try { browserStorage = globalThis.localStorage; } catch { browserStorage = undefined; }
   const renderLogin = (options = {}) => {
     startupFlow.innerHTML = createLoginMarkup({ phone: loginPhone, ...options });
   };
-  const showApplication = () => {
+  const showApplication = async () => {
+    const restored = await restoreActiveMission();
     startupFlow.hidden = true;
     appShell.hidden = false;
     openHomeView();
-    root.querySelector('#service-request')?.focus();
+    if (!restored) root.querySelector('#service-request')?.focus();
   };
   const finishOnboarding = () => {
     saveOnboardingCompleted(browserStorage);
@@ -313,7 +316,7 @@ export function initialiseHomePage(
       // Keep the local phone/OTP fallback available if OAuth recovery fails.
     }
     const startupSession = resolveCustomerStartupSession(browserStorage, oauthAuthenticated);
-    if (startupSession.authenticated) showApplication();
+    if (startupSession.authenticated) await showApplication();
     else if (startupSession.oauthFailed) renderLogin({ error: 'Đăng nhập Google chưa hoàn tất. Vui lòng thử lại.' });
     else startupFlow.innerHTML = isOnboardingCompleted(browserStorage) ? createLoginMarkup() : createOnboardingMarkup(onboardingIndex);
   }, 650);
@@ -365,7 +368,7 @@ export function initialiseHomePage(
       }
       const session = createMockCustomerSession(loginPhone);
       saveCustomerSession(browserStorage, session);
-      showApplication();
+      void showApplication();
     }
   });
   const input = root.querySelector('#service-request');
@@ -977,6 +980,42 @@ export function initialiseHomePage(
     } catch (error) {
       console.error('[HOME AI][C13]', { phase: trackingPhase, errorType: error?.awsErrorCode ?? error?.name ?? 'Error' });
       stage.insertAdjacentHTML('beforeend', '<p class="route-error tracking-route-error" role="alert">Không thể tải hành trình của thợ. Vui lòng thử lại.</p><button type="button" data-retry-tracking>Thử lại</button>');
+    }
+  };
+  restoreActiveMission = async () => {
+    try {
+      missionConnection ??= customerMissionConnector({ verifiedUserId: verifiedCustomerUserId });
+      const connection = await missionConnection;
+      const restored = await restoreActiveCustomerMission(connection, { scheduleTask });
+      if (!restored) return false;
+      missionRepository = connection.repository;
+      missionSynchronizer = restored.synchronizer;
+      currentDiagnosis = {
+        summary: restored.snapshot.mission.diagnosticSummary ?? restored.snapshot.mission.problemDescription,
+        service: restored.snapshot.mission.serviceCategory,
+      };
+      applyRemoteMissionState(restored.snapshot);
+      if (selectedTechnician) {
+        mission.querySelector('[data-mission-initials]').textContent = selectedTechnician.initials;
+        mission.querySelector('[data-mission-technician]').textContent = selectedTechnician.name;
+        mission.querySelector('[data-mission-rating]').textContent = selectedTechnician.rating;
+        mission.querySelector('[data-mission-problem]').textContent = restored.snapshot.mission.problemDescription;
+        mission.querySelector('[data-mission-address]').textContent = restored.snapshot.mission.address;
+        mission.querySelector('[data-mission-price]').textContent = restored.snapshot.mission.finalAuthorizedAmount == null
+          ? 'Đang cập nhật' : `${new Intl.NumberFormat('vi-VN').format(restored.snapshot.mission.finalAuthorizedAmount)}đ`;
+        mission.querySelector('[data-mission-arrival]').textContent = ['travelling', 'arrived'].includes(restored.snapshot.mission.status)
+          ? 'Đang cập nhật GPS' : 'Đã đến';
+        mission.hidden = false;
+        root.querySelector('[data-booking-confirmation]').hidden = true;
+        renderMission();
+      } else {
+        showBookingConfirmation(restored.snapshot.mission);
+      }
+      startRemoteMissionPolling(restored.snapshot.mission.id);
+      return true;
+    } catch (error) {
+      console.error('[HOME AI][Supabase mission]', { operation: 'restore-active', errorType: error?.name ?? 'Error' });
+      return false;
     }
   };
   root.querySelector('[data-track-technician]').addEventListener('click', () => {

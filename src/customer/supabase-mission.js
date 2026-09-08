@@ -7,6 +7,11 @@ const defaultRepositoryLoader = async (runtimeConfig) => {
   return createOptionalSupabaseRepositories(runtimeConfig);
 };
 
+export const resumableMissionStatuses = Object.freeze([
+  'requested', 'searching', 'offered', 'accepted', 'travelling', 'arrived',
+  'quote_pending', 'in_progress', 'supplement_pending', 'completed_pending_payment',
+]);
+
 export function createCustomerMissionDraft({ diagnosis, problemDescription, serviceCategory, address, location, scheduledFor = null }) {
   return Object.freeze({
     serviceCategory,
@@ -97,6 +102,23 @@ export async function connectSupabaseCustomerMissions({
   }
 }
 
+export async function restoreActiveCustomerMission(connection, {
+  scheduleTask = globalThis.setTimeout,
+  synchronizerFactory = createCustomerMissionSynchronizer,
+} = {}) {
+  if (connection?.source !== 'supabase' || !connection.activeMission
+      || !resumableMissionStatuses.includes(connection.activeMission.status)) return null;
+  const synchronizer = synchronizerFactory({
+    missionRepository: connection.repository,
+    providerRepository: connection.providerRepository,
+    scheduleTask,
+  });
+  return Object.freeze({
+    synchronizer,
+    snapshot: await synchronizer.load(connection.activeMission.id),
+  });
+}
+
 export async function listCustomerMatchingProviders({ connection, technicianRepository, location, serviceCategory }) {
   if (connection?.source === 'supabase') {
     if (!connection.providerRepository) throw new Error('Supabase provider repository unavailable');
@@ -151,14 +173,16 @@ export function createCustomerMissionSynchronizer({
     return dispatchPromise;
   };
 
-  const createOrResume = async (draft, activeMission, { now = Date.now(), reuseWindowMs = 300000 } = {}) => {
-    const requestedAt = new Date(activeMission?.requestedAt ?? '').getTime();
-    const reusable = activeMission && ['requested', 'searching', 'offered'].includes(activeMission.status)
-      && Number.isFinite(requestedAt) && now - requestedAt >= 0 && now - requestedAt <= reuseWindowMs;
-    if (!reusable) return create(draft, { replaceMission: activeMission });
+  const createOrResume = async (draft, activeMission) => {
+    if (!activeMission) return create(draft);
+    if (!resumableMissionStatuses.includes(activeMission.status)) {
+      throw new Error('Existing customer mission cannot be replaced');
+    }
     if (dispatchPromise) return dispatchPromise;
     dispatchPromise = (async () => {
-      await missionRepository.createOffers(activeMission.id);
+      if (['requested', 'searching', 'offered'].includes(activeMission.status)) {
+        await missionRepository.createOffers(activeMission.id);
+      }
       return load(activeMission.id);
     })().finally(() => { dispatchPromise = undefined; });
     return dispatchPromise;
