@@ -153,6 +153,19 @@ export function createMissionMarkup() {
   </section>`;
 }
 
+export function getRestoredMissionDestination(status) {
+  if (status === 'completed_pending_payment') return 'payment';
+  if (status === 'completed') return 'review';
+  return 'mission';
+}
+
+export function showRestoredCustomerMission(root, status) {
+  root.querySelector('[data-new-request-flow]').hidden = true;
+  root.querySelectorAll('[data-new-request-only]').forEach((section) => { section.hidden = true; });
+  root.querySelector('[data-mission-tracker]').scrollIntoView?.({ behavior: 'auto', block: 'start' });
+  return getRestoredMissionDestination(status);
+}
+
 export function createHomeAiMarkup() {
   const categories = serviceCategories.map((category) => `
     <button class="category-card" type="button" data-category="${category.id}" data-prompt="${category.prompt}" aria-pressed="false">
@@ -180,6 +193,7 @@ export function createHomeAiMarkup() {
       <main>
         <div data-app-view="home">
         <section class="hero" aria-labelledby="home-title">
+          <div data-new-request-flow>
           <div class="trust-badge"><span>✓</span> Thợ uy tín gần bạn</div>
           <h1 id="home-title">Bạn cần sửa gì<br /><em>hôm nay?</em></h1>
           <p class="hero-copy">Mô tả vấn đề, HOME AI sẽ giúp bạn tìm đúng thợ chuyên nghiệp.</p>
@@ -234,10 +248,11 @@ export function createHomeAiMarkup() {
             </form>
           </section>
           <section class="booking-confirmation" data-booking-confirmation hidden aria-live="polite"><div class="confirmation-check">✓</div><p>YÊU CẦU ĐÃ ĐƯỢC XÁC NHẬN</p><h2 data-confirmation-title>Thợ đã nhận yêu cầu!</h2><dl><div data-confirmation-mission-row hidden><dt>Mã nhiệm vụ</dt><dd data-confirmation-mission></dd></div><div data-confirmation-state-row hidden><dt>Trạng thái</dt><dd data-confirmation-state></dd></div><div><dt>Thợ</dt><dd data-confirmation-technician></dd></div><div><dt>Thời gian dự kiến đến</dt><dd data-confirmation-arrival></dd></div><div><dt>Địa chỉ</dt><dd data-confirmation-address></dd></div><div><dt>Vấn đề</dt><dd data-confirmation-problem></dd></div><div><dt>Giá tham khảo</dt><dd data-confirmation-estimate></dd></div></dl><div class="confirmation-actions"><button type="button" data-track-technician>Theo dõi thợ</button><button type="button" data-cancel-request>Hủy yêu cầu</button></div><p data-confirmation-status role="status"></p></section>
+          </div>
           ${createMissionMarkup()}
         </section>
 
-        <section class="services" aria-labelledby="services-title">
+        <section class="services" data-new-request-only aria-labelledby="services-title">
           <div class="section-heading">
             <div><p>DỊCH VỤ PHỔ BIẾN</p><h2 id="services-title">Bạn đang cần gì?</h2></div>
             <span>Chọn nhanh</span>
@@ -245,7 +260,7 @@ export function createHomeAiMarkup() {
           <div class="category-grid">${categories}</div>
         </section>
 
-        <section class="confidence-card" aria-label="Cam kết dịch vụ">
+        <section class="confidence-card" data-new-request-only aria-label="Cam kết dịch vụ">
           <div class="confidence-icon">${icon('bolt')}</div>
           <div><strong>Nhanh chóng &amp; an tâm</strong><span>Kết nối thợ phù hợp, báo giá minh bạch</span></div>
           <span class="rating">★ 4.9</span>
@@ -299,8 +314,11 @@ export function initialiseHomePage(
     const restored = await restoreActiveMission();
     startupFlow.hidden = true;
     appShell.hidden = false;
-    openHomeView();
-    if (!restored) root.querySelector('#service-request')?.focus();
+    if (restored) showRestoredCustomerMission(root, restored.mission.status);
+    else {
+      openHomeView();
+      root.querySelector('#service-request')?.focus();
+    }
   };
   const finishOnboarding = () => {
     saveOnboardingCompleted(browserStorage);
@@ -1066,7 +1084,7 @@ export function initialiseHomePage(
         showBookingConfirmation(restored.snapshot.mission);
       }
       startRemoteMissionPolling(restored.snapshot.mission.id);
-      return true;
+      return restored.snapshot;
     } catch (error) {
       console.error('[HOME AI][Supabase mission]', { operation: 'restore-active', errorType: error?.name ?? 'Error' });
       return false;

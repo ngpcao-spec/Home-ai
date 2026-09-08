@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { createBookingTechnicianMarkup, createHomeAiMarkup, createMissionMarkup, getEstimatedPriceRange, serviceCategories } from '../src/app.js';
+import { createBookingTechnicianMarkup, createHomeAiMarkup, createMissionMarkup, getEstimatedPriceRange, serviceCategories, showRestoredCustomerMission } from '../src/app.js';
+import { createCompletionSummaryMarkup } from '../src/mission/completion-summary.js';
 import { mockTechnicians } from '../src/technicians/mock-technicians.js';
 
 describe('HOME AI C04 marketplace home page', () => {
@@ -72,5 +73,30 @@ describe('HOME AI C04 marketplace home page', () => {
     assert.match(markup, /class="profile-view" data-app-view="profile"/);
     assert.doesNotMatch(markup, /Phú Dũng/);
     assert.doesNotMatch(markup, /Nguyễn Minh Anh/);
+  });
+
+  it('ouvre directement le paiement après reload d’une mission completed_pending_payment', () => {
+    const newRequestFlow = { hidden: false };
+    const newRequestSections = [{ hidden: false }, { hidden: false }];
+    let scrolled = false;
+    const root = {
+      querySelector(selector) {
+        if (selector === '[data-new-request-flow]') return newRequestFlow;
+        if (selector === '[data-mission-tracker]') return { scrollIntoView() { scrolled = true; } };
+        throw new Error(`Unexpected selector ${selector}`);
+      },
+      querySelectorAll(selector) {
+        assert.equal(selector, '[data-new-request-only]');
+        return newRequestSections;
+      },
+    };
+
+    assert.equal(showRestoredCustomerMission(root, 'completed_pending_payment'), 'payment');
+    assert.equal(newRequestFlow.hidden, true);
+    assert.equal(newRequestSections.every(({ hidden }) => hidden), true);
+    assert.equal(scrolled, true);
+    assert.match(createCompletionSummaryMarkup({ completedWork: [], finalAuthorizedAmount: 300000, warrantyDays: 30 }, [
+      { version: 2, status: 'accepted', totalAmount: 300000 },
+    ]), /Thanh toán trực tiếp cho thợ/);
   });
 });
