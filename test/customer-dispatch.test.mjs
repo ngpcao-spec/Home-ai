@@ -51,3 +51,28 @@ it('does not treat an accepted offer alone or a provider id on an offered missio
   assert.notEqual(getCustomerDispatchState({ mission, offers: [{ status: 'accepted' }] }).phase, 'accepted');
   assert.equal(createAssignedCustomerTechnician({ id: 'p1' }, mission), null);
 });
+
+it('shows C08 cancellation only while the real mission is searching or offered', () => {
+  for (const status of ['searching', 'offered']) {
+    assert.match(renderCustomerDispatchState({ mission: { status }, offers: [] }), /data-cancel-provider-search[^>]*>Hủy tìm thợ/);
+  }
+  for (const status of ['requested', 'accepted', 'cancelled']) {
+    assert.doesNotMatch(renderCustomerDispatchState({ mission: { status }, offers: [] }), /data-cancel-provider-search/);
+  }
+});
+
+it('reloads authoritative accepted state when cancellation loses to provider acceptance', async () => {
+  const mission = { id: 'm1', status: 'offered', providerId: null, version: 2 };
+  const accepted = { ...mission, status: 'accepted', providerId: 'p1', version: 3 };
+  const sync = createCustomerMissionSynchronizer({
+    missionRepository: {
+      cancelCurrent: async () => { const error = new Error('Mission changed concurrently.'); error.code = '40001'; throw error; },
+      getById: async () => accepted, getQuoteHistory: async () => [], getOffers: async () => [{ id: 'o1', status: 'accepted' }],
+    },
+    providerRepository: { getById: async () => ({ id: 'p1', name: 'Provider Test' }) },
+  });
+  const result = await sync.cancelSearch(mission);
+  assert.equal(result.cancelled, false);
+  assert.equal(result.snapshot.mission.status, 'accepted');
+  assert.equal(result.snapshot.provider.id, 'p1');
+});

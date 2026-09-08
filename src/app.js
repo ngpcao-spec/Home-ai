@@ -812,6 +812,34 @@ export function initialiseHomePage(
   root.querySelector('[data-map-search]').addEventListener('click', (event) => {
     const profilePanel = root.querySelector('[data-provider-profile]');
     const technicianSheet = root.querySelector('[data-technician-sheet]');
+    const cancelSearchButton = event.target.closest?.('[data-cancel-provider-search]');
+    if (cancelSearchButton) {
+      if (!globalThis.confirm('Bạn có chắc chắn muốn hủy tìm thợ không?')) return;
+      const statusNode = technicianSheet.querySelector('[data-cancel-search-status]');
+      cancelSearchButton.disabled = true;
+      if (statusNode) statusNode.textContent = 'Đang hủy tìm thợ...';
+      void missionSynchronizer.cancelSearch(remoteMissionState?.mission).then((result) => {
+        if (result.cancelled) {
+          stopMissionPolling?.();
+          stopMissionRealtime?.();
+          remoteMissionState = null;
+          persistedMission = null;
+          searchGeneration += 1;
+          root.querySelector('[data-map-search]').hidden = true;
+          openHomeView();
+          root.querySelector('[data-diagnosis-input]')?.focus();
+          return;
+        }
+        applyRemoteMissionState(result.snapshot);
+        const actualStatus = result.snapshot?.mission?.status ?? 'inconnu';
+        const actualStatusNode = technicianSheet.querySelector('[data-cancel-search-status]');
+        if (actualStatusNode) actualStatusNode.textContent = `Không thể hủy: trạng thái hiện tại là ${actualStatus}.`;
+      }).catch(() => {
+        cancelSearchButton.disabled = false;
+        if (statusNode) statusNode.textContent = 'Không thể hủy tìm thợ. Vui lòng thử lại.';
+      });
+      return;
+    }
     if (event.target.closest?.('[data-view-profile]')) {
       const technicianId = event.target.closest('[data-view-profile]').dataset.viewProfile;
       const technician = matchedTechnicians.find(({ id }) => id === technicianId) ?? selectedTechnician;

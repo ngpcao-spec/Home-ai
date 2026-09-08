@@ -15,5 +15,8 @@ export function getCustomerDispatchState({ mission, offers = [] }) {
 
 export function renderCustomerDispatchState(snapshot) {
   const { phase, title } = getCustomerDispatchState(snapshot);
-  return `<article class="map-bottom-sheet" data-dispatch-state="${phase}" role="status"><h2>${title}</h2></article>`;
+  const canCancelSearch = ['searching', 'offered'].includes(snapshot.mission.status);
+  return `<article class="map-bottom-sheet" data-dispatch-state="${phase}" role="status"><h2>${title}</h2>${canCancelSearch
+    ? '<div class="sheet-actions"><button type="button" class="secondary-button" data-cancel-provider-search>Hủy tìm thợ</button></div><p data-cancel-search-status role="status"></p>'
+    : ''}</article>`;
 }

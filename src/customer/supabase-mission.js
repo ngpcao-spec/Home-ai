@@ -226,6 +226,25 @@ export function createCustomerMissionSynchronizer({
     return load(missionId);
   };
 
+  const cancelSearch = async (mission) => {
+    if (!mission?.id || !['searching', 'offered'].includes(mission.status)) {
+      return Object.freeze({ cancelled: false, snapshot: mission?.id ? await load(mission.id) : null });
+    }
+    try {
+      const cancelledMission = await missionRepository.cancelCurrent(mission);
+      return Object.freeze({ cancelled: true, snapshot: await load(cancelledMission.id) });
+    } catch (error) {
+      // An offer may have been accepted while the customer confirmed cancellation.
+      // Always return the authoritative state rather than pretending locally that
+      // the cancellation succeeded.
+      const snapshot = await load(mission.id);
+      if (!['searching', 'offered'].includes(snapshot.mission.status)) {
+        return Object.freeze({ cancelled: false, snapshot });
+      }
+      throw error;
+    }
+  };
+
   const poll = (missionId, onState, onError) => {
     let stopped = false;
     let timer;
@@ -263,5 +282,5 @@ export function createCustomerMissionSynchronizer({
     return () => { active = false; unsubscribe?.(); };
   };
 
-  return Object.freeze({ load, create, createOrResume, decideQuote, completeExternalPayment, createReview, poll, subscribe });
+  return Object.freeze({ load, create, createOrResume, decideQuote, completeExternalPayment, createReview, cancelSearch, poll, subscribe });
 }
