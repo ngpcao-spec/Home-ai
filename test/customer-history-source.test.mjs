@@ -38,4 +38,12 @@ describe('C19 avec une session Supabase', () => {
     assert.match(app, /connection\.source !== 'supabase'.*throw/s);
     assert.match(app, /Impossible|Không thể tải lịch sử Supabase/);
   });
+
+  it('identifie une session expiree avant toute requete et redemande Google', async () => {
+    const app = await readFile(new URL('../src/app.js', import.meta.url), 'utf8');
+    assert.match(app, /connection\.reason === 'no-session'/);
+    assert.match(app, /SUPABASE_SESSION_REQUIRED/);
+    assert.match(app, /Phiên đăng nhập đã hết hạn/);
+    assert.doesNotMatch(app.match(/SUPABASE_SESSION_REQUIRED[\s\S]*?return;/)?.[0] ?? '', /mockMissionHistory/);
+  });
 });

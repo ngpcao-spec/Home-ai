@@ -554,11 +554,21 @@ export function initialiseHomePage(
         ? '<p role="status">Đang tải lịch sử Supabase…</p>'
         : createMissionHistoryMarkup(getMissionHistory());
       if (expectsSupabase) void ensureSupabaseMissionBackend().then((connection) => {
-        if (connection.source !== 'supabase') throw connection.error ?? new Error('Supabase history unavailable');
+        if (connection.source !== 'supabase') {
+          const error = connection.error ?? new Error(connection.reason ?? 'Supabase history unavailable');
+          error.code = connection.reason === 'no-session' ? 'SUPABASE_SESSION_REQUIRED' : 'SUPABASE_HISTORY_UNAVAILABLE';
+          throw error;
+        }
         return loadRemoteMissionHistory();
       }).then(() => {
         if (!historyView.hidden) historyView.innerHTML = createMissionHistoryMarkup(getMissionHistory());
-      }).catch(() => {
+      }).catch((error) => {
+        if (error?.code === 'SUPABASE_SESSION_REQUIRED') {
+          appShell.hidden = true;
+          startupFlow.hidden = false;
+          renderLogin({ error: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại bằng Google.' });
+          return;
+        }
         if (!historyView.hidden) historyView.innerHTML = '<p role="alert">Không thể tải lịch sử Supabase. Vui lòng thử lại.</p>';
       });
     }
