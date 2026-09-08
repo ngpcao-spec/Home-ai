@@ -488,6 +488,19 @@ export function initialiseHomePage(
       });
     }).filter(Boolean);
   };
+  const ensureSupabaseMissionBackend = async () => {
+    missionConnection ??= customerMissionConnector({ verifiedUserId: verifiedCustomerUserId });
+    const connection = await missionConnection;
+    if (connection.source !== 'supabase') {
+      if (verifiedCustomerUserId) missionConnection = undefined;
+      return connection;
+    }
+    supabaseMissionMode = true;
+    missionRepository = connection.repository;
+    providerRepository = connection.providerRepository;
+    missionSynchronizer ??= createCustomerMissionSynchronizer({ missionRepository, providerRepository, scheduleTask });
+    return connection;
+  };
   const renderCustomerProfile = () => {
     root.querySelector('[data-app-view="profile"]').innerHTML = createCustomerProfileMarkup(customerProfile, {
       addressFormOpen,
@@ -528,11 +541,17 @@ export function initialiseHomePage(
   const showAppView = (view, missionId) => {
     if (view === 'history') {
       const historyView = root.querySelector('[data-app-view="history"]');
-      historyView.innerHTML = createMissionHistoryMarkup(getMissionHistory());
-      if (supabaseMissionMode) void loadRemoteMissionHistory().then(() => {
+      const expectsSupabase = supabaseMissionMode || Boolean(verifiedCustomerUserId);
+      historyView.innerHTML = expectsSupabase
+        ? '<p role="status">Đang tải lịch sử Supabase…</p>'
+        : createMissionHistoryMarkup(getMissionHistory());
+      if (expectsSupabase) void ensureSupabaseMissionBackend().then((connection) => {
+        if (connection.source !== 'supabase') throw connection.error ?? new Error('Supabase history unavailable');
+        return loadRemoteMissionHistory();
+      }).then(() => {
         if (!historyView.hidden) historyView.innerHTML = createMissionHistoryMarkup(getMissionHistory());
       }).catch(() => {
-        if (!historyView.hidden) historyView.insertAdjacentHTML('beforeend', '<p role="status">Không thể tải lịch sử Supabase.</p>');
+        if (!historyView.hidden) historyView.innerHTML = '<p role="alert">Không thể tải lịch sử Supabase. Vui lòng thử lại.</p>';
       });
     }
     if (view === 'profile') {
@@ -1075,14 +1094,7 @@ export function initialiseHomePage(
   };
   restoreActiveMission = async () => {
     try {
-      missionConnection ??= customerMissionConnector({ verifiedUserId: verifiedCustomerUserId });
-      const connection = await missionConnection;
-      if (connection.source === 'supabase') {
-        supabaseMissionMode = true;
-        missionRepository = connection.repository;
-        providerRepository = connection.providerRepository;
-        missionSynchronizer ??= createCustomerMissionSynchronizer({ missionRepository, providerRepository, scheduleTask });
-      }
+      const connection = await ensureSupabaseMissionBackend();
       const restored = await restoreActiveCustomerMission(connection, { scheduleTask });
       if (!restored) return false;
       missionSynchronizer = restored.synchronizer;
