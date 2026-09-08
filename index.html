@@ -10,6 +10,33 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      globalThis.__HOME_AI_CLIENT_CACHE_READY__ = (async () => {
+        if (!('serviceWorker' in navigator)) return;
+        const buildId = '__HOME_AI_BUILD_ID__';
+        const base = new URL('./', location.href);
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        const legacy = registrations.filter(registration => {
+          const worker = registration.active || registration.waiting || registration.installing;
+          return registration.scope === base.href && worker && new URL(worker.scriptURL).pathname.endsWith('/provider-sw.js');
+        });
+        const controlled = Boolean(navigator.serviceWorker.controller
+          && new URL(navigator.serviceWorker.controller.scriptURL).pathname.endsWith('/provider-sw.js'));
+        await Promise.all(legacy.map(registration => registration.unregister()));
+        if ('caches' in globalThis) {
+          const keys = await caches.keys();
+          await Promise.all(keys.filter(key => key.startsWith('home-ai-provider-')).map(key => caches.delete(key)));
+        }
+        const reloadKey = `home-ai-client-cache-reset-${buildId}`;
+        if (controlled && sessionStorage.getItem(reloadKey) !== 'done') {
+          sessionStorage.setItem(reloadKey, 'done');
+          const cleanUrl = new URL('./', location.href);
+          cleanUrl.searchParams.set('v', buildId);
+          location.replace(cleanUrl.href);
+          await new Promise(() => {});
+        }
+      })().catch(() => {});
+    </script>
     <script src="./src/runtime-config.js"></script>
     <script type="importmap">
       {"imports":{"@supabase/supabase-js":"https://esm.sh/@supabase/supabase-js@2.112.4"}}

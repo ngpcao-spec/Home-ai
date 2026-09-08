@@ -4,7 +4,7 @@ await rm('dist', { force: true, recursive: true });
 await mkdir('dist/src', { recursive: true });
 await cp('index.html', 'dist/index.html');
 await cp('provider.html', 'dist/provider.html');
-await cp('provider-manifest.webmanifest', 'dist/provider-manifest.webmanifest');
+await cp('provider', 'dist/provider', { recursive: true });
 await cp('provider-icon.svg', 'dist/provider-icon.svg');
 await cp('src', 'dist/src', { recursive: true });
 // Amazon Location browser API keys are public identifiers, but must be restricted
@@ -29,14 +29,18 @@ await writeFile('dist/src/runtime-config.js', `globalThis.__HOME_AI_CONFIG__ = O
   BUILD_ID: ${JSON.stringify(buildId)},
 });\n`);
 
-const serviceWorkerSource = await readFile('provider-sw.js', 'utf8');
-await writeFile('dist/provider-sw.js', serviceWorkerSource.replace('__HOME_AI_BUILD_ID__', buildId));
-for (const file of ['index.html', 'provider.html']) {
+await cp('provider-sw.js', 'dist/provider-sw.js');
+const serviceWorkerSource = await readFile('provider/provider-sw.js', 'utf8');
+await writeFile('dist/provider/provider-sw.js', serviceWorkerSource.replace('__HOME_AI_BUILD_ID__', buildId));
+for (const file of ['index.html', 'provider/index.html']) {
   const path = `dist/${file}`;
   const html = await readFile(path, 'utf8');
-  const entry = file === 'index.html' ? './src/app.js' : './src/provider/provider-app.js';
+  const isClient = file === 'index.html';
+  const entry = isClient ? './src/app.js' : '../src/provider/provider-app.js';
+  const runtimeConfig = isClient ? './src/runtime-config.js' : '../src/runtime-config.js';
   await writeFile(path, html
-    .replace('./src/runtime-config.js', `./src/runtime-config.js?v=${buildId}`)
+    .replace('__HOME_AI_BUILD_ID__', buildId)
+    .replace(runtimeConfig, `${runtimeConfig}?v=${buildId}`)
     .replace(entry, `${entry}?v=${buildId}`));
 }
 
