@@ -1,1 +1,47 @@
-const CACHE='home-ai-provider-v5';const ASSETS=['./provider.html','./provider-manifest.webmanifest','./provider-icon.svg','./src/provider/provider-app.css','./src/provider/provider-navigation.css','./src/provider/provider-quote.css','./src/provider/provider-dispatch.css','./src/location/location-permission.css','./src/provider/provider-app.js','./src/provider/provider-dispatch.js','./src/provider/provider-repository.js','./src/provider/provider-navigation.js','./src/provider/provider-auth.js','./src/provider/provider-location-heartbeat.js','./src/provider/mock-provider-data.js','./src/location/location-permission.js','./src/map/map-provider.js','./src/routing/routing-provider.js','./src/location/client-location.js'];self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS))));self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))));self.addEventListener('fetch',e=>{if(e.request.method==='GET')e.respondWith(fetch(e.request).then(r=>{const copy=r.clone();caches.open(CACHE).then(c=>c.put(e.request,copy));return r;}).catch(()=>caches.match(e.request)));});
+const BUILD_ID = '__HOME_AI_BUILD_ID__';
+const CACHE_PREFIX = 'home-ai-provider-';
+const CACHE = `${CACHE_PREFIX}v6-${BUILD_ID}`;
+const OFFLINE_ASSETS = new Set([
+  './provider.html', './provider-manifest.webmanifest', './provider-icon.svg',
+  './src/provider/provider-app.css', './src/provider/provider-auth.css',
+  './src/provider/provider-navigation.css', './src/provider/provider-quote.css',
+  './src/provider/provider-dispatch.css', './src/location/location-permission.css',
+  './src/provider/provider-app.js', './src/provider/provider-dispatch.js',
+  './src/provider/provider-repository.js', './src/provider/provider-navigation.js',
+  './src/provider/provider-auth.js', './src/provider/provider-location-heartbeat.js',
+  './src/provider/mock-provider-data.js', './src/location/location-permission.js',
+  './src/map/map-provider.js', './src/routing/routing-provider.js',
+  './src/location/client-location.js',
+]);
+const offlinePaths = new Set([...OFFLINE_ASSETS].map(asset => new URL(asset, self.registration.scope).pathname));
+
+self.addEventListener('install', event => {
+  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(OFFLINE_ASSETS)).then(() => self.skipWaiting()));
+});
+self.addEventListener('activate', event => {
+  event.waitUntil(caches.keys()
+    .then(keys => Promise.all(keys.filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE).map(key => caches.delete(key))))
+    .then(() => self.clients.claim()));
+});
+
+async function networkFirst(request) {
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const cache = await caches.open(CACHE);
+      await cache.put(request, response.clone());
+    }
+    return response;
+  } catch (error) {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    throw error;
+  }
+}
+
+self.addEventListener('fetch', event => {
+  if (event.request.method !== 'GET') return;
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin || !offlinePaths.has(url.pathname)) return;
+  event.respondWith(networkFirst(event.request));
+});

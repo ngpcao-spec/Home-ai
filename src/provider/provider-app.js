@@ -146,4 +146,7 @@ export async function bootstrapProviderApp(root, initialise=initialiseProviderAp
   }
 }
 
-if(typeof document!=='undefined') { void bootstrapProviderApp(document.querySelector('#provider-root')); if('serviceWorker' in navigator) navigator.serviceWorker.register('./provider-sw.js').catch(()=>{}); }
+if(typeof document!=='undefined') {
+  void bootstrapProviderApp(document.querySelector('#provider-root'));
+  if('serviceWorker' in navigator) navigator.serviceWorker.register('./provider-sw.js',{updateViaCache:'none'}).catch(()=>{});
+}
