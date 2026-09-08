@@ -120,6 +120,7 @@ describe('HOME AI C04 marketplace home page', () => {
       querySelectorAll(selector) {
         if (selector === '[data-new-request-only]') return newRequestSections;
         if (selector === '[data-prompt]') return [prompt];
+        if (selector.includes('[data-request-form] button')) return [];
         throw new Error(`Unexpected selector ${selector}`);
       },
     };

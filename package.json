@@ -15,5 +15,8 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
   }
 }

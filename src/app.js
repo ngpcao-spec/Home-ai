@@ -168,6 +168,19 @@ export function showRestoredCustomerMission(root, status) {
 }
 
 export function resetCustomerRequestView(root) {
+  // Restore ancestor visibility from normal startup without replacing listeners.
+  if (root.ownerDocument) {
+    const template = root.ownerDocument.createElement('template');
+    template.innerHTML = createHomeAiMarkup();
+    const home = root.querySelector('[data-app-view="home"]');
+    const fresh = template.content.querySelector('[data-app-view="home"]');
+    for (const selector of ['.hero', '[data-new-request-flow]', '.services', '.confidence-card']) {
+      const node = home.querySelector(selector);
+      node.hidden = fresh.querySelector(selector).hidden;
+      node.style.removeProperty('display');
+      node.style.removeProperty('visibility');
+    }
+  }
   root.querySelector('[data-new-request-flow]').hidden = false;
   root.querySelectorAll('[data-new-request-only]').forEach((section) => { section.hidden = false; });
   for (const selector of [
@@ -178,7 +191,11 @@ export function resetCustomerRequestView(root) {
     if (node) node.hidden = true;
   }
   root.querySelector('[data-request-form]')?.reset();
-  root.querySelector('[data-booking-form]')?.reset();
+  const booking = root.querySelector('[data-booking-form]');
+  const address = booking?.elements?.address?.value;
+  booking?.reset();
+  if (address !== undefined) booking.elements.address.value = address;
+  root.querySelectorAll('[data-request-form] button, [data-find-technician], [data-booking-form] button').forEach(button => { button.disabled = false; });
   root.querySelectorAll('[data-prompt]').forEach((button) => {
     button.classList.remove('is-selected');
     button.setAttribute('aria-pressed', 'false');
@@ -852,6 +869,7 @@ export function initialiseHomePage(
           stopLocationStream = undefined;
           remoteMissionState = null;
           persistedMission = null;
+          missionConnection = missionConnection.then(connection => ({ ...connection, activeMission: null }));
           searchGeneration += 1;
           selectedCategory = undefined;
           diagnosedCategory = undefined;
@@ -860,10 +878,13 @@ export function initialiseHomePage(
           matchedTechnicians = [];
           clientLocation = undefined;
           trackingRoute = undefined;
+          remoteTrackingGeneration += 1;
+          trackingRoutes.reset();
+          missionBookedAt = undefined;
           missionState = createMissionState();
           resetCustomerRequestView(root);
           openHomeView();
-          root.querySelector('#service-request')?.focus();
+          globalThis.scrollTo?.({ top: 0, behavior: 'instant' });
           return;
         }
         applyRemoteMissionState(result.snapshot);
