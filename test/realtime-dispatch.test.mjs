@@ -65,9 +65,11 @@ describe('dispatch Provider Realtime', () => {
     const alert=createProviderOfferAlert({environment,scheduleRepeat:(fn,delay)=>{repeats.push({fn,delay});return 7;},clearRepeat:id=>cleared.push(id)});
     const offer={id:'o1',status:'pending',expiresAt:new Date(Date.now()+60000).toISOString()};
     assert.equal(alert.start(offer),true);
+    assert.equal(alert.isAudioEnabled(),false);
     assert.equal(alert.start(offer),false);
     assert.equal(repeats.length,1);
     await alert.unlock();
+    assert.equal(alert.isAudioEnabled(),true);
     repeats[0].fn();
     assert.ok(oscillatorStarts>=2);
     assert.equal(alert.stop('o1'),true);

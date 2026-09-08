@@ -68,6 +68,10 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   const page=root.ownerDocument??globalThis.document;
   const offerAlert=createProviderOfferAlert();
   const offerLayer=createIncomingOfferLayer(root);
+  const updateAudioControl=()=>{
+    const control=(offerLayer?.host??root).querySelector('[data-enable-offer-audio]');
+    if(control)control.hidden=offerAlert.isAudioEnabled();
+  };
   const stopDiagnostics=mountOfferDiagnostics(root,()=>readOfferDiagnostics({document:page,source:repository.source,busy,offers:state.offers,buildId:globalThis.__HOME_AI_CONFIG__?.BUILD_ID}));
   const syncOfferLayer=()=>{
     const offer=repository.source==='supabase'&&!page?.hidden&&!busy
@@ -75,6 +79,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
     priorityOfferId=offer?.id??null;
     offerLayer?.sync(offer);
     if(offer)offerAlert.start(offer);else offerAlert.stop();
+    updateAudioControl();
     return offer;
   };
   const renderDashboard=async()=>{
@@ -135,8 +140,8 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   heartbeat.sync();
   root.addEventListener('input',()=>{if(supplementParent)updateSupplementForm(root,supplementParent,canSendSupplement(),busy);});
   const handleProviderClick=async e=>{
-    if(e.target.closest('[data-enable-offer-audio]')){await offerAlert.unlock();return;}
-    if(!e.target.closest('[data-accept]')&&!e.target.closest('[data-decline]'))void offerAlert.unlock();
+    if(e.target.closest('[data-enable-offer-audio]')){await offerAlert.unlock();updateAudioControl();return;}
+    if(!e.target.closest('[data-accept]')&&!e.target.closest('[data-decline]'))void offerAlert.unlock().then(updateAudioControl);
     const view=e.target.closest('[data-provider-view]');
     if(view){currentView=view.dataset.providerView;selectedMissionId=null;if(currentView==='missions'||currentView==='income')await loadHistory();else await draw();return;}
     const mission=e.target.closest('[data-history-mission]');if(mission){selectedMissionId=mission.dataset.historyMission;await draw();return;}

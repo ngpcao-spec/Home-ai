@@ -7,15 +7,26 @@ export function renderIncomingOffer(offer, now = Date.now()) {
   const safe = (value = '') => String(value).replace(/[&<>"']/g, (char) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[char]));
+  const service = safe(offer.serviceLabel ?? serviceLabels[offer.serviceCategory] ?? offer.serviceCategory);
   return `<section class="dispatch-offer" data-dispatch-offer-id="${safe(offer.id)}" role="dialog" aria-modal="true" aria-labelledby="dispatch-title">
-    <div class="dispatch-pulse">HOME AI</div><p>NHIỆM VỤ MỚI</p>
-    <h1 id="dispatch-title">${safe(offer.serviceLabel ?? serviceLabels[offer.serviceCategory] ?? offer.serviceCategory)}</h1>
-    <strong class="dispatch-countdown" data-dispatch-countdown data-expires-at="${safe(offer.expiresAt)}">${minutes}:${seconds}</strong>
-    <div class="dispatch-facts"><span>${Number(offer.distanceKm).toFixed(1)} km</span><span>ETA ${offer.etaMinutes} phút</span></div>
-    <h2>${safe(offer.approximateAddress)}</h2><p class="dispatch-request">${safe(offer.request)}</p>
-    ${offer.indicativeAmount != null ? `<div class="dispatch-price"><small>GIÁ THAM KHẢO</small><strong>${new Intl.NumberFormat('vi-VN').format(offer.indicativeAmount)}${offer.currency === 'VND' || !offer.currency ? 'đ' : ` ${safe(offer.currency)}`}</strong></div>` : ''}
-    <button class="dispatch-audio" data-enable-offer-audio>🔊 Chạm để bật âm thanh</button>
-    <div class="dispatch-actions"><button data-decline="${safe(offer.id)}">TỪ CHỐI</button><button data-accept="${safe(offer.id)}">NHẬN VIỆC</button></div>
+    <header class="dispatch-hero">
+      <div class="dispatch-beacon" aria-hidden="true"><i></i><i></i><i></i><div class="dispatch-pulse"><svg viewBox="0 0 48 48"><path d="M24 6a3 3 0 0 1 3 3v1c7 1 11 7 11 15v7l4 5H6l4-5v-7c0-8 4-14 11-15V9a3 3 0 0 1 3-3Z"/><path d="M18 40a6 6 0 0 0 12 0Z"/></svg></div></div>
+      <h1 id="dispatch-title">Có nhiệm vụ mới!</h1>
+      <p class="dispatch-subtitle">${service} · ${safe(offer.approximateAddress)}</p>
+    </header>
+    <div class="dispatch-panel">
+      <article class="dispatch-card">
+        <div class="dispatch-service"><span class="dispatch-service-icon" aria-hidden="true">${offer.serviceCategory==='electricity'?'ϟ':'⚒'}</span><div><h2>${service}</h2><p class="dispatch-request">${safe(offer.request)}</p></div></div>
+        <div class="dispatch-location"><span aria-hidden="true">⌖</span><div><small>Khu vực hỗ trợ</small><strong>${safe(offer.approximateAddress)}</strong></div></div>
+        <div class="dispatch-facts"><div><small>Khoảng cách</small><strong>${offer.distanceKm!=null?Number(offer.distanceKm).toFixed(1)+' km':'Đang cập nhật'}</strong></div><div><small>Thời gian đến</small><strong>${offer.etaMinutes!=null?'ETA '+safe(offer.etaMinutes)+' phút':'Đang cập nhật'}</strong></div></div>
+        ${offer.indicativeAmount != null ? `<div class="dispatch-price"><small>Giá tham khảo</small><strong>${new Intl.NumberFormat('vi-VN').format(offer.indicativeAmount)}${offer.currency === 'VND' || !offer.currency ? 'đ' : ` ${safe(offer.currency)}`}</strong></div>` : ''}
+      </article>
+      <footer class="dispatch-footer">
+        <div class="dispatch-time"><strong class="dispatch-countdown" data-dispatch-countdown data-expires-at="${safe(offer.expiresAt)}">${minutes}:${seconds}</strong><span>Thời gian chấp nhận</span></div>
+        <div class="dispatch-actions"><button data-decline="${safe(offer.id)}"><span aria-hidden="true">×</span> TỪ CHỐI</button><button data-accept="${safe(offer.id)}"><span aria-hidden="true">✓</span> NHẬN VIỆC</button></div>
+        <button class="dispatch-audio" data-enable-offer-audio>♫ Chạm để bật âm thanh</button>
+      </footer>
+    </div>
   </section>`;
 }
 
@@ -90,7 +101,7 @@ export function createProviderOfferAlert({
       return audioContext?.state==='running';
     } catch { return false; }
   };
-  return Object.freeze({start,stop,unlock,getActiveOfferId:()=>activeOfferId});
+  return Object.freeze({start,stop,unlock,getActiveOfferId:()=>activeOfferId,isAudioEnabled:()=>audioContext?.state==='running'});
 }
 
 export function notifyIncomingOffer(environment = globalThis) {
