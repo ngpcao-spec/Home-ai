@@ -67,7 +67,8 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   const renderDashboard=async()=>{
     if(currentView==='missions'||currentView==='income'){
       const content=currentView==='missions'?renderProviderMissionHistory(history,{loading:historyLoading,error:historyError,selectedMissionId}):renderProviderIncome(history,{loading:historyLoading,error:historyError});
-      root.innerHTML=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0]??'P')}</button></header>${content}${renderProviderNav(currentView)}`;
+      const priorityOffer=state.offers?.find(({id})=>id===priorityOfferId);
+      root.innerHTML=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0]??'P')}</button></header>${content}${renderProviderNav(currentView)}${renderIncomingOffer(priorityOffer)}`;
       return;
     }
     const priorityOffer=state.offers?.find(({id})=>id===priorityOfferId);root.innerHTML=renderProviderDashboard(state,{source:repository.source,busy,message,navigation,diagnosing,supplementParent})+renderIncomingOffer(priorityOffer);const map=root.querySelector('[data-provider-map]');if(navigation&&map)await renderProviderNavigation(map,navigation,state.provider).catch(()=>{});
@@ -100,8 +101,16 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   const loadNavigation=async()=>{if(!['accepted','travelling'].includes(state.assignment?.status))return;try{navigation=await navigationLoader(state.assignment,{source:repository.source});}catch{message='Không thể tải lộ trình. GPS vẫn sẵn sàng để thử lại.';}};
   await loadNavigation(); await draw();
   const page=root.ownerDocument??globalThis.document;
-  const heartbeat=heartbeatFactory({repository,getState:()=>state,isPageActive:()=>!page?.hidden,onState:async next=>{state=next;message='Vị trí GPS đã được cập nhật.';await draw();},onError:async()=>{message='Không thể cập nhật GPS. Hãy cho phép truy cập vị trí.';await draw();}});
-  const dispatch=createProviderDispatchController({repository,getState:()=>state,isPageActive:()=>!page?.hidden,onState:async next=>{state=next;priorityOfferId=next.offers?.[0]?.id??null;if(currentView==='missions'||currentView==='income')await loadHistory();else await draw();},onOffer:async offer=>{priorityOfferId=offer.id;notifyIncomingOffer();await draw();},onError:async()=>{message='Kết nối thời gian thực bị gián đoạn. HOME AI đang thử lại.';await draw();}});
+  const heartbeat=heartbeatFactory({repository,getState:()=>state,isPageActive:()=>!page?.hidden,onState:async next=>{state=next;message='Vị trí GPS đã được cập nhật.';if(currentView==='home')await draw();},onError:async()=>{message='Không thể cập nhật GPS. Hãy cho phép truy cập vị trí.';if(currentView==='home')await draw();}});
+  const dispatch=createProviderDispatchController({repository,getState:()=>state,isPageActive:()=>!page?.hidden,onState:async next=>{
+    const previousAssignment=`${state.assignment?.id??''}:${state.assignment?.status??''}`;
+    const previousOffers=(state.offers??[]).map(({id,status})=>`${id}:${status}`).join('|');
+    state=next; priorityOfferId=next.offers?.[0]?.id??null;
+    const assignmentChanged=previousAssignment!==`${next.assignment?.id??''}:${next.assignment?.status??''}`;
+    const offersChanged=previousOffers!==(next.offers??[]).map(({id,status})=>`${id}:${status}`).join('|');
+    if((currentView==='missions'||currentView==='income')&&assignmentChanged)await loadHistory();
+    else if(currentView==='home'||offersChanged)await draw();
+  },onOffer:async offer=>{priorityOfferId=offer.id;notifyIncomingOffer();await draw();},onError:async()=>{message='Kết nối thời gian thực bị gián đoạn. HOME AI đang thử lại.';if(currentView==='home')await draw();}});
   dispatch.start();
   const countdownTimer=globalThis.setInterval?.(()=>updateDispatchCountdown(root),1000);
   const syncHeartbeat=()=>heartbeat.sync();

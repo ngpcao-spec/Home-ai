@@ -43,6 +43,18 @@ describe('dispatch Provider Realtime', () => {
     controller.stop();
   });
 
+  it('n invalide pas le DOM lorsque le polling retourne les mêmes données métier', async () => {
+    const state={provider:{id:'p1'},status:{online:true,available:true},offers:[],assignment:null};
+    let renders=0;
+    const repository={source:'supabase',subscribeDispatch(){return()=>{};},async load(){return structuredClone(state);}};
+    const controller=createProviderDispatchController({repository,getState:()=>state,onState:()=>{renders+=1;},scheduleTask:()=>1,clearTask(){}});
+    controller.start();
+    await controller.refresh();
+    await controller.refresh();
+    assert.equal(renders,0);
+    controller.stop();
+  });
+
   it('ne charge pas le dashboard en polling quand la page est inactive', async () => {
     let loads=0; const tasks=[];
     const repository={source:'supabase',subscribeDispatch(){return()=>{};},async load(){loads+=1;return{offers:[]};}};

@@ -49,9 +49,10 @@ export function createProviderDispatchController({
   const performRefresh = async () => {
     try {
       const next = await repository.load();
+      const changed = JSON.stringify(next) !== JSON.stringify(getState());
       const incoming = (next.offers ?? []).find(({ id }) => !knownOfferIds.has(id));
       knownOfferIds = new Set((next.offers ?? []).map(({ id }) => id));
-      if (!stopped) { onState(next); if (incoming) onOffer(incoming); }
+      if (!stopped) { if (changed) onState(next); if (incoming) onOffer(incoming); }
     } catch (error) { if (!stopped) onError(error); }
   };
   const refresh = () => {

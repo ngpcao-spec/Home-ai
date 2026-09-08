@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { describe, it } from 'node:test';
 import { calculateProviderIncome, prepareProviderHistory, renderProviderIncome, renderProviderMissionHistory } from '../src/provider/provider-history.js';
 import { createProgressiveProviderAppRepository } from '../src/provider/provider-repository.js';
+import { initialiseProviderApp } from '../src/provider/provider-app.js';
 
 const completed = {
   id: 'e2e-mission', providerId: 'provider-nha-trang', clientId: 'customer-1', status: 'completed',
@@ -69,5 +70,21 @@ describe('Provider history and income', () => {
     assert.match(css, /@media\(max-width:380px\)/);
     assert.match(app, /data-provider-view="missions"/);
     assert.match(app, /data-provider-view="income"/);
+  });
+
+  it('does not rebuild history for an unchanged GPS heartbeat', async () => {
+    const listeners = {}; let html=''; let renders=0; let heartbeatCallbacks;
+    const state={provider:{id:'provider-nha-trang',name:'Provider Test Nha Trang'},status:{online:true,available:true},offers:[],assignment:null};
+    const root={get innerHTML(){return html;},set innerHTML(value){html=value;renders+=1;},querySelector(){return null;},addEventListener(name,callback){listeners[name]=callback;}};
+    const repository={source:'supabase',load:async()=>structuredClone(state),getHistory:async()=>[completed],updateLocation:async()=>structuredClone(state),subscribeDispatch(){return()=>{};}};
+    const app=await initialiseProviderApp(root,async()=>repository,async()=>null,{enabled:false,getSession:async()=>null},callbacks=>{heartbeatCallbacks=callbacks;return{sync(){},stop(){}};},{getState:async()=>'granted',request:async()=>({latitude:12,longitude:109})});
+    try{
+      await listeners.click({target:{closest:selector=>selector==='[data-provider-view]'?{dataset:{providerView:'missions'}}:null}});
+      const stableRenders=renders;
+      await heartbeatCallbacks.onState(structuredClone(state));
+      await heartbeatCallbacks.onError(new Error('GPS unavailable'));
+      assert.equal(renders,stableRenders);
+      assert.match(html,/Lịch sử công việc/);
+    }finally{app.stop();}
   });
 });
