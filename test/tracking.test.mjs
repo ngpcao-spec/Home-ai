@@ -7,7 +7,7 @@ import {
 } from '../src/tracking/location-stream.js';
 import { createTrackingRouteSession } from '../src/tracking/route-session.js';
 import { createInterventionQuote } from '../src/mission/intervention-quote.js';
-import { createCompletionSummaryMarkup, createPaidExternalMarkup, createProviderReviewMarkup } from '../src/mission/completion-summary.js';
+import { createCompletionSummaryMarkup, createPaidExternalMarkup, createProviderReviewMarkup, getCompletedMissionPricePresentation } from '../src/mission/completion-summary.js';
 import {
   createInterventionQuoteMarkup,
   createInterventionProgressMarkup,
@@ -187,6 +187,18 @@ describe('suivi C13', () => {
     ];
     const markup = createCompletionSummaryMarkup(completion, history);
     ['Sửa chữa hoàn tất', 'Kỹ thuật viên đã hoàn thành công việc.', 'Thay dây điện nguồn', 'Giá ban đầu đã chấp nhận', '290.000đ', 'Chi phí phát sinh đã chấp nhận', '+100.000đ', 'TỔNG THANH TOÁN', '390.000đ', 'Bảo hành', '30 ngày', 'Tiếp tục thanh toán', 'v1', 'v2'].forEach((text) => assert.match(markup, new RegExp(text.replace('+', '\\+'))));
+  });
+
+  it('utilise le total serveur du dernier devis accepté pour une mission terminée', () => {
+    const history = [
+      { id: 'quote-v1', version: 1, status: 'accepted', totalAmount: 200000 },
+      { id: 'quote-v2', version: 2, status: 'accepted', totalAmount: 300000 },
+    ];
+
+    assert.deepEqual(getCompletedMissionPricePresentation(history), {
+      label: 'Tổng tiền cuối cùng',
+      amount: 300000,
+    });
   });
 
   it('affiche brièvement le paiement externe puis l’évaluation sans PSP', () => {

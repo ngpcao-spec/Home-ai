@@ -6,6 +6,21 @@ const escapeHtml = (value) => String(value)
   .replaceAll('"', '&quot;')
   .replaceAll("'", '&#039;');
 
+export function getLatestAcceptedQuoteAmount(quoteHistory = []) {
+  const latestAccepted = quoteHistory.reduce((latest, quote) => {
+    if (quote.status !== 'accepted') return latest;
+    return !latest || quote.version > latest.version ? quote : latest;
+  }, null);
+  return latestAccepted?.totalAmount ?? null;
+}
+
+export function getCompletedMissionPricePresentation(quoteHistory = []) {
+  return Object.freeze({
+    label: 'Tổng tiền cuối cùng',
+    amount: getLatestAcceptedQuoteAmount(quoteHistory),
+  });
+}
+
 export function createCompletionSummaryMarkup(completion, quoteHistory) {
   if (!completion) return '';
   const initial = quoteHistory[0];

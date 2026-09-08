@@ -11,7 +11,7 @@ import { createMockProviderLocationSource } from './tracking/location-stream.js'
 import { prepareSupabaseTracking } from './tracking/supabase-tracking.js';
 import { createTrackingRouteSession } from './tracking/route-session.js';
 import { createInterventionQuote } from './mission/intervention-quote.js';
-import { createCompletionSummaryMarkup, createPaidExternalMarkup, createProviderReviewMarkup } from './mission/completion-summary.js';
+import { createCompletionSummaryMarkup, createPaidExternalMarkup, createProviderReviewMarkup, getCompletedMissionPricePresentation } from './mission/completion-summary.js';
 import {
   createCompletedMissionRecord,
   createMissionDetailMarkup,
@@ -146,7 +146,7 @@ export function createMissionMarkup() {
   return `<section class="mission-tracker" data-mission-tracker hidden aria-labelledby="mission-title">
     <div class="mission-heading"><div><p>THEO DÕI NHIỆM VỤ</p><h2 id="mission-title">Hành trình của thợ</h2></div><span data-mission-status-badge></span></div>
     <article class="mission-technician"><span class="technician-avatar" data-mission-initials></span><div><h3 data-mission-technician></h3><p>⭐ <span data-mission-rating></span></p></div></article>
-    <dl class="mission-facts"><div><dt>Vấn đề</dt><dd data-mission-problem></dd></div><div><dt>Địa chỉ</dt><dd data-mission-address></dd></div><div><dt>Giá tham khảo</dt><dd data-mission-price></dd></div><div><dt>Dự kiến đến</dt><dd data-mission-arrival></dd></div></dl>
+    <dl class="mission-facts"><div><dt>Vấn đề</dt><dd data-mission-problem></dd></div><div><dt>Địa chỉ</dt><dd data-mission-address></dd></div><div><dt data-mission-price-label>Giá tham khảo</dt><dd data-mission-price></dd></div><div><dt>Dự kiến đến</dt><dd data-mission-arrival></dd></div></dl>
     <ol class="mission-timeline" data-mission-timeline>${missionStatuses.map((status, index) => `<li data-mission-step="${index}"><span>${index + 1}</span><strong>${status.label}</strong></li>`).join('')}</ol>
     <div class="mission-stage" data-mission-stage aria-live="polite"></div>
     <button class="demo-next" type="button" data-mission-next>Chuyển sang bước tiếp theo</button>
@@ -894,6 +894,13 @@ export function initialiseHomePage(
   const renderMission = () => {
     const status = renderMissionProgress();
     const stage = mission.querySelector('[data-mission-stage]');
+    const missionCompleted = ['completed', 'completed_pending_payment'].includes(missionState.missionStatus);
+    if (missionCompleted) {
+      const finalPrice = getCompletedMissionPricePresentation(missionState.quoteHistory);
+      mission.querySelector('[data-mission-price-label]').textContent = finalPrice.label;
+      mission.querySelector('[data-mission-price]').textContent = finalPrice.amount == null
+        ? 'Đang cập nhật' : `${new Intl.NumberFormat('vi-VN').format(finalPrice.amount)}đ`;
+    }
     const completedMarkup = missionState.reviewStage === 'rating'
       ? createProviderReviewMarkup(selectedTechnician, missionState)
       : missionState.paymentStatus === 'paid_external'
