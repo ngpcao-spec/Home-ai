@@ -15,7 +15,7 @@ export function renderIncomingOffer(offer, now = Date.now()) {
     <h2>${safe(offer.approximateAddress)}</h2><p class="dispatch-request">${safe(offer.request)}</p>
     ${offer.indicativeAmount != null ? `<div class="dispatch-price"><small>GIÁ THAM KHẢO</small><strong>${new Intl.NumberFormat('vi-VN').format(offer.indicativeAmount)}${offer.currency === 'VND' || !offer.currency ? 'đ' : ` ${safe(offer.currency)}`}</strong></div>` : ''}
     <button class="dispatch-audio" data-enable-offer-audio>🔊 Chạm để bật âm thanh</button>
-    <div class="dispatch-actions"><button data-decline="${safe(offer.id)}">Từ chối</button><button data-accept="${safe(offer.id)}">Nhận việc</button></div>
+    <div class="dispatch-actions"><button data-decline="${safe(offer.id)}">TỪ CHỐI</button><button data-accept="${safe(offer.id)}">NHẬN VIỆC</button></div>
   </section>`;
 }
 

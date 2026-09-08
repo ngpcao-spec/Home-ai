@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { describe, it } from 'node:test';
 import { createProviderDispatchController, createProviderOfferAlert, renderIncomingOffer, updateDispatchCountdown } from '../src/provider/provider-dispatch.js';
 import { createSupabaseOffersRepository } from '../src/supabase/repositories/offers.js';
@@ -17,8 +18,8 @@ describe('dispatch Provider Realtime', () => {
     await realtime({eventType:'INSERT'});
     assert.equal(received[0].id,'o1');
     assert.match(renderIncomingOffer(received[0],0),/02:00/);
-    assert.match(renderIncomingOffer(received[0],0),/Nhận việc/);
-    assert.match(renderIncomingOffer(received[0],0),/Từ chối/);
+    assert.match(renderIncomingOffer(received[0],0),/NHẬN VIỆC/);
+    assert.match(renderIncomingOffer(received[0],0),/TỪ CHỐI/);
     assert.match(renderIncomingOffer({...received[0],indicativeAmount:200000,currency:'VND'},0),/200\.000đ/);
     controller.stop();
   });
@@ -42,6 +43,19 @@ describe('dispatch Provider Realtime', () => {
     await tasks.shift().task();
     assert.equal(received[0].id,'poll-offer');
     controller.stop();
+  });
+
+  it('charge le CSS plein écran au bon chemin Provider et privilégie le viewport iPhone', async () => {
+    const [html,css,app]=await Promise.all([
+      readFile(new URL('../provider/index.html',import.meta.url),'utf8'),
+      readFile(new URL('../src/provider/provider-dispatch.css',import.meta.url),'utf8'),
+      readFile(new URL('../src/provider/provider-app.js',import.meta.url),'utf8'),
+    ]);
+    assert.match(html,/href="\.\.\/src\/provider\/provider-dispatch\.css" data-provider-dispatch-styles/);
+    assert.match(app,/link\.href = '\.\.\/src\/provider\/provider-dispatch\.css'/);
+    assert.match(css,/position:fixed;z-index:50;inset:0;width:100%;height:100%/);
+    assert.match(css,/@keyframes dispatch-screen-flash/);
+    assert.match(css,/min-height:64px/);
   });
 
   it('répète une seule alerte par offre et arrête immédiatement son et vibration', async () => {

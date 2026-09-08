@@ -11,7 +11,7 @@ function ensureDispatchStyles(documentRef = globalThis.document) {
   if (!documentRef?.head || documentRef.querySelector?.('[data-provider-dispatch-styles]')) return;
   const link = documentRef.createElement('link');
   link.rel = 'stylesheet';
-  link.href = './src/provider/provider-dispatch.css';
+  link.href = '../src/provider/provider-dispatch.css';
   link.dataset.providerDispatchStyles = '';
   documentRef.head.append(link);
 }
