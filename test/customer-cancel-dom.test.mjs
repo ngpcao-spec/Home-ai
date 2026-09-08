@@ -28,6 +28,8 @@ it('C08 cancellation restores the actual C04 DOM and allows a new Supabase reque
       async () => ({ source: 'supabase', activeMission: initial, repository, providerRepository: {} }),
       { resume: async () => ({ authenticated: true, session: { user: { id: 'customer' } } }) });
     await tasks[0]();
+    assert.equal(root.querySelector('[data-cancel-provider-search]').closest('[hidden]'), null,
+      'A restored search must expose its cancellation button to the user');
     root.querySelector('.hero').hidden = true;
     root.querySelector('.services').style.display = 'none';
     root.querySelector('[name="address"]').value = 'Adresse conservée';

@@ -161,6 +161,20 @@ export function getRestoredMissionDestination(status) {
 }
 
 export function showRestoredCustomerMission(root, status) {
+  if (['requested', 'searching', 'offered'].includes(status)) {
+    root.querySelector('[data-new-request-flow]').hidden = false;
+    root.querySelectorAll('[data-new-request-only]').forEach(section => { section.hidden = false; });
+    root.querySelector('[data-booking-confirmation]').hidden = true;
+    root.querySelector('[data-mission-tracker]').hidden = true;
+    const search = root.querySelector('[data-map-search]');
+    search.hidden = false;
+    search.scrollIntoView?.({ behavior: 'auto', block: 'start' });
+    return 'search';
+  }
+  if (['cancelled', 'expired'].includes(status)) {
+    resetCustomerRequestView(root);
+    return 'home';
+  }
   root.querySelector('[data-new-request-flow]').hidden = true;
   root.querySelectorAll('[data-new-request-only]').forEach((section) => { section.hidden = true; });
   root.querySelector('[data-mission-tracker]').scrollIntoView?.({ behavior: 'auto', block: 'start' });
