@@ -46,7 +46,7 @@ export function createIncomingOfferLayer(root) {
       host.innerHTML = renderIncomingOffer(offer);
     },
     confirm() {
-      currentId=null;
+      currentId='__accepted_confirmation__';
       host.innerHTML='<section class="mission-accepted-confirmation" role="status"><div class="mission-accepted-check">✓</div><h2>Đã nhận nhiệm vụ!</h2><p>Đang mở chi tiết nhiệm vụ...</p></section>';
     },
     stop() { host.remove(); },

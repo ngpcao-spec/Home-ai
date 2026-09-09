@@ -67,6 +67,15 @@ describe('navigation Provider App après acceptation', () => {
     assert.doesNotMatch(html,/data-start-travel/);
   });
 
+  it('remplace un chargement de trajet en échec par une erreur et Réessayer',()=>{
+    const assignment={id:'m1',serviceCategory:'electricity',request:'Test',address:'Nha Trang',status:'accepted'};
+    const html=renderProviderDashboard({provider:{name:'Minh'},status:{},offers:[],assignment},{navigationError:'Hết thời gian chờ Amazon Location.'});
+    assert.match(html,/Không thể tải chi tiết lộ trình/);
+    assert.match(html,/Hết thời gian chờ Amazon Location/);
+    assert.match(html,/data-retry-provider-navigation>Thử lại/);
+    assert.doesNotMatch(html,/mission-accepted-confirmation/);
+  });
+
   it('ne place l’adresse et les coordonnées exactes que dans la mission assignée', () => {
     const state={provider:{name:'Minh'},status:{online:true,available:true},offers:[{id:'o',serviceCategory:'electricity',request:'Test',approximateAddress:'Khu vực Nha Trang',distanceKm:1,etaMinutes:3}],assignment:null};
     assert.doesNotMatch(renderProviderDashboard(state),/12 Nguyễn Trãi|clientLocation|109\.1902/);
