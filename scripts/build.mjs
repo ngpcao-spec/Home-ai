@@ -13,6 +13,11 @@ const mapsKey = process.env.AMAZON_LOCATION_API_KEY ?? '';
 const supabaseUrl = process.env.SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY ?? '';
 const supabaseRequired = process.env.REQUIRE_SUPABASE_CONFIG === 'true';
+const providerTestModeRequested = process.env.PROVIDER_TEST_MODE === 'true';
+if (providerTestModeRequested && (process.env.CI || supabaseRequired)) {
+  throw new Error('PROVIDER_TEST_MODE is forbidden in production builds');
+}
+const providerTestMode = providerTestModeRequested && !process.env.CI && !supabaseRequired;
 const buildId = (process.env.GITHUB_SHA ?? 'local').replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 40) || 'local';
 if (process.env.CI && !mapsKey.trim()) throw new Error('AMAZON_LOCATION_API_KEY is required for the production build');
 if (Boolean(supabaseUrl.trim()) !== Boolean(supabaseAnonKey.trim())) {
@@ -26,8 +31,15 @@ await writeFile('dist/src/runtime-config.js', `globalThis.__HOME_AI_CONFIG__ = O
   SUPABASE_URL: ${JSON.stringify(supabaseUrl)},
   SUPABASE_ANON_KEY: ${JSON.stringify(supabaseAnonKey)},
   SUPABASE_REQUIRED: ${supabaseRequired},
+  PROVIDER_TEST_MODE: ${providerTestMode},
   BUILD_ID: ${JSON.stringify(buildId)},
 });\n`);
+if (!providerTestMode) {
+  const providerAppPath='dist/src/provider/provider-app.js';
+  const providerAppSource=await readFile(providerAppPath,'utf8');
+  await writeFile(providerAppPath,providerAppSource.replace(/\/\* PROVIDER_TEST_UI_START \*\/[\s\S]*?\/\* PROVIDER_TEST_UI_END \*\//,
+    "const testArrivalMarkup='';"));
+}
 
 await cp('provider-sw.js', 'dist/provider-sw.js');
 const serviceWorkerSource = await readFile('provider/provider-sw.js', 'utf8');

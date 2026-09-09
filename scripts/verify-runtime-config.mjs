@@ -23,6 +23,7 @@ const runtimeKey = readRuntimeString('AMAZON_LOCATION_API_KEY');
 const runtimeSupabaseUrl = readRuntimeString('SUPABASE_URL');
 const runtimeSupabaseAnonKey = readRuntimeString('SUPABASE_ANON_KEY');
 const runtimeSupabaseRequired = readRuntimeBoolean('SUPABASE_REQUIRED');
+const runtimeProviderTestMode = readRuntimeBoolean('PROVIDER_TEST_MODE');
 
 const expectedKey = process.env.AMAZON_LOCATION_API_KEY?.trim() ?? '';
 if (!expectedKey) throw new Error('AMAZON_LOCATION_API_KEY is not configured');
@@ -46,6 +47,9 @@ if (Boolean(runtimeSupabaseUrl) !== Boolean(runtimeSupabaseAnonKey)) {
 }
 if (runtimeSupabaseUrl !== expectedSupabaseUrl || runtimeSupabaseAnonKey !== expectedSupabaseAnonKey) {
   throw new Error('Supabase runtime configuration does not match the build environment');
+}
+if (runtimeSupabaseRequired && runtimeProviderTestMode) {
+  throw new Error('Provider test mode must be disabled in production');
 }
 
 console.log(`Runtime configuration verified (values redacted; Supabase: ${runtimeSupabaseUrl ? 'configured' : 'local fallback only'}).`);

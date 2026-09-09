@@ -23,4 +23,17 @@ describe('configuration du déploiement GitHub Pages', () => {
     assert.match(verify, /Supabase production runtime configuration is missing/);
     assert.match(verify, /values redacted/);
   });
+
+  it('interdit le mode test Provider dans tout build de production',async()=>{
+    const [build,verify,runtime]=await Promise.all([
+      readFile(new URL('../scripts/build.mjs',import.meta.url),'utf8'),
+      readFile(new URL('../scripts/verify-runtime-config.mjs',import.meta.url),'utf8'),
+      readFile(new URL('../src/runtime-config.js',import.meta.url),'utf8'),
+    ]);
+    assert.match(build,/providerTestModeRequested && \(process\.env\.CI \|\| supabaseRequired\)/);
+    assert.match(build,/PROVIDER_TEST_MODE is forbidden in production builds/);
+    assert.match(build,/providerAppSource\.replace/);
+    assert.match(verify,/Provider test mode must be disabled in production/);
+    assert.match(runtime,/PROVIDER_TEST_MODE: false/);
+  });
 });
