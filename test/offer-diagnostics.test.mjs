@@ -1,6 +1,6 @@
 import { it } from 'node:test';
 import assert from 'node:assert/strict';
-import { readOfferDiagnostics } from '../src/provider/offer-diagnostics.js';
+import { mountOfferDiagnostics, readOfferDiagnostics } from '../src/provider/offer-diagnostics.js';
 
 it('distinguishes missing expiration, locally expired offers and missing overlay without exposing customer data',()=>{
   const report=readOfferDiagnostics({document:{querySelector:()=>null,hidden:false,visibilityState:'visible'},source:'supabase',busy:false,buildId:'test',offers:[
@@ -13,4 +13,12 @@ it('distinguishes missing expiration, locally expired offers and missing overlay
   assert.ok(report.offers[2].remainingSeconds>0);
   assert.equal(report.overlay,null);
   assert.ok(!JSON.stringify(report).includes('Private customer'));
+});
+
+it('never mounts the legacy Provider diagnostics UI',()=>{
+  let created=0;const root={ownerDocument:{body:{append(){throw new Error('must not append');}},createElement(){created+=1;}}};
+  const stop=mountOfferDiagnostics(root,()=>({}));
+  assert.equal(created,0);
+  assert.equal(typeof stop,'function');
+  stop();
 });
