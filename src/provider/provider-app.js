@@ -23,6 +23,17 @@ const money = (value) => `${new Intl.NumberFormat('vi-VN').format(value ?? 0)}đ
 const statusLabel = { accepted:'Đã nhận nhiệm vụ', travelling:'Đang di chuyển', arrived:'Đã đến nơi', quote_pending:'Báo giá đã được chấp nhận', supplement_pending:'Đang chờ duyệt bổ sung', in_progress:'Đang thực hiện', completed_pending_payment:'Đã hoàn tất · chờ thanh toán' };
 const serviceIcon = category => category==='electricity'?'⚡':'🛠';
 function renderQuoteWorkflow(assignment, { diagnosing=false, busy=false, supplementParent=null }={}) {
+  if (assignment.status === 'completed_pending_payment') {
+    const finalAmount = assignment.finalAuthorizedAmount ?? assignment.quote?.totalAmount;
+    return `<section class="provider-completion-waiting" data-provider-completion-waiting>
+      <span class="completion-check" aria-hidden="true">✓</span>
+      <p>HOÀN THÀNH CÔNG VIỆC</p>
+      <h2>Công việc đã hoàn thành</h2>
+      ${finalAmount != null ? `<div><small>Tổng tiền cuối cùng</small><strong>${money(finalAmount)}</strong></div>` : ''}
+      <h3>Đang chờ khách hàng xác nhận thanh toán</h3>
+      <small>Khách hàng cần xác nhận đã thanh toán trực tiếp trước khi nhiệm vụ được đóng.</small>
+    </section>`;
+  }
   if(supplementParent)return renderSupplementForm(supplementParent);
   if (assignment.quote && !['declined','rejected'].includes(assignment.quote.status)) { const accepted=assignment.quote.status==='accepted'; return `<section class="provider-quote provider-quote--waiting"><p>BÁO GIÁ V${assignment.quote.version}</p><h3>${esc(assignment.quote.diagnosis)}</h3><strong>${money(assignment.quote.totalAmount)}</strong><span>${accepted?'Khách hàng đã chấp nhận':'Đã gửi cho khách hàng'}</span><div class="waiting-pulse">${accepted?'✓ Công việc đã được phê duyệt':'⌛ Đang chờ khách hàng chấp nhận'}</div><small>${accepted?'Nội dung báo giá này đã khóa; mọi thay đổi phải tạo phiên bản mới.':'Không bắt đầu công việc tính phí trước khi khách hàng chấp nhận rõ ràng.'}</small>${accepted&&assignment.status==='quote_pending'?`<button data-start-intervention ${busy?'disabled':''}>Bắt đầu thực hiện</button>`:''}${assignment.status==='in_progress'?`<button data-provider-supplement>Đề xuất chi phí phát sinh</button><button data-finish-intervention ${busy?'disabled':''}>Hoàn tất công việc</button>`:''}</section>`; }
   if (assignment.status === 'in_progress' && assignment.quote?.status === 'rejected') return '<p>Chi phí phát sinh đã bị từ chối. Chỉ tiếp tục công việc đã chấp nhận.</p><button data-finish-intervention>Hoàn tất công việc</button>';
