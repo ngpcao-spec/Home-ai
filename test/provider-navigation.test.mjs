@@ -48,6 +48,25 @@ describe('navigation Provider App après acceptation', () => {
     assert.equal(ARRIVAL_RADIUS_KM, .15);
   });
 
+  it('rend le détail premium depuis la navigation réelle sans action fictive', () => {
+    const state={provider:{name:'Minh'},status:{online:true,available:false},offers:[],assignment:{id:'m1',serviceCategory:'electricity',request:'Mất điện trong nhà',address:'Vĩnh Hải, Nha Trang',status:'accepted',clientLocation:{latitude:12.25,longitude:109.19}}};
+    const navigation={route:{distanceKm:2.1,durationMinutes:6,points:[]},providerLocation:{latitude:12.23,longitude:109.18},destination:{latitude:12.25,longitude:109.19},arrived:false};
+    const html=renderProviderDashboard(state,{source:'supabase',navigation});
+    for(const text of ['Chi tiết nhiệm vụ','Vị trí của bạn','Mất điện trong nhà','Vĩnh Hải, Nha Trang','2.1 km','ETA 6 phút','Mở bản đồ','BẮT ĐẦU DI CHUYỂN'])assert.match(html,new RegExp(text));
+    assert.match(html,/maps\.apple\.com\/\?daddr=12\.25,109\.19/);
+    assert.doesNotMatch(html,/Gọi khách hàng|Nhắn tin|Giá tham khảo/);
+  });
+
+  it('affiche uniquement un prix réellement accepté et le statut travelling', () => {
+    const assignment={id:'m1',serviceCategory:'electricity',request:'Test',address:'Nha Trang',status:'travelling',quote:{status:'accepted',totalAmount:300000}};
+    const navigation={route:{distanceKm:.8,durationMinutes:3},providerLocation:{latitude:12.2,longitude:109.2},destination:{latitude:12.21,longitude:109.21},arrived:false};
+    const html=renderProviderDashboard({provider:{name:'Minh'},status:{},offers:[],assignment},{navigation});
+    assert.match(html,/Đang di chuyển/);
+    assert.match(html,/Giá đã chấp nhận/);
+    assert.match(html,/300\.000đ/);
+    assert.doesNotMatch(html,/data-start-travel/);
+  });
+
   it('ne place l’adresse et les coordonnées exactes que dans la mission assignée', () => {
     const state={provider:{name:'Minh'},status:{online:true,available:true},offers:[{id:'o',serviceCategory:'electricity',request:'Test',approximateAddress:'Khu vực Nha Trang',distanceKm:1,etaMinutes:3}],assignment:null};
     assert.doesNotMatch(renderProviderDashboard(state),/12 Nguyễn Trãi|clientLocation|109\.1902/);
