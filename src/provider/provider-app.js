@@ -67,10 +67,15 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   let priorityOfferId=repository.source==='supabase' ? state.offers?.[0]?.id ?? null : null;
   const page=root.ownerDocument??globalThis.document;
   const offerAlert=createProviderOfferAlert();
+  offerAlert.prepare();
   const offerLayer=createIncomingOfferLayer(root);
   const updateAudioControl=()=>{
     const control=(offerLayer?.host??root).querySelector('[data-enable-offer-audio]');
-    if(control)control.hidden=!offerAlert.needsAudioActivation();
+    if(control){
+      const error=offerAlert.getAudioError();
+      control.hidden=!offerAlert.needsAudioActivation()&&!error;
+      control.textContent=error?`Không thể phát âm thanh (${error}). Chạm để thử lại.`:'♫ Chạm để bật âm thanh';
+    }
   };
   const stopDiagnostics=mountOfferDiagnostics(root,()=>readOfferDiagnostics({document:page,source:repository.source,busy,offers:state.offers,buildId:globalThis.__HOME_AI_CONFIG__?.BUILD_ID}));
   const syncOfferLayer=()=>{

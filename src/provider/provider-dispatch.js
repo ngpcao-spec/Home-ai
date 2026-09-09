@@ -62,26 +62,41 @@ export function createProviderOfferAlert({
   scheduleRepeat = environment.setInterval?.bind(environment),
   clearRepeat = environment.clearInterval?.bind(environment),
 } = {}) {
-  let activeOfferId = null; let timer; let audioContext;
-  const pulse = () => {
-    try {
-      const AudioContext = environment.AudioContext || environment.webkitAudioContext;
-      audioContext ??= AudioContext ? new AudioContext() : null;
-      if (audioContext?.state !== 'running') return false;
-      [784, 988].forEach((frequency, index) => {
-        const oscillator=audioContext.createOscillator(); const gain=audioContext.createGain();
-        oscillator.frequency.value=frequency; gain.gain.value=0.11;
-        oscillator.connect(gain); gain.connect(audioContext.destination);
-        oscillator.start(audioContext.currentTime+index*0.2); oscillator.stop(audioContext.currentTime+0.16+index*0.2);
-      });
-    } catch { /* iOS may keep audio suspended until a user gesture. */ }
-    try { environment.navigator?.vibrate?.([240,100,240]); } catch { /* Optional capability. */ }
+  const audioStorageKey='home-ai-provider-audio-unlocked';
+  let activeOfferId = null; let timer; let audioContext; let audioError=''; const activeOscillators=new Set();
+  const rememberAudioUnlock=()=>{try{environment.sessionStorage?.setItem(audioStorageKey,'true');}catch{/* Storage is optional. */}};
+  const formatAudioError=error=>`${error?.name??'AudioError'}${error?.message?`: ${error.message}`:''}`;
+  const prepare = () => {
+    if(audioContext)return audioContext;
+    try{
+      const AudioContext=environment.AudioContext||environment.webkitAudioContext;
+      audioContext=AudioContext?new AudioContext():null;
+      if(!audioContext)audioError='AudioContextUnavailable';
+    }catch(error){audioError=formatAudioError(error);}
+    return audioContext;
+  };
+  const playTone = () => {
+    if(prepare()?.state!=='running')return false;
+    [784,988].forEach((frequency,index)=>{
+      const oscillator=audioContext.createOscillator();const gain=audioContext.createGain();
+      oscillator.frequency.value=frequency;gain.gain.value=0.11;
+      oscillator.connect(gain);gain.connect(audioContext.destination);
+      activeOscillators.add(oscillator);oscillator.onended=()=>activeOscillators.delete(oscillator);
+      oscillator.start(audioContext.currentTime+index*0.2);oscillator.stop(audioContext.currentTime+0.16+index*0.2);
+    });
+    audioError='';
     return true;
+  };
+  const pulse = () => {
+    try { playTone(); } catch(error) { audioError=formatAudioError(error); }
+    try { environment.navigator?.vibrate?.([240,100,240]); } catch { /* Optional capability. */ }
+    return audioContext?.state==='running';
   };
   const stop = (offerId = activeOfferId) => {
     if (offerId && activeOfferId && offerId !== activeOfferId) return false;
     if (timer !== undefined) clearRepeat?.(timer);
     timer=undefined; activeOfferId=null;
+    activeOscillators.forEach(oscillator=>{try{oscillator.stop();}catch{/* It may already have ended. */}});activeOscillators.clear();
     try { environment.navigator?.vibrate?.(0); } catch { /* Optional capability. */ }
     return true;
   };
@@ -94,18 +109,21 @@ export function createProviderOfferAlert({
   };
   const unlock = async () => {
     try {
-      const AudioContext=environment.AudioContext||environment.webkitAudioContext;
-      audioContext??=AudioContext?new AudioContext():null;
-      await audioContext?.resume?.();
-      if(activeOfferId)pulse();
-      return audioContext?.state==='running';
-    } catch { return false; }
+      const context=prepare();
+      if(!context)return false;
+      await context.resume?.();
+      if(context.state!=='running')throw Object.assign(new Error(`AudioContext state: ${context.state}`),{name:'NotAllowedError'});
+      rememberAudioUnlock();audioError='';
+      if(activeOfferId)playTone();
+      return true;
+    } catch(error) { audioError=formatAudioError(error);return false; }
   };
   return Object.freeze({
-    start,stop,unlock,
+    start,stop,unlock,prepare,
     getActiveOfferId:()=>activeOfferId,
     isAudioEnabled:()=>audioContext?.state==='running',
     needsAudioActivation:()=>audioContext?.state==='suspended'||audioContext?.state==='interrupted',
+    getAudioError:()=>audioError,
   });
 }
 

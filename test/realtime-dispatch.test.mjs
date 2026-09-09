@@ -61,10 +61,11 @@ describe('dispatch Provider Realtime', () => {
   });
 
   it('répète une seule alerte par offre et arrête immédiatement son et vibration', async () => {
-    const repeats=[]; const cleared=[]; const vibrations=[]; let oscillatorStarts=0;
+    const repeats=[]; const cleared=[]; const vibrations=[]; const stored=[]; let oscillatorStarts=0;
     const audioContext={state:'suspended',currentTime:0,destination:{},resume:async()=>{audioContext.state='running';},createOscillator:()=>({frequency:{},connect(){},start(){oscillatorStarts+=1;},stop(){}}),createGain:()=>({gain:{},connect(){}})};
-    const environment={AudioContext:function(){return audioContext;},navigator:{vibrate:value=>vibrations.push(value)}};
+    const environment={AudioContext:function(){return audioContext;},navigator:{vibrate:value=>vibrations.push(value)},sessionStorage:{setItem:(key,value)=>stored.push([key,value])}};
     const alert=createProviderOfferAlert({environment,scheduleRepeat:(fn,delay)=>{repeats.push({fn,delay});return 7;},clearRepeat:id=>cleared.push(id)});
+    assert.equal(alert.prepare(),audioContext);
     const offer={id:'o1',status:'pending',expiresAt:new Date(Date.now()+60000).toISOString()};
     assert.equal(alert.start(offer),true);
     assert.equal(alert.isAudioEnabled(),false);
@@ -74,11 +75,25 @@ describe('dispatch Provider Realtime', () => {
     await alert.unlock();
     assert.equal(alert.isAudioEnabled(),true);
     assert.equal(alert.needsAudioActivation(),false);
+    assert.deepEqual(stored,[['home-ai-provider-audio-unlocked','true']]);
     repeats[0].fn();
     assert.ok(oscillatorStarts>=2);
     assert.equal(alert.stop('o1'),true);
-    assert.deepEqual(cleared,[7]);
+    assert.equal(alert.start({id:'o2',status:'pending',expiresAt:new Date(Date.now()+60000).toISOString()}),true);
+    assert.ok(oscillatorStarts>=4);
+    alert.stop('o2');
+    assert.deepEqual(cleared,[7,7]);
     assert.equal(vibrations.at(-1),0);
+  });
+
+  it('conserve et expose exactement le refus de déblocage audio Safari', async () => {
+    const rejection=Object.assign(new Error('The request is not allowed by the user agent'),{name:'NotAllowedError'});
+    const audioContext={state:'suspended',resume:async()=>{throw rejection;}};
+    const alert=createProviderOfferAlert({environment:{webkitAudioContext:function(){return audioContext;}},scheduleRepeat:()=>7,clearRepeat(){}});
+    alert.prepare();
+    assert.equal(await alert.unlock(),false);
+    assert.equal(alert.needsAudioActivation(),true);
+    assert.equal(alert.getAudioError(),'NotAllowedError: The request is not allowed by the user agent');
   });
 
   it('ne demande pas une activation audio quand le navigateur ne la requiert pas', () => {
