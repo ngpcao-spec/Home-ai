@@ -17,9 +17,10 @@ const fallback = { analyse: async ({ description, preferredCategory }) => ({ cat
 
 it('adapts the strict Edge Function contract to the existing C05 diagnostic model', async () => {
   const calls = [];
+  const logs = [];
   const diagnostic = createSupabaseAiDiagnostic({
     client: client(async (...args) => { calls.push(args); return { data: valid, error: null }; }),
-    getVerifiedUserId: () => 'customer-1', fallback,
+    getVerifiedUserId: () => 'customer-1', fallback, logger: event => logs.push(event),
   });
   const result = await diagnostic.analyse({ description: 'Nhà bị mất điện', preferredCategory: 'electricity' });
   assert.equal(result.categoryId, 'electricity');
@@ -27,6 +28,12 @@ it('adapts the strict Edge Function contract to the existing C05 diagnostic mode
   assert.equal(result.source, 'openai');
   assert.deepEqual(calls[0][1].body, { description: 'Nhà bị mất điện', preferredCategory: 'electricity' });
   assert.ok(calls[0][1].signal);
+  assert.deepEqual(logs, [
+    { event: 'edge_function_call_started', functionName: 'diagnose-home-request' },
+    { event: 'edge_function_response_received', functionName: 'diagnose-home-request' },
+    { event: 'edge_function_response_validated', source: 'AI' },
+  ]);
+  assert.doesNotMatch(JSON.stringify(logs), /Nhà bị mất điện|customer-1|access_token|OPENAI_API_KEY/);
 });
 
 it('rejects unknown fields, categories and malformed AI output', () => {

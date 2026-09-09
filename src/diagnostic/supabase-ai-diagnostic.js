@@ -4,6 +4,8 @@ import { createMockDiagnostic } from './mock-diagnostic.js';
 
 const fallbackCodes = new Set(['AI_TIMEOUT', 'AI_RATE_LIMIT', 'AI_UNAVAILABLE', 'AI_INVALID_RESPONSE', 'FUNCTION_NETWORK_ERROR']);
 
+const defaultDiagnosticLogger = event => globalThis.console?.info?.('[HOME AI AI diagnostic]', event);
+
 export class AiDiagnosticError extends Error {
   constructor(code, message, options) {
     super(message, options);
@@ -31,6 +33,7 @@ export function createSupabaseAiDiagnostic({
   fallback = createMockDiagnostic({ delay: 0 }),
   timeoutMs = 12000,
   getVerifiedUserId = () => null,
+  logger = defaultDiagnosticLogger,
 } = {}) {
   const runFallback = async (request, reason) => Object.freeze({
     ...await fallback.analyse(request), source: 'fallback', fallbackReason: reason,
@@ -48,17 +51,24 @@ export function createSupabaseAiDiagnostic({
       const controller = newAbortController();
       const timer = globalThis.setTimeout(() => controller.abort(), timeoutMs);
       try {
+        logger({ event: 'edge_function_call_started', functionName: 'diagnose-home-request' });
         const { data, error } = await client.functions.invoke('diagnose-home-request', {
           body: { description: cleanDescription, preferredCategory: preferredCategory ?? null },
           signal: controller.signal,
         });
         if (error) throw normalizeInvokeError(error);
-        try { return adaptAiDiagnostic(data); }
+        logger({ event: 'edge_function_response_received', functionName: 'diagnose-home-request' });
+        try {
+          const result = adaptAiDiagnostic(data);
+          logger({ event: 'edge_function_response_validated', source: 'AI' });
+          return result;
+        }
         catch (error) { throw new AiDiagnosticError('AI_INVALID_RESPONSE', 'AI returned an invalid diagnostic', { cause: error }); }
       } catch (error) {
         const normalized = error?.name === 'AbortError'
           ? new AiDiagnosticError('AI_TIMEOUT', 'AI diagnostic timed out', { cause: error })
           : error instanceof AiDiagnosticError ? error : normalizeInvokeError(error);
+        logger({ event: 'edge_function_call_failed', code: normalized.code });
         if (fallbackCodes.has(normalized.code)) return runFallback({ description: cleanDescription, preferredCategory }, normalized.code);
         throw normalized;
       } finally {
