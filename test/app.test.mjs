@@ -12,6 +12,8 @@ describe('HOME AI C04 marketplace home page', () => {
     assert.match(markup, /HOME <strong>AI/);
     assert.match(markup, /Bạn cần sửa gì/);
     assert.match(markup, /Bắt đầu với AI/);
+    assert.match(markup, /data-result-confidence/);
+    assert.match(markup, /data-result-questions/);
     assert.match(markup, /data-location/);
     assert.match(markup, /AI đã hiểu vấn đề của bạn/);
     assert.match(markup, /Tìm thợ phù hợp/);

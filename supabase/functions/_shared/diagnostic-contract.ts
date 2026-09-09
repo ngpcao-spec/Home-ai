@@ -1,0 +1,51 @@
+export const categories = ['electricity', 'plumbing', 'air-conditioning', 'appliances'] as const;
+
+export const diagnosticSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['serviceCategory', 'understoodProblem', 'confidence', 'missingQuestions', 'vietnameseSummary'],
+  properties: {
+    serviceCategory: { type: 'string', enum: categories },
+    understoodProblem: { type: 'string', minLength: 1, maxLength: 500 },
+    confidence: { type: 'number', minimum: 0, maximum: 1 },
+    missingQuestions: { type: 'array', maxItems: 3, items: { type: 'string', minLength: 1, maxLength: 300 } },
+    vietnameseSummary: { type: 'string', minLength: 1, maxLength: 500 },
+  },
+} as const;
+
+const plainObject = (value: unknown): value is Record<string, unknown> => value !== null
+  && typeof value === 'object' && !Array.isArray(value);
+
+export function validateRequest(value: unknown) {
+  if (!plainObject(value) || Object.keys(value).some(key => !['description', 'preferredCategory'].includes(key))) {
+    throw new Error('INVALID_INPUT');
+  }
+  const description = typeof value.description === 'string' ? value.description.trim() : '';
+  const preferredCategory = value.preferredCategory == null ? null : String(value.preferredCategory);
+  if (!description || description.length > 2000 || (preferredCategory !== null && !categories.includes(preferredCategory as typeof categories[number]))) {
+    throw new Error('INVALID_INPUT');
+  }
+  return { description, preferredCategory };
+}
+
+export function validateDiagnostic(value: unknown) {
+  if (!plainObject(value)) throw new Error('AI_INVALID_RESPONSE');
+  const expected = ['confidence', 'missingQuestions', 'serviceCategory', 'understoodProblem', 'vietnameseSummary'].sort();
+  const keys = Object.keys(value).sort();
+  if (keys.length !== expected.length || keys.some((key, index) => key !== expected[index])) throw new Error('AI_INVALID_RESPONSE');
+  if (!categories.includes(value.serviceCategory as typeof categories[number])
+      || typeof value.understoodProblem !== 'string' || !value.understoodProblem.trim() || value.understoodProblem.length > 500
+      || typeof value.confidence !== 'number' || !Number.isFinite(value.confidence) || value.confidence < 0 || value.confidence > 1
+      || !Array.isArray(value.missingQuestions) || value.missingQuestions.length > 3
+      || value.missingQuestions.some(question => typeof question !== 'string' || !question.trim() || question.length > 300)
+      || typeof value.vietnameseSummary !== 'string' || !value.vietnameseSummary.trim() || value.vietnameseSummary.length > 500) {
+    throw new Error('AI_INVALID_RESPONSE');
+  }
+  return {
+    serviceCategory: value.serviceCategory,
+    understoodProblem: value.understoodProblem.trim(),
+    confidence: value.confidence,
+    missingQuestions: value.missingQuestions.map(question => question.trim()),
+    vietnameseSummary: value.vietnameseSummary.trim(),
+  };
+}

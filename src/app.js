@@ -1,4 +1,6 @@
 import { createMockDiagnostic } from './diagnostic/mock-diagnostic.js';
+import { createSupabaseAiDiagnostic } from './diagnostic/supabase-ai-diagnostic.js';
+import { getSupabaseBrowserClient } from './supabase/client.js';
 import { getCustomerDispatchState, renderCustomerDispatchState } from './customer/dispatch-state.js';
 import { getMatchReasons, getRouteMatrixCandidates } from './technicians/matching.js';
 import { createProgressiveTechnicianRepository } from './technicians/repository.js';
@@ -293,7 +295,9 @@ export function createHomeAiMarkup() {
                 <div><dt>Vấn đề:</dt><dd data-result-summary></dd></div>
                 <div><dt>Dịch vụ phù hợp:</dt><dd data-result-category></dd></div>
                 <div><dt>Thợ được đề xuất:</dt><dd data-result-technician></dd></div>
+                <div data-result-confidence-row hidden><dt>Độ tin cậy:</dt><dd data-result-confidence></dd></div>
               </dl>
+              <div data-result-questions hidden><strong>Cần bổ sung:</strong><ul data-result-question-list></ul></div>
               <p class="result-note">HOME AI đề xuất tìm một chuyên gia phù hợp với vấn đề này.</p>
               <div class="result-actions">
                 <button class="find-button" type="button" data-find-technician>Tìm thợ phù hợp</button>
@@ -359,7 +363,7 @@ export function createHomeAiMarkup() {
 export function initialiseHomePage(
   root,
   geolocation = globalThis.navigator?.geolocation,
-  diagnostic = createMockDiagnostic(),
+  diagnostic = null,
   technicianRepository = createProgressiveTechnicianRepository(),
   scheduleTask = globalThis.setTimeout,
   searchTiming = prototypeSearchTiming,
@@ -381,6 +385,17 @@ export function initialiseHomePage(
   let verifiedCustomerUserId = null;
   const requiresSupabaseSession = globalThis.__HOME_AI_CONFIG__?.SUPABASE_REQUIRED === true
     || globalThis.location?.hostname === 'ngpcao-spec.github.io';
+  const localDiagnostic = createMockDiagnostic();
+  const aiDiagnostic = createSupabaseAiDiagnostic({
+    client: getSupabaseBrowserClient(),
+    fallback: createMockDiagnostic({ delay: 0 }),
+    getVerifiedUserId: () => verifiedCustomerUserId,
+  });
+  const diagnosticService = diagnostic ?? Object.freeze({
+    analyse: request => verifiedCustomerUserId
+      ? aiDiagnostic.analyse(request)
+      : requiresSupabaseSession ? aiDiagnostic.analyse(request) : localDiagnostic.analyse(request),
+  });
   try { browserStorage = globalThis.localStorage; } catch { browserStorage = undefined; }
   const renderLogin = (options = {}) => {
     startupFlow.innerHTML = createLoginMarkup({ phone: loginPhone, ...options });
@@ -673,13 +688,30 @@ export function initialiseHomePage(
     status.textContent = 'AI đang phân tích vấn đề của bạn...';
 
     try {
-      const diagnosis = await diagnostic.analyse({ description, preferredCategory: selectedCategory });
+      const diagnosis = await diagnosticService.analyse({ description, preferredCategory: selectedCategory });
       const category = serviceCategories.find(({ id }) => id === diagnosis.categoryId) ?? serviceCategories[3];
       diagnosedCategory = category.id;
       currentDiagnosis = { ...diagnosis, service: category.label };
       root.querySelector('[data-result-summary]').textContent = diagnosis.summary;
       root.querySelector('[data-result-category]').textContent = category.label;
       root.querySelector('[data-result-technician]').textContent = category.technician;
+      const confidenceRow = root.querySelector('[data-result-confidence-row]');
+      const confidence = root.querySelector('[data-result-confidence]');
+      if (confidenceRow && confidence) {
+        confidenceRow.hidden = !Number.isFinite(diagnosis.confidence);
+        confidence.textContent = Number.isFinite(diagnosis.confidence) ? `${Math.round(diagnosis.confidence * 100)}%` : '';
+      }
+      const questions = root.querySelector('[data-result-questions]');
+      const questionList = root.querySelector('[data-result-question-list]');
+      if (questions && questionList) {
+        const missing = Array.isArray(diagnosis.missingQuestions) ? diagnosis.missingQuestions : [];
+        questions.hidden = missing.length === 0;
+        questionList.replaceChildren(...missing.map(question => {
+          const item = root.ownerDocument.createElement('li');
+          item.textContent = question;
+          return item;
+        }));
+      }
       status.textContent = '';
       resultCard.hidden = false;
       resultCard.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });

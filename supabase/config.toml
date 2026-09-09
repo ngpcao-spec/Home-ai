@@ -1,0 +1,2 @@
+[functions.diagnose-home-request]
+verify_jwt = true
