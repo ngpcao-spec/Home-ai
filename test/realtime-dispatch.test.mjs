@@ -54,7 +54,9 @@ describe('dispatch Provider Realtime', () => {
     assert.match(html,/href="\.\.\/src\/provider\/provider-dispatch\.css" data-provider-dispatch-styles/);
     assert.match(app,/link\.href = '\.\.\/src\/provider\/provider-dispatch\.css'/);
     assert.match(css,/position:fixed;z-index:50;inset:0;width:100%;height:100%/);
-    assert.match(css,/@keyframes dispatch-screen-flash/);
+    assert.match(css,/@keyframes dispatch-bell-aura/);
+    assert.match(css,/\.dispatch-countdown\{[^}]*width:68px;[^}]*height:68px;[^}]*border:4px solid/);
+    assert.doesNotMatch(css,/\.dispatch-offer\{[^}]*animation:/);
     assert.match(css,/min-height:64px/);
   });
 
@@ -66,15 +68,24 @@ describe('dispatch Provider Realtime', () => {
     const offer={id:'o1',status:'pending',expiresAt:new Date(Date.now()+60000).toISOString()};
     assert.equal(alert.start(offer),true);
     assert.equal(alert.isAudioEnabled(),false);
+    assert.equal(alert.needsAudioActivation(),true);
     assert.equal(alert.start(offer),false);
     assert.equal(repeats.length,1);
     await alert.unlock();
     assert.equal(alert.isAudioEnabled(),true);
+    assert.equal(alert.needsAudioActivation(),false);
     repeats[0].fn();
     assert.ok(oscillatorStarts>=2);
     assert.equal(alert.stop('o1'),true);
     assert.deepEqual(cleared,[7]);
     assert.equal(vibrations.at(-1),0);
+  });
+
+  it('ne demande pas une activation audio quand le navigateur ne la requiert pas', () => {
+    const alert=createProviderOfferAlert({environment:{navigator:{}},scheduleRepeat:()=>7,clearRepeat(){}});
+    alert.start({id:'o1',status:'pending',expiresAt:new Date(Date.now()+60000).toISOString()});
+    assert.equal(alert.needsAudioActivation(),false);
+    alert.stop();
   });
 
   it('met à jour le compte à rebours sans reconstruire le DOM et atteint zéro', () => {

@@ -101,7 +101,12 @@ export function createProviderOfferAlert({
       return audioContext?.state==='running';
     } catch { return false; }
   };
-  return Object.freeze({start,stop,unlock,getActiveOfferId:()=>activeOfferId,isAudioEnabled:()=>audioContext?.state==='running'});
+  return Object.freeze({
+    start,stop,unlock,
+    getActiveOfferId:()=>activeOfferId,
+    isAudioEnabled:()=>audioContext?.state==='running',
+    needsAudioActivation:()=>audioContext?.state==='suspended'||audioContext?.state==='interrupted',
+  });
 }
 
 export function notifyIncomingOffer(environment = globalThis) {

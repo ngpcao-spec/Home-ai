@@ -70,7 +70,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   const offerLayer=createIncomingOfferLayer(root);
   const updateAudioControl=()=>{
     const control=(offerLayer?.host??root).querySelector('[data-enable-offer-audio]');
-    if(control)control.hidden=offerAlert.isAudioEnabled();
+    if(control)control.hidden=!offerAlert.needsAudioActivation();
   };
   const stopDiagnostics=mountOfferDiagnostics(root,()=>readOfferDiagnostics({document:page,source:repository.source,busy,offers:state.offers,buildId:globalThis.__HOME_AI_CONFIG__?.BUILD_ID}));
   const syncOfferLayer=()=>{
