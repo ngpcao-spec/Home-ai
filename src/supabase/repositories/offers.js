@@ -46,13 +46,14 @@ export function createSupabaseOffersRepository(supabase) {
       }), 'offers.updateProviderMissionProgress');
     },
     async createCurrentProviderQuote(missionId, draft) {
+      const diagnosis = draft.diagnosis?.trim() || 'Không cung cấp chẩn đoán';
       const items = [
         { item_type: 'labor', description: draft.laborDescription, amount: Number(draft.laborAmount), position: 1 },
         { item_type: 'part', description: draft.partsDescription, amount: Number(draft.partsAmount), position: 2 },
       ];
       return unwrap(await client.rpc('create_current_provider_quote_version', {
-        target_mission_id: missionId, new_diagnosis: draft.diagnosis,
-        new_warranty_days: Number(draft.warrantyDays), new_items: items, target_parent_quote_id: null,
+        target_mission_id: missionId, new_diagnosis: diagnosis,
+        new_warranty_days: Number(draft.warrantyDays || 0), new_items: items, target_parent_quote_id: null,
       }), 'offers.createCurrentProviderQuote');
     },
     async createCurrentProviderSupplement(missionId, parent, discovery) {

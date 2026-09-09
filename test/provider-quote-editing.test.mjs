@@ -72,7 +72,7 @@ it('keeps all four input nodes and values across repeated dispatch/GPS refreshes
     view.fail(false);
     await view.click('[data-send-quote]');
     assert.deepEqual(view.sent[1], { id: 'm1', draft: {
-      diagnosis: values[0], laborAmount: values[1], partsAmount: values[2], warrantyDays: values[3],
+      diagnosis: values[0], laborAmount: Number(values[1]), partsAmount: Number(values[2]), warrantyDays: Number(values[3]),
       laborDescription: 'Công kiểm tra và sửa chữa', partsDescription: 'Linh kiện dự kiến',
     } });
     assert.ok(view.root.innerHTML.includes('BÁO GIÁ V1'));
