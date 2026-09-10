@@ -8,7 +8,11 @@ const valid = {
   serviceCategory: 'electricity',
   understoodProblem: 'Hệ thống điện trong nhà gặp sự cố.',
   confidence: 0.92,
-  missingQuestions: ['Sự cố bắt đầu khi nào?'],
+  missingQuestions: [{
+    question: 'Sự cố bắt đầu khi nào?',
+    suggestedAnswers: ['Hôm nay', 'Vài ngày trước', 'Hơn một tuần trước'],
+    allowUnknown: true,
+  }],
   vietnameseSummary: 'Cần thợ điện kiểm tra hệ thống trong nhà.',
 };
 
@@ -40,6 +44,7 @@ it('rejects unknown fields, categories and malformed AI output', () => {
   assert.throws(() => validateAiDiagnostic({ ...valid, extra: true }), /Invalid AI diagnostic/);
   assert.throws(() => adaptAiDiagnostic({ ...valid, serviceCategory: 'roofing' }), /Invalid AI diagnostic/);
   assert.throws(() => validateAiDiagnostic({ ...valid, confidence: 2 }), /Invalid AI diagnostic/);
+  assert.throws(() => validateAiDiagnostic({ ...valid, missingQuestions: [{ ...valid.missingQuestions[0], suggestedAnswers: ['Một', 'Hai'] }] }), /Invalid AI diagnostic/);
 });
 
 it('uses the technical fallback for network, 429, 5xx and invalid JSON responses', async () => {

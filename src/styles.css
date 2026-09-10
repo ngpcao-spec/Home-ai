@@ -84,10 +84,14 @@ h1 em { color: var(--green); font-style: normal; }
 .clarification { margin: 14px 0; padding: 14px; border-radius: 14px; background: #f0f8f5; }
 .clarification > strong { color: #087b61; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; }
 .clarification > p { margin: 8px 0 12px; color: #23443d; font-weight: 750; line-height: 1.45; }
+.clarification-options { display: grid; gap: 8px; }
+.clarification-options button { min-height: 44px; padding: 10px 12px; border: 1px solid #b7d7cd; border-radius: 11px; background: #fff; color: #174b3e; font-weight: 750; text-align: left; }
+.clarification-options button:active { border-color: #087b61; background: #dff2eb; }
 .clarification form { display: grid; gap: 8px; }
+.clarification form:not([hidden]) { margin-top: 10px; }
 .clarification label { color: #617770; font-size: 11px; font-weight: 700; }
 .clarification input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #bdd9d0; border-radius: 11px; background: #fff; color: #17342d; font: inherit; }
-.clarification button { min-height: 44px; border: 0; border-radius: 11px; background: #087b61; color: #fff; font-weight: 800; }
+.clarification form button { min-height: 44px; border: 0; border-radius: 11px; background: #087b61; color: #fff; font-weight: 800; }
 .clarification small { display: block; margin-top: 8px; color: #71847f; }
 .find-button, .edit-button { min-height: 40px; padding: 0 16px; border-radius: 11px; font-size: 12px; font-weight: 750; }
 .find-button { border: 0; color: white; background: var(--green); }

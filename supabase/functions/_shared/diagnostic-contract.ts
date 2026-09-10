@@ -8,7 +8,20 @@ export const diagnosticSchema = {
     serviceCategory: { type: 'string', enum: categories },
     understoodProblem: { type: 'string', minLength: 1, maxLength: 500 },
     confidence: { type: 'number', minimum: 0, maximum: 1 },
-    missingQuestions: { type: 'array', maxItems: 3, items: { type: 'string', minLength: 1, maxLength: 300 } },
+    missingQuestions: {
+      type: 'array', maxItems: 3, items: {
+        type: 'object', additionalProperties: false,
+        required: ['question', 'suggestedAnswers', 'allowUnknown'],
+        properties: {
+          question: { type: 'string', minLength: 1, maxLength: 300 },
+          suggestedAnswers: {
+            type: 'array', minItems: 3, maxItems: 5,
+            items: { type: 'string', minLength: 1, maxLength: 120 },
+          },
+          allowUnknown: { type: 'boolean' },
+        },
+      },
+    },
     vietnameseSummary: { type: 'string', minLength: 1, maxLength: 500 },
   },
 } as const;
@@ -47,15 +60,30 @@ export function validateDiagnostic(value: unknown) {
       || typeof value.understoodProblem !== 'string' || !value.understoodProblem.trim() || value.understoodProblem.length > 500
       || typeof value.confidence !== 'number' || !Number.isFinite(value.confidence) || value.confidence < 0 || value.confidence > 1
       || !Array.isArray(value.missingQuestions) || value.missingQuestions.length > 3
-      || value.missingQuestions.some(question => typeof question !== 'string' || !question.trim() || question.length > 300)
       || typeof value.vietnameseSummary !== 'string' || !value.vietnameseSummary.trim() || value.vietnameseSummary.length > 500) {
     throw new Error('AI_INVALID_RESPONSE');
   }
+  const missingQuestions = value.missingQuestions.map(item => {
+    if (!plainObject(item)) throw new Error('AI_INVALID_RESPONSE');
+    const expectedQuestionKeys = ['allowUnknown', 'question', 'suggestedAnswers'];
+    const itemKeys = Object.keys(item).sort();
+    if (itemKeys.length !== expectedQuestionKeys.length || itemKeys.some((key, index) => key !== expectedQuestionKeys[index])) throw new Error('AI_INVALID_RESPONSE');
+    if (typeof item.question !== 'string' || !item.question.trim() || item.question.length > 300
+        || !Array.isArray(item.suggestedAnswers) || item.suggestedAnswers.length < 3 || item.suggestedAnswers.length > 5
+        || item.suggestedAnswers.some(answer => typeof answer !== 'string' || !answer.trim() || answer.length > 120 || ['Khác', 'Không biết'].includes(answer.trim()))
+        || new Set(item.suggestedAnswers.map(answer => answer.trim())).size !== item.suggestedAnswers.length
+        || typeof item.allowUnknown !== 'boolean') throw new Error('AI_INVALID_RESPONSE');
+    return {
+      question: item.question.trim(),
+      suggestedAnswers: item.suggestedAnswers.map(answer => answer.trim()),
+      allowUnknown: item.allowUnknown,
+    };
+  });
   return {
     serviceCategory: value.serviceCategory,
     understoodProblem: value.understoodProblem.trim(),
     confidence: value.confidence,
-    missingQuestions: value.missingQuestions.map(question => question.trim()),
+    missingQuestions,
     vietnameseSummary: value.vietnameseSummary.trim(),
   };
 }

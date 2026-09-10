@@ -16,15 +16,30 @@ export function validateAiDiagnostic(value) {
       || typeof value.understoodProblem !== 'string' || !value.understoodProblem.trim() || value.understoodProblem.length > 500
       || !Number.isFinite(value.confidence) || value.confidence < 0 || value.confidence > 1
       || !Array.isArray(value.missingQuestions) || value.missingQuestions.length > 3
-      || value.missingQuestions.some(question => typeof question !== 'string' || !question.trim() || question.length > 300)
       || typeof value.vietnameseSummary !== 'string' || !value.vietnameseSummary.trim() || value.vietnameseSummary.length > 500) {
     throw new TypeError('Invalid AI diagnostic response');
   }
+  const missingQuestions = value.missingQuestions.map(item => {
+    if (!isPlainObject(item)) throw new TypeError('Invalid AI diagnostic response');
+    const itemKeys = Object.keys(item).sort();
+    const expectedItemKeys = ['allowUnknown', 'question', 'suggestedAnswers'];
+    if (itemKeys.length !== expectedItemKeys.length || itemKeys.some((key, index) => key !== expectedItemKeys[index])
+        || typeof item.question !== 'string' || !item.question.trim() || item.question.length > 300
+        || !Array.isArray(item.suggestedAnswers) || item.suggestedAnswers.length < 3 || item.suggestedAnswers.length > 5
+        || item.suggestedAnswers.some(answer => typeof answer !== 'string' || !answer.trim() || answer.length > 120 || ['Khác', 'Không biết'].includes(answer.trim()))
+        || new Set(item.suggestedAnswers.map(answer => answer.trim())).size !== item.suggestedAnswers.length
+        || typeof item.allowUnknown !== 'boolean') throw new TypeError('Invalid AI diagnostic response');
+    return Object.freeze({
+      question: item.question.trim(),
+      suggestedAnswers: Object.freeze(item.suggestedAnswers.map(answer => answer.trim())),
+      allowUnknown: item.allowUnknown,
+    });
+  });
   return Object.freeze({
     serviceCategory: value.serviceCategory,
     understoodProblem: value.understoodProblem.trim(),
     confidence: value.confidence,
-    missingQuestions: Object.freeze(value.missingQuestions.map(question => question.trim())),
+    missingQuestions: Object.freeze(missingQuestions),
     vietnameseSummary: value.vietnameseSummary.trim(),
   });
 }

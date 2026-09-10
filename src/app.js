@@ -300,10 +300,11 @@ export function createHomeAiMarkup() {
               <div class="clarification" data-result-questions hidden>
                 <strong>Cần bổ sung</strong>
                 <p data-clarification-question></p>
-                <form data-clarification-form>
-                  <label for="clarification-answer">Câu trả lời của bạn</label>
+                <div class="clarification-options" data-clarification-options role="group" aria-label="Các câu trả lời đề xuất"></div>
+                <form data-clarification-form hidden>
+                  <label for="clarification-answer">Nhập câu trả lời khác</label>
                   <input id="clarification-answer" name="answer" maxlength="500" autocomplete="off" required />
-                  <button type="submit">Gửi câu trả lời</button>
+                  <button type="submit">Tiếp tục</button>
                 </form>
                 <small data-clarification-progress></small>
               </div>
@@ -507,7 +508,7 @@ export function initialiseHomePage(
   let diagnosedCategory;
   let selectedTechnician;
   let currentDiagnosis;
-  let diagnosticConversation = { initialDescription: '', clarifications: [], currentQuestion: '', pending: false };
+  let diagnosticConversation = { initialDescription: '', clarifications: [], currentQuestion: null, pending: false, submitting: false };
   let matchedTechnicians = [];
   let currentRadiusKm = 2;
   let mapProvider;
@@ -702,26 +703,43 @@ export function initialiseHomePage(
     }
     const questions = root.querySelector('[data-result-questions]');
     const missing = Array.isArray(diagnosis.missingQuestions) ? diagnosis.missingQuestions : [];
-    const canClarify = diagnosis.source === 'openai' && missing.length > 0 && diagnosticConversation.clarifications.length < 3;
-    diagnosticConversation.currentQuestion = canClarify ? missing[0] : '';
+    const nextQuestion = missing[0];
+    const canClarify = diagnosis.source === 'openai' && nextQuestion?.question
+      && Array.isArray(nextQuestion.suggestedAnswers) && nextQuestion.suggestedAnswers.length >= 3
+      && diagnosticConversation.clarifications.length < 3;
+    diagnosticConversation.currentQuestion = canClarify ? nextQuestion : null;
     diagnosticConversation.pending = canClarify;
+    diagnosticConversation.submitting = false;
     questions.hidden = !canClarify;
-    root.querySelector('[data-clarification-question]').textContent = diagnosticConversation.currentQuestion;
+    root.querySelector('[data-clarification-question]').textContent = diagnosticConversation.currentQuestion?.question ?? '';
+    const optionContainer = root.querySelector('[data-clarification-options]');
+    const optionLabels = canClarify
+      ? [...nextQuestion.suggestedAnswers, ...(nextQuestion.allowUnknown ? ['Không biết'] : []), 'Khác']
+      : [];
+    optionContainer.replaceChildren(...optionLabels.map(label => {
+      const button = root.ownerDocument.createElement('button');
+      button.type = 'button';
+      button.textContent = label;
+      if (label === 'Khác') button.dataset.clarificationOther = '';
+      else button.dataset.clarificationAnswer = label;
+      return button;
+    }));
     root.querySelector('[data-clarification-progress]').textContent = canClarify
       ? `Câu hỏi ${diagnosticConversation.clarifications.length + 1}/3`
       : '';
-    root.querySelector('[data-clarification-form]').reset();
+    const clarificationForm = root.querySelector('[data-clarification-form]');
+    clarificationForm.reset();
+    clarificationForm.hidden = true;
     root.querySelector('[data-find-technician]').hidden = canClarify;
     root.querySelector('[data-result-note]').hidden = canClarify;
     status.textContent = '';
     resultCard.hidden = false;
     resultCard.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
-    if (canClarify) root.querySelector('[data-clarification-form] input').focus();
   };
   const analyseCurrentConversation = async () => {
     const submitButton = form.querySelector('[type="submit"]');
     submitButton.disabled = true;
-    root.querySelector('[data-clarification-form] button').disabled = true;
+    root.querySelectorAll('[data-clarification-options] button, [data-clarification-form] button').forEach(button => { button.disabled = true; });
     status.textContent = 'AI đang phân tích vấn đề của bạn...';
     try {
       const diagnosis = await diagnosticService.analyse({
@@ -734,29 +752,52 @@ export function initialiseHomePage(
       status.textContent = 'Không thể phân tích lúc này. Vui lòng thử lại.';
     } finally {
       submitButton.disabled = false;
-      root.querySelector('[data-clarification-form] button').disabled = false;
+      diagnosticConversation.submitting = false;
+      root.querySelectorAll('[data-clarification-options] button, [data-clarification-form] button').forEach(button => { button.disabled = false; });
     }
   };
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const description = input.value.trim();
     if (!description) return;
-    diagnosticConversation = { initialDescription: description, clarifications: [], currentQuestion: '', pending: false };
+    diagnosticConversation = { initialDescription: description, clarifications: [], currentQuestion: null, pending: false, submitting: false };
     resultCard.hidden = true;
     await analyseCurrentConversation();
   });
 
+  const submitClarification = async answer => {
+    if (!diagnosticConversation.pending || diagnosticConversation.submitting
+        || diagnosticConversation.clarifications.length >= 3) return;
+    const cleanAnswer = String(answer ?? '').trim();
+    if (!cleanAnswer) return;
+    diagnosticConversation.submitting = true;
+    diagnosticConversation.clarifications.push({
+      question: diagnosticConversation.currentQuestion.question,
+      answer: cleanAnswer,
+    });
+    await analyseCurrentConversation();
+  };
+  root.querySelector('[data-result-questions]').addEventListener('click', event => {
+    const answerButton = event.target.closest?.('[data-clarification-answer]');
+    if (answerButton) {
+      void submitClarification(answerButton.dataset.clarificationAnswer);
+      return;
+    }
+    if (event.target.closest?.('[data-clarification-other]')) {
+      const clarificationForm = root.querySelector('[data-clarification-form]');
+      clarificationForm.hidden = false;
+      clarificationForm.elements.answer.focus();
+    }
+  });
   root.querySelector('[data-clarification-form]').addEventListener('submit', async event => {
     event.preventDefault();
-    if (!diagnosticConversation.pending || diagnosticConversation.clarifications.length >= 3) return;
-    const answer = event.target.elements.answer.value.trim();
+    const answer = event.target.elements.answer.value;
     if (!answer) return;
-    diagnosticConversation.clarifications.push({ question: diagnosticConversation.currentQuestion, answer });
-    await analyseCurrentConversation();
+    await submitClarification(answer);
   });
 
   root.querySelector('[data-edit-description]').addEventListener('click', () => {
-    diagnosticConversation = { initialDescription: '', clarifications: [], currentQuestion: '', pending: false };
+    diagnosticConversation = { initialDescription: '', clarifications: [], currentQuestion: null, pending: false, submitting: false };
     resultCard.hidden = true;
     input.focus();
   });
