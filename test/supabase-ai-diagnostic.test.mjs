@@ -77,6 +77,21 @@ it('never repeats supplied facts or invents location and detailed answer options
   assert.doesNotMatch(diagnosticInstructions, /Phòng khách - tường bên phải|Phòng ngủ - cạnh giường/);
 });
 
+it('does not collect price preauthorization or repeat an already requested repair action', () => {
+  assert.match(diagnosticInstructions, /never ask for a budget, price threshold, payment choice or advance authorization/i);
+  assert.match(diagnosticInstructions, /quote workflow handles explicit customer approval later/i);
+  assert.match(diagnosticInstructions, /already asks to inspect and repair[\s\S]*do not ask whether they want inspection only or immediate repair/i);
+  assert.match(diagnosticInstructions, /2 máy lạnh treo tường[\s\S]*Do not ask again whether to inspect or repair[\s\S]*do not invent price-limit options/i);
+  assert.doesNotMatch(diagnosticInstructions, /1\.000\.000|3\.000\.000/);
+});
+
+it('stops when provider-useful facts are sufficient and never delegates technical choices to the customer', () => {
+  assert.match(diagnosticInstructions, /2 máy lạnh treo tường[\s\S]*Return missingQuestions=\[\]/i);
+  assert.match(diagnosticInstructions, /Do not ask the customer to predict a technical cause/i);
+  assert.match(diagnosticInstructions, /choose the provider's tools or materials/i);
+  assert.match(diagnosticInstructions, /never ask whether the provider should bring or refill refrigerant/i);
+});
+
 it('keeps Khác in the UI, allows Không biết when useful, and produces a provider summary', () => {
   assert.match(diagnosticInstructions, /Do not put “Khác” or “Không biết” in suggestedAnswers/);
   assert.match(diagnosticInstructions, /allowUnknown=true only when not knowing is a meaningful response/);
