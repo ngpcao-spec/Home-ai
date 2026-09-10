@@ -43,7 +43,13 @@ export function createMockProviderAppRepository(seed = mockProviderDashboard) {
       state.assignment = { ...state.assignment, status: 'quote_pending', quote };
       return clone(state);
     },
-    async startIntervention(missionId) { if (state.assignment?.id !== missionId || state.assignment.quote?.status !== 'accepted') throw new Error('Accepted quote required'); const pricing=services.find(({serviceCategory})=>serviceCategory===state.assignment.serviceCategory)??services[0]; state.assignment={...state.assignment,status:'in_progress',pricing}; return clone(state); },
+    async startIntervention(missionId) {
+      const pricing=state.assignment?.pricing??services.find(({serviceCategory})=>serviceCategory===state.assignment?.serviceCategory)??services[0];
+      const hourlyReady=pricing?.pricingModel==='hourly'&&state.assignment?.status==='arrived';
+      const quoteReady=state.assignment?.quote?.status==='accepted';
+      if(state.assignment?.id!==missionId||(!hourlyReady&&!quoteReady))throw new Error('Mission is not ready to start');
+      state.assignment={...state.assignment,status:'in_progress',pricing};return clone(state);
+    },
     async submitHourlyInvoice(missionId, invoice) {
       if (state.assignment?.id !== missionId) throw new Error('Mission is not in progress');
       if (state.assignment.invoice) {

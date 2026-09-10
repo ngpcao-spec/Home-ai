@@ -54,18 +54,26 @@ describe('Provider hourly billing V1', () => {
     assert.equal(readHourlyInvoiceForm(root, pricing).invoice.totalAmount, 625000);
   });
 
-  it('runs finish → editable billing → explicit invoice send → payment wait', async () => {
+  it('runs hourly arrival → no fixed quote → intervention → 1h35 invoice → payment wait', async () => {
     const dom = new JSDOM('<div id="provider-root"></div>', { pretendToBeVisual: true });
     const root = dom.window.document.querySelector('#provider-root');
     const repository = createMockProviderAppRepository({
       provider: { id: 'p1', name: 'Provider Test' }, status: { online: true, available: false }, offers: [],
       services: [{ id: 's1', providerId: 'p1', serviceCategory: 'electricity', ...pricing, enabled: true }],
       assignment: { id: 'm1', serviceCategory: 'electricity', request: 'Sửa điện', address: 'Nha Trang',
-        status: 'in_progress', pricing, quote: { id: 'q1', version: 1, status: 'accepted', diagnosis: 'Sửa', totalAmount: 200000 } },
+        status: 'arrived', pricing, quote: null },
     });
     const app = await initialiseProviderApp(root, async () => repository, async () => null,
       { enabled: false, getSession: async () => null }, () => ({ sync() {}, stop() {} }));
     try {
+      assert.ok(root.querySelector('[data-hourly-intervention-ready]'));
+      assert.equal(root.querySelector('[data-quote-labor]'), null);
+      assert.equal(root.querySelector('[data-quote-parts]'), null);
+      assert.equal(root.querySelector('[data-send-quote]'), null);
+      root.querySelector('[data-start-intervention]').click();
+      for (let index = 0; index < 3; index += 1) await new Promise((resolve) => setImmediate(resolve));
+      assert.equal(app.getState().assignment.status, 'in_progress');
+      assert.ok(root.querySelector('[data-hourly-intervention-progress]'));
       root.querySelector('[data-finish-intervention]').click();
       await new Promise((resolve) => setImmediate(resolve));
       assert.ok(root.querySelector('[data-hourly-invoice-form]'));
@@ -148,6 +156,17 @@ describe('Provider hourly billing V1', () => {
     assert.match(sql, /final_authorized_amount=result\.total_amount,status='completed_pending_payment'/);
     assert.match(sql, /revoke all on function public\.finish_current_provider_intervention\(uuid,integer\) from public,anon,authenticated/);
     assert.match(sql, /where \(user_role='customer' and m\.client_id=uid\) or \(user_role='provider' and m\.provider_id=uid\)/);
+  });
+
+  it('branches server intervention by pricing model and invoices hourly work without a fixed quote', async () => {
+    const sql = await readFile(new URL('../supabase/migrations/20260910001500_hourly_intervention_without_quote.sql', import.meta.url), 'utf8');
+    assert.match(sql, /if service_row\.pricing_model='hourly' then[\s\S]*mission_row\.status<>'arrived'/);
+    assert.match(sql, /else[\s\S]*accepted_quote[\s\S]*mission_row\.status<>'quote_pending'/);
+    assert.match(sql, /accepted_quote\.id is null or accepted_quote\.type<>'initial'/);
+    assert.match(sql, /mission_row\.status<>'in_progress'/);
+    assert.doesNotMatch(sql, /submit_current_provider_hourly_invoice[\s\S]*accepted_quote/);
+    assert.match(sql, /calculated_labor:=greatest\(service_row\.minimum_charge,[\s\S]*service_row\.hourly_rate\*total_worked_minutes\+30/);
+    assert.match(sql, /final_authorized_amount=result\.total_amount,status='completed_pending_payment'/);
   });
 
   it('keeps legacy base prices separate until hourly pricing is explicitly configured', async () => {

@@ -45,6 +45,20 @@ function renderQuoteWorkflow(assignment, { diagnosing=false, busy=false, supplem
     </section>`;
   }
   if (billing) return renderHourlyInvoiceForm(assignment.pricing, { busy });
+  if (assignment.pricing?.pricingModel === 'hourly') {
+    if (assignment.status === 'arrived') return `<section class="provider-quote provider-hourly-start" data-hourly-intervention-ready>
+      <p>THANH TOÁN THEO GIỜ</p><h3>Sẵn sàng bắt đầu công việc</h3>
+      <div class="waiting-pulse">${money(assignment.pricing.hourlyRate)}/giờ · tối thiểu ${money(assignment.pricing.minimumCharge)}</div>
+      <small>Thời gian và vật tư sẽ được khai báo khi hoàn thành công việc.</small>
+      <button data-start-intervention ${busy?'disabled':''}>Bắt đầu thực hiện</button>
+    </section>`;
+    if (assignment.status === 'in_progress') return `<section class="provider-quote provider-hourly-progress" data-hourly-intervention-progress>
+      <p>THANH TOÁN THEO GIỜ</p><h3>Công việc đang thực hiện</h3>
+      <small>Hoàn thành công việc để khai báo thời gian và vật tư thực tế.</small>
+      <button data-finish-intervention ${busy?'disabled':''}>Hoàn tất công việc</button>
+    </section>`;
+    return '';
+  }
   if(supplementParent)return renderSupplementForm(supplementParent);
   if (assignment.quote && !['declined','rejected'].includes(assignment.quote.status)) { const accepted=assignment.quote.status==='accepted'; return `<section class="provider-quote provider-quote--waiting"><p>BÁO GIÁ V${assignment.quote.version}</p><h3>${esc(assignment.quote.diagnosis)}</h3><strong>${money(assignment.quote.totalAmount)}</strong><span>${accepted?'Khách hàng đã chấp nhận':'Đã gửi cho khách hàng'}</span><div class="waiting-pulse">${accepted?'✓ Công việc đã được phê duyệt':'⌛ Đang chờ khách hàng chấp nhận'}</div><small>${accepted?'Nội dung báo giá này đã khóa; mọi thay đổi phải tạo phiên bản mới.':'Không bắt đầu công việc tính phí trước khi khách hàng chấp nhận rõ ràng.'}</small>${accepted&&assignment.status==='quote_pending'?`<button data-start-intervention ${busy?'disabled':''}>Bắt đầu thực hiện</button>`:''}${assignment.status==='in_progress'?`<button data-provider-supplement>Đề xuất chi phí phát sinh</button><button data-finish-intervention ${busy?'disabled':''}>Hoàn tất công việc</button>`:''}</section>`; }
   if (assignment.status === 'in_progress' && assignment.quote?.status === 'rejected') return '<p>Chi phí phát sinh đã bị từ chối. Chỉ tiếp tục công việc đã chấp nhận.</p><button data-finish-intervention>Hoàn tất công việc</button>';
@@ -146,6 +160,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   const loadPricing=async()=>{pricingLoading=true;pricingError='';await renderDashboard();try{pricingServices=await repository.getServices();}catch(error){pricingServices=[];pricingError=error?.message??'Lỗi không xác định';}finally{pricingLoading=false;await renderDashboard();}};
   const canSendQuote=()=>state.assignment?.id===editingMissionId
     && state.assignment.status==='arrived'
+    && state.assignment.pricing?.pricingModel!=='hourly'
     && (!state.assignment.quote || ['declined','rejected'].includes(state.assignment.quote.status));
   const canSendSupplement=()=>state.assignment?.id===editingMissionId
     && state.assignment?.status==='in_progress' && state.assignment.quote?.status==='accepted'
