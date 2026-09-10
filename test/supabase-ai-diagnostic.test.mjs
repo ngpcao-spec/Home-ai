@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { it } from 'node:test';
 import { adaptAiDiagnostic, validateAiDiagnostic } from '../src/diagnostic/diagnostic-contract.js';
 import { createSupabaseAiDiagnostic } from '../src/diagnostic/supabase-ai-diagnostic.js';
+import { diagnosticInstructions } from '../supabase/functions/_shared/diagnostic-instructions.js';
 
 const valid = {
   serviceCategory: 'electricity',
@@ -45,6 +46,43 @@ it('rejects unknown fields, categories and malformed AI output', () => {
   assert.throws(() => adaptAiDiagnostic({ ...valid, serviceCategory: 'roofing' }), /Invalid AI diagnostic/);
   assert.throws(() => validateAiDiagnostic({ ...valid, confidence: 2 }), /Invalid AI diagnostic/);
   assert.throws(() => validateAiDiagnostic({ ...valid, missingQuestions: [{ ...valid.missingQuestions[0], suggestedAnswers: ['Một', 'Hai'] }] }), /Invalid AI diagnostic/);
+  assert.throws(() => validateAiDiagnostic({ ...valid, missingQuestions: [valid.missingQuestions[0], valid.missingQuestions[0]] }), /Invalid AI diagnostic/);
+});
+
+it('prioritizes provider-useful clarification without a rigid category questionnaire', () => {
+  assert.match(diagnosticInstructions, /not a technical diagnostician/i);
+  assert.match(diagnosticInstructions, /single missing fact has the highest real value for the provider/i);
+  for (const criterion of ['quantity', 'requested action', 'scope', 'duration', 'date or time', 'logistics', 'required equipment']) {
+    assert.match(diagnosticInstructions, new RegExp(criterion, 'i'));
+  }
+  assert.match(diagnosticInstructions, /future services such as drivers, car rental, furniture repair, cleaning/i);
+  assert.match(diagnosticInstructions, /Never apply a rigid category-specific questionnaire/i);
+});
+
+it('asks quantity first for multiple outlets and multiple bulbs', () => {
+  assert.match(diagnosticInstructions, /Cần thay nhiều ổ cắm điện[\s\S]*Bao nhiêu ổ cắm cần thay\?/);
+  assert.match(diagnosticInstructions, /Cần thay nhiều bóng đèn[\s\S]*Bao nhiêu bóng đèn cần thay\?/);
+  assert.match(diagnosticInstructions, /“1”, “2”, “3”, “4 trở lên”/);
+});
+
+it('guides plumbing and air-conditioning questions toward useful work information', () => {
+  assert.match(diagnosticInstructions, /For a plumbing request[\s\S]*requested work[\s\S]*quantity[\s\S]*scope\/symptom/);
+  assert.match(diagnosticInstructions, /For an air-conditioning request[\s\S]*number\/type of units[\s\S]*observable symptom/);
+});
+
+it('never repeats supplied facts or invents location and detailed answer options', () => {
+  assert.match(diagnosticInstructions, /Never ask again for information already present/i);
+  assert.match(diagnosticInstructions, /without inventing facts or overly precise details/i);
+  assert.match(diagnosticInstructions, /Do not ask which room each outlet is in/i);
+  assert.doesNotMatch(diagnosticInstructions, /Phòng khách - tường bên phải|Phòng ngủ - cạnh giường/);
+});
+
+it('keeps Khác in the UI, allows Không biết when useful, and produces a provider summary', () => {
+  assert.match(diagnosticInstructions, /Do not put “Khác” or “Không biết” in suggestedAnswers/);
+  assert.match(diagnosticInstructions, /allowUnknown=true only when not knowing is a meaningful response/);
+  assert.match(diagnosticInstructions, /vietnameseSummary is primarily for the provider/i);
+  assert.match(diagnosticInstructions, /short, factual and actionable/i);
+  assert.match(diagnosticInstructions, /Never invent quantity, fault, materials, price, duration, urgency, diagnosis, cause, repair, safety claim, location/);
 });
 
 it('uses the technical fallback for network, 429, 5xx and invalid JSON responses', async () => {
@@ -100,10 +138,12 @@ it('keeps the Edge Function authenticated, secret-only and strictly validated', 
   assert.match(source, /reasoning: \{ effort: 'minimal' \}/);
   assert.match(source, /max_output_tokens: 400/);
   assert.match(source, /store: false/);
+  assert.match(source, /instructions: diagnosticInstructions/);
   assert.doesNotMatch(source, /logStage\([^\n]*(?:token|apiKey|description|userData)/);
   assert.match(source, /AbortController/);
   assert.match(source, /AI_TIMEOUT/);
   assert.match(contract, /additionalProperties: false/);
+  assert.match(contract, /missingQuestions: \{[\s\S]*maxItems: 1/);
   assert.match(contract, /rawClarifications\.length > 3/);
   assert.match(source, /initialProblem: input\.description/);
   assert.match(source, /clarificationHistory: input\.clarifications/);

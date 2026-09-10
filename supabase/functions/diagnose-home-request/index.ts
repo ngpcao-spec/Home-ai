@@ -1,5 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { diagnosticSchema, validateDiagnostic, validateRequest } from '../_shared/diagnostic-contract.ts';
+import { diagnosticInstructions } from '../_shared/diagnostic-instructions.js';
 
 const allowedOrigins = new Set(['https://ngpcao-spec.github.io', 'http://localhost:3000', 'http://127.0.0.1:3000']);
 const jsonHeaders = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
@@ -72,7 +73,7 @@ Deno.serve(async request => {
         reasoning: { effort: 'minimal' },
         max_output_tokens: 400,
         store: false,
-        instructions: 'Classify the HOME AI repair request using the initial problem and every clarification. Return only the required JSON. Use Vietnamese for understoodProblem, every missing question, every suggested answer and vietnameseSummary. For each missing question provide 3 to 5 short, relevant and mutually distinct suggestedAnswers. Set allowUnknown=true only when not knowing is a meaningful answer. Ask only for information still missing. Do not include “Khác” or “Không biết” in suggestedAnswers because the interface adds them. Do not provide medical advice and do not invent safety claims, prices, urgency, causes or repairs.',
+        instructions: diagnosticInstructions,
         input: [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify({
           initialProblem: input.description,
           clarificationHistory: input.clarifications,

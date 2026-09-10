@@ -15,7 +15,7 @@ export function validateAiDiagnostic(value) {
   if (!diagnosticCategories.includes(value.serviceCategory)
       || typeof value.understoodProblem !== 'string' || !value.understoodProblem.trim() || value.understoodProblem.length > 500
       || !Number.isFinite(value.confidence) || value.confidence < 0 || value.confidence > 1
-      || !Array.isArray(value.missingQuestions) || value.missingQuestions.length > 3
+      || !Array.isArray(value.missingQuestions) || value.missingQuestions.length > 1
       || typeof value.vietnameseSummary !== 'string' || !value.vietnameseSummary.trim() || value.vietnameseSummary.length > 500) {
     throw new TypeError('Invalid AI diagnostic response');
   }

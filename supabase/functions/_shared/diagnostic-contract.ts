@@ -9,7 +9,7 @@ export const diagnosticSchema = {
     understoodProblem: { type: 'string', minLength: 1, maxLength: 500 },
     confidence: { type: 'number', minimum: 0, maximum: 1 },
     missingQuestions: {
-      type: 'array', maxItems: 3, items: {
+      type: 'array', maxItems: 1, items: {
         type: 'object', additionalProperties: false,
         required: ['question', 'suggestedAnswers', 'allowUnknown'],
         properties: {
@@ -59,7 +59,7 @@ export function validateDiagnostic(value: unknown) {
   if (!categories.includes(value.serviceCategory as typeof categories[number])
       || typeof value.understoodProblem !== 'string' || !value.understoodProblem.trim() || value.understoodProblem.length > 500
       || typeof value.confidence !== 'number' || !Number.isFinite(value.confidence) || value.confidence < 0 || value.confidence > 1
-      || !Array.isArray(value.missingQuestions) || value.missingQuestions.length > 3
+      || !Array.isArray(value.missingQuestions) || value.missingQuestions.length > 1
       || typeof value.vietnameseSummary !== 'string' || !value.vietnameseSummary.trim() || value.vietnameseSummary.length > 500) {
     throw new Error('AI_INVALID_RESPONSE');
   }
