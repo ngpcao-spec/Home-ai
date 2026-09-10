@@ -59,13 +59,13 @@ export function renderProviderActivities(services = [], flow = {}) {
     const proposal = flow.proposal;
     const suggested = flow.reference?.medianHourlyRate;
     const hourlyRate = flow.hourlyRate ?? suggested ?? '';
-    const minimumCharge = flow.minimumCharge ?? '';
+    const minimumCharge = flow.minimumCharge ?? 0;
     return `<main class="provider-activities activity-flow">${back('proposal')}<div class="activity-page-title">Đặt mức giá của tôi</div>${progress(3)}
       <h1>Bạn muốn đề xuất mức giá nào?</h1><p>Bạn hoàn toàn tự do lựa chọn. Mức HOME AI chỉ mang tính tham khảo.</p>
       ${suggested == null ? '' : `<section class="rate-suggestion"><small>Tarif conseillé par HOME AI</small><strong>${formatMoney(suggested)}/giờ</strong></section>`}
       <form class="activity-rate-form" data-activity-rate-form>
-        <label>Đơn giá theo giờ <b>*</b><span><input type="number" inputmode="numeric" min="1" max="1000000000" step="1000" value="${hourlyRate}" data-activity-hourly-rate><em>đ/giờ</em></span></label>
-        <label>Mức phí tối thiểu <b>*</b><span><input type="number" inputmode="numeric" min="0" max="1000000000000" step="1000" value="${minimumCharge}" data-activity-minimum-charge><em>đ</em></span></label>
+        <label>Đơn giá theo giờ <b>*</b><span><input type="number" inputmode="numeric" min="1" max="1000000000" step="1000" value="${hourlyRate}" data-activity-hourly-rate required><em>đ/giờ</em></span></label>
+        <label>Mức phí tối thiểu <b>*</b><span><input type="number" inputmode="numeric" min="0" max="1000000000000" step="1000" value="${minimumCharge}" data-activity-minimum-charge required><em>đ</em></span></label>
         <aside><strong>💡 Gợi ý</strong><p>Mức phí tối thiểu giúp bù chi phí di chuyển và các công việc nhỏ.</p></aside>
         <button type="submit" data-create-activity ${flow.busy ? 'disabled' : ''}>Thêm hoạt động của tôi</button>
       </form><p class="activity-message" role="status">${escapeHtml(flow.error ?? '')}</p>
@@ -90,10 +90,13 @@ export function readProviderActivityInput(root, mode) {
 }
 
 export function readProviderActivityPricing(root) {
-  const hourlyRate = Number(root.querySelector('[data-activity-hourly-rate]')?.value);
-  const minimumCharge = Number(root.querySelector('[data-activity-minimum-charge]')?.value);
+  const hourlyRateValue = root.querySelector('[data-activity-hourly-rate]')?.value ?? '';
+  const minimumChargeValue = root.querySelector('[data-activity-minimum-charge]')?.value ?? '';
+  const hourlyRate = Number(hourlyRateValue);
+  const minimumCharge = Number(minimumChargeValue);
   return Object.freeze({
-    valid: Number.isInteger(hourlyRate) && hourlyRate > 0 && hourlyRate <= 1_000_000_000
+    valid: hourlyRateValue !== '' && minimumChargeValue !== ''
+      && Number.isInteger(hourlyRate) && hourlyRate > 0 && hourlyRate <= 1_000_000_000
       && Number.isInteger(minimumCharge) && minimumCharge >= 0 && minimumCharge <= 1_000_000_000_000,
     hourlyRate, minimumCharge,
   });

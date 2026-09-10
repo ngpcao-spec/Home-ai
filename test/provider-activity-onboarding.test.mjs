@@ -31,6 +31,12 @@ describe('Provider activity onboarding', () => {
       reference: { medianHourlyRate: null, providerCount: 0 } });
     const dom = new JSDOM(noReference);
     assert.equal(dom.window.document.querySelector('[data-activity-hourly-rate]').value, '');
+    assert.equal(dom.window.document.querySelector('[data-activity-minimum-charge]').value, '0');
+    assert.equal(dom.window.document.querySelector('[data-activity-minimum-charge]').required, true);
+    dom.window.document.querySelector('[data-activity-hourly-rate]').value = '300000';
+    assert.equal(readProviderActivityPricing(dom.window.document).valid, true);
+    dom.window.document.querySelector('[data-activity-minimum-charge]').value = '';
+    assert.equal(readProviderActivityPricing(dom.window.document).valid, false);
     assert.doesNotMatch(noReference, /Tarif conseillé par HOME AI/);
   });
 
