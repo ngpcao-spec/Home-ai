@@ -73,6 +73,7 @@ export function createSupabaseOffersRepository(supabase) {
       return Object.freeze({
         medianHourlyRate: value.median_hourly_rate == null ? null : Number(value.median_hourly_rate),
         providerCount: Number(value.provider_count) || 0,
+        radiusKm: value.radius_km == null ? null : Number(value.radius_km),
       });
     },
     async createCurrentProviderActivity(proposal, pricing) {

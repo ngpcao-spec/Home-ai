@@ -43,14 +43,14 @@ export function renderProviderActivities(services = [], flow = {}) {
     const proposal = flow.proposal;
     const reference = flow.reference;
     const referenceMarkup = reference?.medianHourlyRate != null
-      ? `<strong>${formatMoney(reference.medianHourlyRate)}/giờ</strong><small>Tính từ ${reference.providerCount} provider đã hoàn thành nhiệm vụ tương tự gần bạn</small>`
+      ? `<strong>Tarif médian HOME AI : ${formatMoney(reference.medianHourlyRate)}/giờ</strong><small>Basé sur ${reference.providerCount} providers</small>`
       : '<strong>Chưa có dữ liệu so sánh</strong><small>Bạn hoàn toàn tự do nhập mức giá của mình.</small>';
     return `<main class="provider-activities activity-flow">${back('choose')}<div class="activity-page-title">Đề xuất của HOME AI</div>${progress(2)}
       <div class="analysis-complete">✦ Phân tích hoàn tất</div><h1>Đây là những gì tôi hiểu</h1><p>Kiểm tra và sửa nếu cần.</p>
       <section class="activity-proposal-card"><span>${activityIcons[proposal.serviceCategory] ?? '◆'}</span><button type="button" data-edit-activity>Chỉnh sửa</button>
         <h2>${escapeHtml(proposal.activityName)}</h2><p>${escapeHtml(proposal.description)}</p></section>
       <section class="pricing-model-advice"><span>⌛</span><div><small>Mô hình giá đề xuất</small><strong>${proposal.pricingModel === 'hourly' ? 'Theo giờ' : escapeHtml(proposal.pricingModel)}</strong><p>HOME AI chỉ hỗ trợ cấu hình theo giờ trong phiên bản này.</p></div></section>
-      <section class="rate-reference"><span>▥</span><div><small>Tarif médian HOME AI</small>${referenceMarkup}</div></section>
+      <section class="rate-reference"><span>▥</span><div>${referenceMarkup}</div></section>
       <button type="button" class="activity-primary" data-activity-continue ${proposal.pricingModel !== 'hourly' ? 'disabled' : ''}>Tiếp tục</button>
       <p class="activity-message" role="status">${escapeHtml(flow.error ?? '')}</p>
     </main>`;

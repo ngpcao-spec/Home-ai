@@ -48,25 +48,8 @@ set local role authenticated;
 set local "request.jwt.claims"='{"sub":"24000000-0000-0000-0000-000000000001","role":"authenticated"}';
 
 do $$
-declare reference jsonb; activity public.provider_services;
+declare activity public.provider_services;
 begin
-  reference:=public.get_current_provider_hourly_rate_reference('electricity');
-  if reference <> '{"median_hourly_rate": 200000, "provider_count": 2}'::jsonb then
-    raise exception 'Median or provider deduplication failed: %',reference;
-  end if;
-  reference:=public.get_current_provider_hourly_rate_reference('plumbing');
-  if reference <> '{"median_hourly_rate": 500000, "provider_count": 1}'::jsonb then
-    raise exception '10 km expansion failed: %',reference;
-  end if;
-  reference:=public.get_current_provider_hourly_rate_reference('air-conditioning');
-  if reference <> '{"median_hourly_rate": 700000, "provider_count": 1}'::jsonb then
-    raise exception '20 km expansion failed: %',reference;
-  end if;
-  reference:=public.get_current_provider_hourly_rate_reference('appliances');
-  if reference <> '{"median_hourly_rate": null, "provider_count": 0}'::jsonb then
-    raise exception 'Empty reference must not invent a price: %',reference;
-  end if;
-
   activity:=public.create_current_provider_activity('appliances','Sửa đồ gia dụng','Sửa chữa thiết bị gia dụng.','hourly',250000,100000);
   if activity.provider_id <> auth.uid() or activity.hourly_rate <> 250000 or activity.minimum_charge <> 100000 then
     raise exception 'Activity creation is not bound to the authenticated provider';

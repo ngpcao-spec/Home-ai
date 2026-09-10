@@ -87,7 +87,7 @@ export function createMockProviderAppRepository(seed = mockProviderDashboard) {
         ? {serviceCategory:'electricity',activityName:'Thợ điện',description:'Sửa chữa và lắp đặt điện dân dụng.',pricingModel:'hourly'}
         : {serviceCategory:'plumbing',activityName:'Thợ sửa ống nước',description:'Sửa chữa và lắp đặt hệ thống nước.',pricingModel:'hourly'});
     },
-    async getHourlyRateReference() { return {medianHourlyRate:300000,providerCount:8}; },
+    async getHourlyRateReference() { return {medianHourlyRate:300000,providerCount:8,radiusKm:5}; },
     async createActivity(proposal,pricing) {
       if(services.some(({serviceCategory})=>serviceCategory===proposal.serviceCategory))throw new Error('Activity already exists');
       const service={id:`provider-service-${proposal.serviceCategory}`,providerId:state.provider.id,

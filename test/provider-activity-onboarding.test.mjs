@@ -24,11 +24,12 @@ describe('Provider activity onboarding', () => {
     assert.match(choice, /Mô tả công việc tôi làm/);
     assert.equal((choice.match(/data-activity-mode=/g) ?? []).length, 2);
     const understood = renderProviderActivities([], { step: 'proposal', proposal,
-      reference: { medianHourlyRate: 300000, providerCount: 8 } });
+      reference: { medianHourlyRate: 300000, providerCount: 8, radiusKm: 5 } });
     for (const text of ['Đề xuất của HOME AI', 'Đây là những gì tôi hiểu', 'Theo giờ',
-      'Tarif médian HOME AI', '300.000đ/giờ', '8 provider']) assert.match(understood, new RegExp(text));
+      'Tarif médian HOME AI : 300.000đ/giờ', 'Basé sur 8 providers']) assert.match(understood, new RegExp(text));
+    assert.doesNotMatch(understood, /5 km|radius_km|hourly_rates/);
     const noReference = renderProviderActivities([], { step: 'rate', proposal,
-      reference: { medianHourlyRate: null, providerCount: 0 } });
+      reference: { medianHourlyRate: null, providerCount: 0, radiusKm: null } });
     const dom = new JSDOM(noReference);
     assert.equal(dom.window.document.querySelector('[data-activity-hourly-rate]').value, '');
     assert.equal(dom.window.document.querySelector('[data-activity-minimum-charge]').value, '0');
@@ -81,7 +82,7 @@ describe('Provider activity onboarding', () => {
       functions: { invoke: async (name, options) => { calls.push(['function', name, options]); return { data: proposal, error: null }; } },
       rpc: async (name, args) => {
         calls.push(['rpc', name, args]);
-        if (name === 'get_current_provider_hourly_rate_reference') return { data: { median_hourly_rate: 300000, provider_count: 8 }, error: null };
+        if (name === 'get_current_provider_hourly_rate_reference') return { data: { median_hourly_rate: 300000, provider_count: 8, radius_km: 5 }, error: null };
         return { data: { id: 's1', provider_id: 'p1', service_category: 'electricity', activity_name: 'Thợ điện',
           activity_description: proposal.description, pricing_model: 'hourly', hourly_rate: 300000,
           minimum_charge: 400000, currency: 'VND', enabled: true }, error: null };
@@ -90,7 +91,7 @@ describe('Provider activity onboarding', () => {
     assert.deepEqual(await analyzeProviderActivity(client, { inputMode: 'profession', text: 'Électricien' }), proposal);
     const repository = createSupabaseOffersRepository(client);
     assert.deepEqual(await repository.getCurrentProviderHourlyRateReference('electricity'),
-      { medianHourlyRate: 300000, providerCount: 8 });
+      { medianHourlyRate: 300000, providerCount: 8, radiusKm: 5 });
     await repository.createCurrentProviderActivity(proposal, { hourlyRate: 300000, minimumCharge: 400000 });
     assert.deepEqual(calls[0], ['function', 'classify-provider-activity',
       { body: { inputMode: 'profession', text: 'Électricien' } }]);
@@ -121,16 +122,18 @@ describe('Provider activity onboarding', () => {
   });
 
   it('keeps median, provider deduplication and 5/10/20 km expansion in PostgreSQL', async () => {
-    const sql = await readFile(new URL('../supabase/migrations/20260910001600_provider_activity_onboarding.sql', import.meta.url), 'utf8');
+    const sql = await readFile(new URL('../supabase/migrations/20260911000100_historical_hourly_rate_reference.sql', import.meta.url), 'utf8');
     assert.match(sql, /m\.status='completed'/);
     assert.match(sql, /m\.provider_id<>uid/);
-    assert.match(sql, /group by m\.provider_id/);
+    assert.match(sql, /join public\.mission_invoices mi on mi\.mission_id=m\.id/);
+    assert.match(sql, /select distinct on \(cm\.provider_id\)/);
     assert.match(sql, /values \(5::double precision,1\),\(10::double precision,2\),\(20::double precision,3\)/);
     assert.match(sql, /order by r\.priority limit 1/);
-    assert.match(sql, /order by pr\.latest_completed_at desc,pr\.provider_id/);
+    assert.match(sql, /order by lm\.completed_at desc,lm\.mission_id desc/);
     assert.match(sql, /percentile_cont\(0\.5\) within group\(order by hourly_rate\)/);
-    assert.doesNotMatch(sql, /mission_invoices|worked_minutes|labor_amount|total_amount/);
-    assert.match(sql, /jsonb_build_object\([\s\S]*'median_hourly_rate',median_rate,[\s\S]*'provider_count'/);
+    assert.doesNotMatch(sql, /mi\.worked_minutes|mi\.labor_amount|mi\.material_amount|mi\.total_amount/);
+    assert.doesNotMatch(sql, /join public\.provider_services/);
+    assert.match(sql, /jsonb_build_object\([\s\S]*'median_hourly_rate',median_rate,[\s\S]*'provider_count',[\s\S]*'radius_km'/);
   });
 
   it('binds activity creation to auth.uid and preserves existing RLS', async () => {

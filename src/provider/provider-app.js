@@ -241,7 +241,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
       const input=readProviderActivityInput(root,activityFlow.mode);
       if(!input.valid){activityFlow={...activityFlow,error:'Vui lòng nhập ít nhất 2 ký tự.'};await draw();return;}
       busy=true;activityFlow={...activityFlow,input:input.text,error:''};await draw();
-      try{const proposal=await repository.analyzeActivity(input);const reference=proposal.pricingModel==='hourly'?await repository.getHourlyRateReference(proposal.serviceCategory):{medianHourlyRate:null,providerCount:0};activityFlow={...activityFlow,step:'proposal',proposal,reference,error:''};}
+      try{const proposal=await repository.analyzeActivity(input);const reference=proposal.pricingModel==='hourly'?await repository.getHourlyRateReference(proposal.serviceCategory):{medianHourlyRate:null,providerCount:0,radiusKm:null};activityFlow={...activityFlow,step:'proposal',proposal,reference,error:''};}
       catch(error){activityFlow={...activityFlow,error:error?.message??'Không thể phân tích hoạt động.'};}
       finally{busy=false;await draw();}
       return;
