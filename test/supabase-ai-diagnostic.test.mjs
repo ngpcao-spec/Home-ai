@@ -88,13 +88,34 @@ it('keeps the Edge Function authenticated, secret-only and strictly validated', 
   const config = await readFile(new URL('../supabase/config.toml', import.meta.url), 'utf8');
   assert.match(source, /auth\.getUser\(token\)/);
   assert.match(source, /Deno\.env\.get\('OPENAI_API_KEY'\)/);
-  assert.doesNotMatch(source, /console\.(?:log|error)|SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(source, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.match(source, /authenticated_post_received/);
+  assert.match(source, /openai_response_received/);
+  assert.match(source, /json_validated/);
+  assert.match(source, /reasoning: \{ effort: 'minimal' \}/);
+  assert.match(source, /max_output_tokens: 400/);
+  assert.match(source, /store: false/);
+  assert.doesNotMatch(source, /logStage\([^\n]*(?:token|apiKey|description|userData)/);
   assert.match(source, /AbortController/);
   assert.match(source, /AI_TIMEOUT/);
   assert.match(contract, /additionalProperties: false/);
   assert.match(contract, /required: \['serviceCategory', 'understoodProblem', 'confidence', 'missingQuestions', 'vietnameseSummary'\]/);
   assert.match(config, /\[functions\.diagnose-home-request\][\s\S]*verify_jwt = true/);
   for (const category of ['electricity', 'plumbing', 'air-conditioning', 'appliances']) assert.match(contract, new RegExp(`'${category}'`));
+});
+
+it('keeps OPTIONS open and completes an authenticated POST before the unchanged timeout', async () => {
+  const source = await readFile(new URL('../supabase/functions/diagnose-home-request/index.ts', import.meta.url), 'utf8');
+  assert.match(source, /request\.method === 'OPTIONS'[\s\S]*status: 204/);
+  const authenticated = source.indexOf("logStage('authenticated_post_received')");
+  const openAiStarted = source.indexOf("logStage('openai_request_started')");
+  const validated = source.indexOf("logStage('json_validated')");
+  const success = source.indexOf('return response(origin, 200, result)');
+  assert.ok(authenticated > source.indexOf('auth.getUser(token)'));
+  assert.ok(openAiStarted > authenticated);
+  assert.ok(validated > openAiStarted);
+  assert.ok(success > validated);
+  assert.match(source, /setTimeout\(\(\) => controller\.abort\(\), 12000\)/);
 });
 
 it('never exposes OPENAI_API_KEY through browser runtime configuration or Pages', async () => {

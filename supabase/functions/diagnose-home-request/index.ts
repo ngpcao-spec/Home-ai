@@ -3,6 +3,9 @@ import { diagnosticSchema, validateDiagnostic, validateRequest } from '../_share
 
 const allowedOrigins = new Set(['https://ngpcao-spec.github.io', 'http://localhost:3000', 'http://127.0.0.1:3000']);
 const jsonHeaders = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
+const logStage = (event: string, details: Record<string, string | number> = {}) => {
+  console.info(JSON.stringify({ component: 'diagnose-home-request', event, ...details }));
+};
 
 const response = (origin: string, status: number, body: unknown) => new Response(JSON.stringify(body), {
   status,
@@ -48,6 +51,7 @@ Deno.serve(async request => {
   const authClient = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } });
   const { data: userData, error: userError } = await authClient.auth.getUser(token);
   if (userError || !userData.user) return failure(origin, 401, 'AUTH_REQUIRED');
+  logStage('authenticated_post_received');
 
   let input;
   try { input = validateRequest(await request.json()); }
@@ -58,22 +62,28 @@ Deno.serve(async request => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
+    logStage('openai_request_started');
     const openAiResponse = await fetch('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       signal: controller.signal,
       body: JSON.stringify({
         model: Deno.env.get('OPENAI_MODEL') || 'gpt-5-mini',
+        reasoning: { effort: 'minimal' },
+        max_output_tokens: 400,
+        store: false,
         instructions: 'Classify the HOME AI repair request. Return only the required JSON. Use Vietnamese for understoodProblem, missingQuestions and vietnameseSummary. Do not invent prices, urgency, causes or repairs. If information is insufficient, ask up to three short questions.',
         input: [{ role: 'user', content: [{ type: 'input_text', text: input.description }] }],
         text: { format: { type: 'json_schema', name: 'home_ai_diagnostic', strict: true, schema: diagnosticSchema } },
       }),
     });
+    logStage('openai_response_received', { status: openAiResponse.status });
     if (openAiResponse.status === 429) return failure(origin, 429, 'AI_RATE_LIMIT');
     if (openAiResponse.status >= 500) return failure(origin, 503, 'AI_UNAVAILABLE');
     if (!openAiResponse.ok) return failure(origin, 502, 'AI_REQUEST_FAILED');
     const payload = await openAiResponse.json();
     const result = validateDiagnostic(JSON.parse(extractOutputText(payload)));
+    logStage('json_validated');
     return response(origin, 200, result);
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') return failure(origin, 504, 'AI_TIMEOUT');
