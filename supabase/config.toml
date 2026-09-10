@@ -1,2 +1,5 @@
 [functions.diagnose-home-request]
 verify_jwt = true
+
+[functions.classify-provider-activity]
+verify_jwt = true

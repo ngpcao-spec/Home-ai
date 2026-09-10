@@ -6,7 +6,8 @@ export function createMockProviderAppRepository(seed = mockProviderDashboard) {
   let state = clone(seed);
   let services = clone(seed.services ?? [{
     id: 'provider-service-demo', providerId: seed.provider?.id ?? 'provider-demo',
-    serviceCategory: 'electricity', pricingModel: 'hourly', hourlyRate: 300000,
+    serviceCategory: 'electricity', activityName: 'Thợ điện',
+    activityDescription: 'Sửa chữa và lắp đặt điện dân dụng.', pricingModel: 'hourly', hourlyRate: 300000,
     minimumCharge: 400000, currency: 'VND', enabled: true,
   }]);
   return Object.freeze({
@@ -79,6 +80,20 @@ export function createMockProviderAppRepository(seed = mockProviderDashboard) {
       services[index] = { ...services[index], pricingModel: 'hourly', ...pricing };
       return clone(services[index]);
     },
+    async analyzeActivity({ text }) {
+      const value=String(text).toLowerCase();
+      const electricity=/điện|électric|electric/.test(value);
+      return clone(electricity
+        ? {serviceCategory:'electricity',activityName:'Thợ điện',description:'Sửa chữa và lắp đặt điện dân dụng.',pricingModel:'hourly'}
+        : {serviceCategory:'plumbing',activityName:'Thợ sửa ống nước',description:'Sửa chữa và lắp đặt hệ thống nước.',pricingModel:'hourly'});
+    },
+    async getHourlyRateReference() { return {medianHourlyRate:300000,providerCount:8}; },
+    async createActivity(proposal,pricing) {
+      if(services.some(({serviceCategory})=>serviceCategory===proposal.serviceCategory))throw new Error('Activity already exists');
+      const service={id:`provider-service-${proposal.serviceCategory}`,providerId:state.provider.id,
+        ...proposal,...pricing,currency:'VND',enabled:true};
+      services.push(service);return clone(service);
+    },
   });
 }
 
@@ -130,6 +145,13 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
     async getServices() { return repositories.offers.listCurrentProviderServices(initial.provider.id); },
     async setServicePricing(serviceCategory, pricing) {
       return repositories.offers.setCurrentProviderServicePricing(serviceCategory, pricing);
+    },
+    async analyzeActivity(input) { return repositories.offers.analyzeCurrentProviderActivity(input); },
+    async getHourlyRateReference(serviceCategory) {
+      return repositories.offers.getCurrentProviderHourlyRateReference(serviceCategory);
+    },
+    async createActivity(proposal, pricing) {
+      return repositories.offers.createCurrentProviderActivity(proposal, pricing);
     },
   });
 }

@@ -1,5 +1,14 @@
 import { adaptInvoiceRow, adaptMissionRow } from '../adapters.js';
 import { requireSupabaseClient, unwrap } from './shared.js';
+import { analyzeProviderActivity } from '../../provider/provider-activity-ai.js';
+
+const adaptProviderService = (row) => Object.freeze({
+  id: row.id, providerId: row.provider_id, serviceCategory: row.service_category,
+  activityName: row.activity_name ?? null, activityDescription: row.activity_description ?? null,
+  legacyBasePrice: row.base_price == null ? null : Number(row.base_price),
+  pricingModel: row.pricing_model, hourlyRate: row.hourly_rate == null ? null : Number(row.hourly_rate),
+  minimumCharge: row.minimum_charge == null ? null : Number(row.minimum_charge), currency: row.currency, enabled: row.enabled,
+});
 
 export function createSupabaseOffersRepository(supabase) {
   const client = requireSupabaseClient(supabase);
@@ -41,15 +50,10 @@ export function createSupabaseOffersRepository(supabase) {
     },
     async listCurrentProviderServices(providerId) {
       const rows = unwrap(await client.from('provider_services')
-        .select('id,provider_id,service_category,base_price,pricing_model,hourly_rate,minimum_charge,currency,enabled')
-        .eq('provider_id', providerId).eq('enabled', true)
+        .select('id,provider_id,service_category,activity_name,activity_description,base_price,pricing_model,hourly_rate,minimum_charge,currency,enabled')
+        .eq('provider_id', providerId)
         .order('service_category'), 'offers.listCurrentProviderServices') ?? [];
-      return Object.freeze(rows.map((row) => Object.freeze({
-        id: row.id, providerId: row.provider_id, serviceCategory: row.service_category,
-        legacyBasePrice: row.base_price == null ? null : Number(row.base_price),
-        pricingModel: row.pricing_model, hourlyRate: row.hourly_rate == null ? null : Number(row.hourly_rate),
-        minimumCharge: row.minimum_charge == null ? null : Number(row.minimum_charge), currency: row.currency, enabled: row.enabled,
-      })));
+      return Object.freeze(rows.map(adaptProviderService));
     },
     async setCurrentProviderServicePricing(serviceCategory, { hourlyRate, minimumCharge }) {
       const row = unwrap(await client.rpc('set_current_provider_service_hourly_pricing', {
@@ -57,12 +61,30 @@ export function createSupabaseOffersRepository(supabase) {
         new_hourly_rate: Number(hourlyRate),
         new_minimum_charge: Number(minimumCharge),
       }), 'offers.setCurrentProviderServicePricing');
+      return adaptProviderService(row);
+    },
+    async analyzeCurrentProviderActivity(input) {
+      return analyzeProviderActivity(client, input);
+    },
+    async getCurrentProviderHourlyRateReference(serviceCategory) {
+      const value = unwrap(await client.rpc('get_current_provider_hourly_rate_reference', {
+        target_service_category: serviceCategory,
+      }), 'offers.getCurrentProviderHourlyRateReference') ?? {};
       return Object.freeze({
-        id: row.id, providerId: row.provider_id, serviceCategory: row.service_category,
-        legacyBasePrice: row.base_price == null ? null : Number(row.base_price),
-        pricingModel: row.pricing_model, hourlyRate: row.hourly_rate == null ? null : Number(row.hourly_rate),
-        minimumCharge: row.minimum_charge == null ? null : Number(row.minimum_charge), currency: row.currency, enabled: row.enabled,
+        medianHourlyRate: value.median_hourly_rate == null ? null : Number(value.median_hourly_rate),
+        providerCount: Number(value.provider_count) || 0,
       });
+    },
+    async createCurrentProviderActivity(proposal, pricing) {
+      const row = unwrap(await client.rpc('create_current_provider_activity', {
+        target_service_category: proposal.serviceCategory,
+        new_activity_name: proposal.activityName,
+        new_activity_description: proposal.description,
+        new_pricing_model: proposal.pricingModel,
+        new_hourly_rate: Number(pricing.hourlyRate),
+        new_minimum_charge: Number(pricing.minimumCharge),
+      }), 'offers.createCurrentProviderActivity');
+      return adaptProviderService(row);
     },
     async updateProviderLocation({ latitude, longitude }) {
       return unwrap(await client.rpc('update_current_provider_location', {

@@ -9,6 +9,7 @@ import { prepareProviderHistory, renderProviderIncome, renderProviderMissionHist
 import { readInitialQuoteForm, renderInitialQuoteForm, updateInitialQuoteForm } from './initial-quote-form.js';
 import { readHourlyInvoiceForm, renderHourlyInvoiceForm, updateHourlyInvoiceForm } from './hourly-invoice-form.js';
 import { readProviderPricingForm, renderProviderPricing } from './provider-pricing.js';
+import { readProviderActivityInput, readProviderActivityPricing, renderProviderActivities } from './provider-activities.js';
 
 function ensureDispatchStyles(documentRef = globalThis.document) {
   if (!documentRef?.head || documentRef.querySelector?.('[data-provider-dispatch-styles]')) return;
@@ -95,7 +96,7 @@ export function renderProviderDashboard(state, { source='mock', busy=false, mess
 }
 
 function renderProviderNav(activeView) {
-  return `<nav aria-label="Điều hướng Provider"><button data-provider-view="home" class="${activeView==='home'?'active':''}">⌂<span>Trang chủ</span></button><button data-provider-view="missions" class="${activeView==='missions'?'active':''}">▤<span>Nhiệm vụ</span></button><button data-provider-view="income" class="${activeView==='income'?'active':''}">◎<span>Thu nhập</span></button><button data-provider-view="profile" class="${activeView==='profile'?'active':''}">○<span>Hồ sơ</span></button></nav>`;
+  return `<nav aria-label="Điều hướng Provider"><button data-provider-view="home" class="${activeView==='home'?'active':''}">⌂<span>Trang chủ</span></button><button data-provider-view="activities" class="${activeView==='activities'?'active':''}">▣<span>Hoạt động</span></button><button data-provider-view="missions" class="${activeView==='missions'?'active':''}">▤<span>Nhiệm vụ</span></button><button data-provider-view="income" class="${activeView==='income'?'active':''}">◎<span>Thu nhập</span></button><button data-provider-view="profile" class="${activeView==='profile'?'active':''}">○<span>Hồ sơ</span></button></nav>`;
 }
 
 export function renderProviderLogin({ error = '', provisioning = false } = {}) {
@@ -119,6 +120,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   let busy=false; let message=''; let navigation=null;let navigationLoading=false;let navigationError=''; let diagnosing=false; let editingMissionId=null; let supplementParent=null;let billingMissionId=null;let confirmingAcceptance=false;
   let currentView='home'; let history=[]; let historyLoading=false; let historyError=''; let selectedMissionId=null;
   let pricingServices=[];let pricingLoading=false;let pricingError='';let pricingMessage='';
+  let activityFlow={step:'list',mode:null,input:'',proposal:null,reference:null,error:'',message:''};
   let priorityOfferId=repository.source==='supabase' ? state.offers?.[0]?.id ?? null : null;
   const page=root.ownerDocument??globalThis.document;
   const providerTestMode=isProviderTestArrivalEnabled(runtimeConfig,state.provider);
@@ -152,6 +154,10 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
     }
     if(currentView==='profile'){
       root.innerHTML=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0]??'P')}</button></header>${renderProviderPricing(pricingServices,{loading:pricingLoading,error:pricingError,message:pricingMessage,busy})}${renderProviderNav('profile')}`;
+      return;
+    }
+    if(currentView==='activities'){
+      root.innerHTML=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0]??'P')}</button></header>${renderProviderActivities(pricingServices,{...activityFlow,busy})}${renderProviderNav('activities')}`;
       return;
     }
     const priorityOffer=state.offers?.find(({id})=>id===priorityOfferId);root.innerHTML=renderProviderDashboard(state,{source:repository.source,busy,message,navigation,navigationLoading,navigationError,diagnosing,supplementParent,billing:state.assignment?.id===billingMissionId,testMode:providerTestMode})+(offerLayer?'':renderIncomingOffer(priorityOffer));const map=root.querySelector('[data-provider-map]');if(navigation&&map)await renderProviderNavigation(map,navigation,state.provider).catch(()=>{});
@@ -200,13 +206,11 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   const heartbeat=heartbeatFactory({repository,getState:()=>state,isPageActive:()=>!page?.hidden,onState:async next=>{state=next;syncOfferLayer();message='Vị trí GPS đã được cập nhật.';if(currentView==='home')await draw();},onError:async()=>{message='Không thể cập nhật GPS. Hãy cho phép truy cập vị trí.';if(currentView==='home')await draw();}});
   const dispatch=createProviderDispatchController({repository,getState:()=>state,isPageActive:()=>!page?.hidden,onState:async next=>{
     const previousAssignment=`${state.assignment?.id??''}:${state.assignment?.status??''}`;
-    const previousOffers=(state.offers??[]).map(({id,status})=>`${id}:${status}`).join('|');
     state=next; priorityOfferId=next.offers?.find(({expiresAt})=>new Date(expiresAt).getTime()>Date.now())?.id??null;
     const assignmentChanged=previousAssignment!==`${next.assignment?.id??''}:${next.assignment?.status??''}`;
-    const offersChanged=previousOffers!==(next.offers??[]).map(({id,status})=>`${id}:${status}`).join('|');
     if(page?.hidden)return;
     if((currentView==='missions'||currentView==='income')&&assignmentChanged)await loadHistory();
-    else if(currentView==='home'||offersChanged)await draw();
+    else if(currentView==='home')await draw();
   },onOffer:async offer=>{priorityOfferId=offer.id;if(page?.hidden)return;offerAlert.start(offer);if(!root.querySelector?.(`[data-dispatch-offer-id="${offer.id}"]`))await draw();},onError:async()=>{message='Kết nối thời gian thực bị gián đoạn. HOME AI đang thử lại.';if(currentView==='home'&&!page?.hidden)await draw();}});
   dispatch.start();
   const countdownTimer=globalThis.setInterval?.(()=>{const remaining=updateDispatchCountdown(offerLayer?.host??root);if(remaining===0&&priorityOfferId){const expiredId=priorityOfferId;priorityOfferId=null;offerAlert.stop(expiredId);void draw();}},1000);
@@ -221,11 +225,38 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
     if(!e.target.closest('[data-accept]')&&!e.target.closest('[data-decline]'))void offerAlert.unlock().then(updateAudioControl);
     if(e.target.closest('[data-retry-provider-navigation]')){if(navigationLoading)return;void loadNavigation().then(draw);await draw();return;}
     const view=e.target.closest('[data-provider-view]');
-    if(view){currentView=view.dataset.providerView;selectedMissionId=null;if(currentView==='missions'||currentView==='income')await loadHistory();else if(currentView==='profile')await loadPricing();else await draw();return;}
+    if(view){currentView=view.dataset.providerView;selectedMissionId=null;if(currentView==='missions'||currentView==='income')await loadHistory();else if(currentView==='profile'||currentView==='activities'){if(currentView==='activities')activityFlow={step:'list',mode:null,input:'',proposal:null,reference:null,error:'',message:''};await loadPricing();}else await draw();return;}
     const mission=e.target.closest('[data-history-mission]');if(mission){selectedMissionId=mission.dataset.historyMission;await draw();return;}
     if(e.target.closest('[data-history-back]')){selectedMissionId=null;await draw();return;}
     if(e.target.closest('[data-history-retry]')){await loadHistory();return;}
     if(e.target.closest('[data-pricing-retry]')){await loadPricing();return;}
+    if(e.target.closest('[data-add-activity]')){activityFlow={step:'choose',mode:null,input:'',proposal:null,reference:null,error:'',message:''};await draw();return;}
+    const activityBack=e.target.closest('[data-activity-back]');
+    if(activityBack){activityFlow={...activityFlow,step:activityBack.dataset.activityBack,error:''};await draw();return;}
+    const activityMode=e.target.closest('[data-activity-mode]');
+    if(activityMode){activityFlow={...activityFlow,mode:activityMode.dataset.activityMode,input:'',error:''};await draw();return;}
+    if(e.target.closest('[data-edit-activity]')){activityFlow={...activityFlow,step:'choose',error:''};await draw();return;}
+    if(e.target.closest('[data-analyze-activity]')){
+      e.preventDefault?.();if(busy)return;
+      const input=readProviderActivityInput(root,activityFlow.mode);
+      if(!input.valid){activityFlow={...activityFlow,error:'Vui lòng nhập ít nhất 2 ký tự.'};await draw();return;}
+      busy=true;activityFlow={...activityFlow,input:input.text,error:''};await draw();
+      try{const proposal=await repository.analyzeActivity(input);const reference=proposal.pricingModel==='hourly'?await repository.getHourlyRateReference(proposal.serviceCategory):{medianHourlyRate:null,providerCount:0};activityFlow={...activityFlow,step:'proposal',proposal,reference,error:''};}
+      catch(error){activityFlow={...activityFlow,error:error?.message??'Không thể phân tích hoạt động.'};}
+      finally{busy=false;await draw();}
+      return;
+    }
+    if(e.target.closest('[data-activity-continue]')){if(activityFlow.proposal?.pricingModel!=='hourly')return;activityFlow={...activityFlow,step:'rate',error:''};await draw();return;}
+    if(e.target.closest('[data-create-activity]')){
+      e.preventDefault?.();if(busy||activityFlow.proposal?.pricingModel!=='hourly')return;
+      const pricing=readProviderActivityPricing(root);
+      if(!pricing.valid){activityFlow={...activityFlow,error:'Vui lòng nhập đơn giá và mức phí tối thiểu hợp lệ.'};await draw();return;}
+      busy=true;activityFlow={...activityFlow,...pricing,error:''};await draw();
+      try{await repository.createActivity(activityFlow.proposal,pricing);pricingServices=await repository.getServices();activityFlow={step:'list',mode:null,input:'',proposal:null,reference:null,error:'',message:'Đã thêm hoạt động.'};}
+      catch(error){activityFlow={...activityFlow,error:error?.message??'Không thể thêm hoạt động.'};}
+      finally{busy=false;await draw();}
+      return;
+    }
     const pricingForm=e.target.closest('[data-save-pricing]')?.closest('[data-pricing-service]');
     if(pricingForm){
       e.preventDefault?.();if(busy)return;

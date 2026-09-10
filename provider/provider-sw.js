@@ -5,8 +5,10 @@ const OFFLINE_ASSETS = new Set([
   './', './index.html', './provider-manifest.webmanifest', '../provider-icon.svg',
   '../src/provider/provider-app.css', '../src/provider/provider-auth.css', '../src/provider/provider-navigation.css',
   '../src/provider/provider-quote.css', '../src/provider/provider-dispatch.css', '../src/location/location-permission.css',
+  '../src/provider/provider-activities.css',
   '../src/provider/provider-app.js', '../src/provider/provider-dispatch.js', '../src/provider/provider-repository.js',
   '../src/provider/provider-navigation.js', '../src/provider/provider-auth.js', '../src/provider/provider-location-heartbeat.js',
+  '../src/provider/provider-activities.js', '../src/provider/provider-activity-ai.js',
   '../src/provider/mock-provider-data.js', '../src/location/location-permission.js', '../src/map/map-provider.js',
   '../src/routing/routing-provider.js', '../src/location/client-location.js',
 ]);
