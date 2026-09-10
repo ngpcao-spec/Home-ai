@@ -70,16 +70,16 @@ export function createCustomerMissionStateFromServer({ mission, quotes, review =
     interventionPhase,
     quote,
     quoteHistory,
-    completion: completed && acceptedQuote ? Object.freeze({
+    completion: completed && (acceptedQuote || invoice) ? Object.freeze({
       missionId: mission.id,
       completedAt: mission.completedAt,
       completedWork: Object.freeze(quoteHistory
         .filter(({ status }) => status === 'accepted')
         .flatMap(({ recommendedTasks = [] }) => recommendedTasks)),
-      acceptedQuoteId: acceptedQuote.id,
+      acceptedQuoteId: acceptedQuote?.id ?? null,
       finalAuthorizedAmount: invoice?.totalAmount ?? mission.finalAuthorizedAmount,
-      currency: invoice?.currency ?? acceptedQuote.currency ?? mission.currency,
-      warrantyDays: acceptedQuote.warrantyDays,
+      currency: invoice?.currency ?? acceptedQuote?.currency ?? mission.currency,
+      warrantyDays: acceptedQuote?.warrantyDays ?? null,
       invoice,
     }) : null,
     reviewStage: mission.status === 'completed' ? 'rating' : 'hidden',

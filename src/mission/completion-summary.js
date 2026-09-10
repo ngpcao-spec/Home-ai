@@ -27,14 +27,28 @@ export function createCompletionSummaryMarkup(completion, quoteHistory, context 
   const history = quoteHistory.map(({ version, status, totalAmount }) => `<li><strong>v${version}</strong><span>${formatPrice(totalAmount)}</span><em>${status}</em></li>`).join('');
   const invoice = completion.invoice;
   const invoiceBreakdown = invoice?.pricingModel === 'hourly' ? `<div class="customer-invoice" data-customer-hourly-invoice>
-    <p class="quote-eyebrow">HÓA ĐƠN THEO GIỜ</p><dl>
-      <div><dt>Thời gian làm việc khai báo</dt><dd>${Math.floor(invoice.workedMinutes / 60)} giờ ${invoice.workedMinutes % 60} phút</dd></div>
-      <div><dt>Đơn giá theo giờ</dt><dd>${formatPrice(invoice.hourlyRate)}</dd></div>
-      <div><dt>Phí tối thiểu</dt><dd>${formatPrice(invoice.minimumCharge)}</dd></div>
+    <p class="quote-eyebrow">HÓA ĐƠN</p><dl>
+      <div><dt>Thời gian làm việc</dt><dd>${Math.floor(invoice.workedMinutes / 60)} giờ ${invoice.workedMinutes % 60} phút</dd></div>
+      <div><dt>Đơn giá</dt><dd>${formatPrice(invoice.hourlyRate)}/giờ</dd></div>
+      <div><dt>Mức phí tối thiểu</dt><dd>${formatPrice(invoice.minimumCharge)}</dd></div>
       <div><dt>Tiền công</dt><dd>${formatPrice(invoice.laborAmount)}</dd></div>
       <div><dt>Vật tư</dt><dd>${formatPrice(invoice.materialAmount)}</dd></div>
       <div class="payment-total"><dt>TỔNG THANH TOÁN</dt><dd>${formatPrice(invoice.totalAmount)}</dd></div>
     </dl></div>` : '';
+  const completedWork = completion.completedWork.length
+    ? `<div class="completed-work"><h4>Công việc đã thực hiện</h4><ul>${completion.completedWork.map((work) => `<li>${escapeHtml(work)}</li>`).join('')}</ul></div>` : '';
+  const financialSummary = invoice?.pricingModel === 'hourly'
+    ? ''
+    : `<div class="final-financial-summary">
+      <p class="quote-eyebrow">TÓM TẮT CHI PHÍ</p>
+      <dl>
+        <div><dt>Báo giá cuối cùng đã chấp nhận</dt><dd>${formatPrice(acceptedQuote?.totalAmount ?? completion.finalAuthorizedAmount)}</dd></div>
+        <div class="payment-total"><dt>TỔNG THANH TOÁN</dt><dd>${formatPrice(completion.finalAuthorizedAmount)}</dd></div>
+        ${completion.warrantyDays == null ? '' : `<div><dt>Bảo hành</dt><dd>${completion.warrantyDays} ngày</dd></div>`}
+      </dl>
+    </div>`;
+  const quoteHistoryMarkup = history
+    ? `<div class="quote-history"><p class="quote-eyebrow">LỊCH SỬ BÁO GIÁ</p><ol>${history}</ol></div>` : '';
   return `<section class="completion-summary" aria-labelledby="completion-title">
     <div class="completion-check" aria-hidden="true">✓</div>
     <p class="quote-eyebrow">HOÀN THÀNH CAN THIỆP</p>
@@ -45,16 +59,7 @@ export function createCompletionSummaryMarkup(completion, quoteHistory, context 
       <div><dt>Vấn đề</dt><dd>${escapeHtml(context.problem ?? '')}</dd></div>
       <div><dt>Trạng thái</dt><dd>Hoàn thành</dd></div>
     </dl>
-    <div class="completed-work"><h4>Công việc đã thực hiện</h4><ul>${completion.completedWork.map((work) => `<li>${escapeHtml(work)}</li>`).join('')}</ul></div>
-    ${invoiceBreakdown}<div class="final-financial-summary">
-      <p class="quote-eyebrow">TÓM TẮT CHI PHÍ</p>
-      <dl>
-        <div><dt>Báo giá cuối cùng đã chấp nhận</dt><dd>${formatPrice(acceptedQuote?.totalAmount ?? completion.finalAuthorizedAmount)}</dd></div>
-        <div class="payment-total"><dt>TỔNG THANH TOÁN</dt><dd>${formatPrice(completion.finalAuthorizedAmount)}</dd></div>
-        <div><dt>Bảo hành</dt><dd>${completion.warrantyDays} ngày</dd></div>
-      </dl>
-    </div>
-    <div class="quote-history"><p class="quote-eyebrow">LỊCH SỬ BÁO GIÁ</p><ol>${history}</ol></div>
+    ${completedWork}${invoiceBreakdown}${financialSummary}${quoteHistoryMarkup}
     <div class="external-payment"><strong>Thanh toán trực tiếp cho thợ</strong><p>HOME AI không xử lý thanh toán trong ứng dụng.</p></div>
     <button class="continue-payment" type="button" data-continue-payment>Tôi đã thanh toán</button>
     <p class="payment-preparation-status" data-payment-preparation-status role="status"></p>

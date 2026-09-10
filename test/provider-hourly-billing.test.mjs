@@ -3,7 +3,8 @@ import { readFile } from 'node:fs/promises';
 import { describe, it } from 'node:test';
 import { JSDOM } from 'jsdom';
 import { calculateHourlyInvoice } from '../src/billing/hourly-pricing.js';
-import { createCompletionSummaryMarkup } from '../src/mission/completion-summary.js';
+import { createCompletionSummaryMarkup, getCompletedMissionPricePresentation } from '../src/mission/completion-summary.js';
+import { createCustomerMissionStateFromServer, createCustomerMissionSynchronizer } from '../src/customer/supabase-mission.js';
 import { initialiseProviderApp, renderProviderDashboard } from '../src/provider/provider-app.js';
 import { createMockProviderAppRepository } from '../src/provider/provider-repository.js';
 import { readHourlyInvoiceForm, updateHourlyInvoiceForm } from '../src/provider/hourly-invoice-form.js';
@@ -87,6 +88,20 @@ describe('Provider hourly billing V1', () => {
       assert.equal(app.getState().assignment.invoice.totalAmount, 625000);
       assert.ok(root.querySelector('[data-provider-completion-waiting]'));
       assert.equal(root.querySelector('[data-hourly-invoice-form]'), null);
+
+      const invoice = app.getState().assignment.invoice;
+      const customerState = createCustomerMissionStateFromServer({
+        mission: { id: 'm1', status: 'completed_pending_payment', paymentStatus: 'pending',
+          completedAt: null, finalAuthorizedAmount: 625000, currency: 'VND' },
+        quotes: [], invoice,
+      });
+      assert.equal(getCompletedMissionPricePresentation(customerState.quoteHistory,
+        customerState.completion?.finalAuthorizedAmount).amount, 625000);
+      const customerMarkup = createCompletionSummaryMarkup(customerState.completion, customerState.quoteHistory);
+      for (const text of ['HÓA ĐƠN', '1 giờ 35 phút', '300.000đ/giờ', '400.000đ', '475.000đ', '150.000đ', '625.000đ']) {
+        assert.match(customerMarkup, new RegExp(text));
+      }
+      assert.doesNotMatch(customerMarkup, /Đang cập nhật|Báo giá cuối cùng đã chấp nhận/);
     } finally { app.stop(); dom.window.close(); }
   });
 
@@ -106,6 +121,45 @@ describe('Provider hourly billing V1', () => {
     }]);
     assert.equal('labor_amount' in calls[0][1], false);
     assert.equal('total_amount' in calls[0][1], false);
+  });
+
+  it('reloads the persisted hourly invoice through realtime and polling after provider submission', async () => {
+    let mission = { id: 'm1', providerId: 'p1', status: 'in_progress', version: 6,
+      finalAuthorizedAmount: null, currency: 'VND' };
+    let invoice = null;
+    let realtime;
+    let poll;
+    const received = [];
+    const synchronizer = createCustomerMissionSynchronizer({
+      missionRepository: {
+        getById: async () => mission,
+        getQuoteHistory: async () => [],
+        getOffers: async () => [],
+        getReview: async () => null,
+        getInvoice: async () => invoice,
+        subscribeMission(id, callback) { assert.equal(id, 'm1'); realtime = callback; return () => {}; },
+      },
+      providerRepository: { getById: async () => ({ id: 'p1', name: 'Provider Test Nha Trang' }) },
+      scheduleTask(callback) { poll = callback; return 1; },
+      clearTask() {},
+    });
+    const stopRealtime = synchronizer.subscribe('m1', snapshot => received.push(snapshot), assert.fail);
+    const stopPolling = synchronizer.poll('m1', snapshot => received.push(snapshot), assert.fail);
+    mission = { ...mission, status: 'completed_pending_payment', version: 7, finalAuthorizedAmount: 625000 };
+    invoice = { id: 'i1', missionId: 'm1', pricingModel: 'hourly', workedMinutes: 95,
+      hourlyRate: 300000, minimumCharge: 400000, laborAmount: 475000,
+      materialAmount: 150000, totalAmount: 625000, currency: 'VND' };
+    await realtime({ new: { event_type: 'mission.invoice.submitted' } });
+    await poll();
+    assert.equal(received.length, 2);
+    for (const snapshot of received) {
+      assert.equal(snapshot.invoice.id, 'i1');
+      const state = createCustomerMissionStateFromServer(snapshot);
+      assert.equal(state.completion.invoice.totalAmount, 625000);
+      assert.equal(state.completion.finalAuthorizedAmount, 625000);
+    }
+    stopRealtime();
+    stopPolling();
   });
 
   it('keeps an already submitted invoice unchanged after a future service-rate edit and handles a retry idempotently', async () => {
@@ -129,7 +183,7 @@ describe('Provider hourly billing V1', () => {
     const invoice = { ...calculate(1, 35, 150000), id: 'i1' };
     const markup = createCompletionSummaryMarkup({ completedWork: ['Sửa điện'], finalAuthorizedAmount: 625000,
       warrantyDays: 30, invoice }, [{ version: 1, status: 'accepted', totalAmount: 200000 }]);
-    for (const value of ['HÓA ĐƠN THEO GIỜ', '1 giờ 35 phút', '300.000đ', '400.000đ', '475.000đ', '150.000đ', '625.000đ']) {
+    for (const value of ['HÓA ĐƠN', '1 giờ 35 phút', '300.000đ/giờ', '400.000đ', '475.000đ', '150.000đ', '625.000đ']) {
       assert.match(markup, new RegExp(value));
     }
   });

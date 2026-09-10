@@ -1241,7 +1241,7 @@ export function initialiseHomePage(
       in_progress: createTrackingStageMarkup(selectedTechnician),
       completed_pending_payment: completedMarkup,
     };
-    const trackingStageKey = `${remoteMissionState?.mission.id}:${status.id}:${missionState.paymentStatus}:${missionState.reviewStage}:${missionState.reviewSent}:${missionState.rating}`;
+    const trackingStageKey = `${remoteMissionState?.mission.id}:${status.id}:${missionState.paymentStatus}:${missionState.reviewStage}:${missionState.reviewSent}:${missionState.rating}:${missionState.completion?.invoice?.id ?? ''}:${missionState.completion?.finalAuthorizedAmount ?? ''}`;
     if (!remoteMissionState || stage.dataset.trackingStage !== trackingStageKey) {
       stage.innerHTML = stageMarkup[status.id];
       stage.dataset.trackingStage = trackingStageKey;
