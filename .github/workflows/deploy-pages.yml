@@ -44,6 +44,9 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           REQUIRE_SUPABASE_CONFIG: 'true'
+          # TODO(PILOT-BLOCKER): remove both Provider test variables before onboarding real providers.
+          PROVIDER_TEST_MODE: 'true'
+          PROVIDER_TEST_PROVIDER_ID: '2040840f-10c6-4acf-a800-1640e1520f4b'
 
       - name: Verify production runtime configuration
         run: node scripts/verify-runtime-config.mjs
@@ -52,6 +55,8 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           REQUIRE_SUPABASE_CONFIG: 'true'
+          PROVIDER_TEST_MODE: 'true'
+          PROVIDER_TEST_PROVIDER_ID: '2040840f-10c6-4acf-a800-1640e1520f4b'
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

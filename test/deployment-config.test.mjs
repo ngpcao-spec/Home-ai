@@ -24,16 +24,25 @@ describe('configuration du déploiement GitHub Pages', () => {
     assert.match(verify, /values redacted/);
   });
 
-  it('interdit le mode test Provider dans tout build de production',async()=>{
-    const [build,verify,runtime]=await Promise.all([
+  it('limite le mode arrivée GitHub Pages au seul provider de test autorisé',async()=>{
+    const [workflow,build,verify,runtime,providerApp]=await Promise.all([
+      readFile(new URL('../.github/workflows/deploy-pages.yml',import.meta.url),'utf8'),
       readFile(new URL('../scripts/build.mjs',import.meta.url),'utf8'),
       readFile(new URL('../scripts/verify-runtime-config.mjs',import.meta.url),'utf8'),
       readFile(new URL('../src/runtime-config.js',import.meta.url),'utf8'),
+      readFile(new URL('../src/provider/provider-app.js',import.meta.url),'utf8'),
     ]);
-    assert.match(build,/providerTestModeRequested && \(process\.env\.CI \|\| supabaseRequired\)/);
-    assert.match(build,/PROVIDER_TEST_MODE is forbidden in production builds/);
+    assert.match(workflow,/PROVIDER_TEST_MODE: 'true'/);
+    assert.match(workflow,/PROVIDER_TEST_PROVIDER_ID: '2040840f-10c6-4acf-a800-1640e1520f4b'/);
+    assert.match(workflow,/TODO\(PILOT-BLOCKER\)/);
+    assert.match(build,/PROVIDER_TEST_MODE requires the exact authorized test provider/);
+    assert.match(build,/PROVIDER_TEST_PROVIDER_ID: \$\{JSON\.stringify/);
     assert.match(build,/providerAppSource\.replace/);
-    assert.match(verify,/Provider test mode must be disabled in production/);
+    assert.match(verify,/Provider test mode is not restricted to the authorized test provider/);
     assert.match(runtime,/PROVIDER_TEST_MODE: false/);
+    assert.match(runtime,/PROVIDER_TEST_PROVIDER_ID: ''/);
+    assert.match(providerApp,/TODO\(PILOT-BLOCKER\)/);
+    assert.match(providerApp,/provider\?\.id===TEST_ARRIVAL_PROVIDER_ID/);
+    assert.match(providerApp,/provider\?\.name===TEST_ARRIVAL_PROVIDER_NAME/);
   });
 });

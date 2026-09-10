@@ -24,6 +24,7 @@ const runtimeSupabaseUrl = readRuntimeString('SUPABASE_URL');
 const runtimeSupabaseAnonKey = readRuntimeString('SUPABASE_ANON_KEY');
 const runtimeSupabaseRequired = readRuntimeBoolean('SUPABASE_REQUIRED');
 const runtimeProviderTestMode = readRuntimeBoolean('PROVIDER_TEST_MODE');
+const runtimeProviderTestProviderId = readRuntimeString('PROVIDER_TEST_PROVIDER_ID');
 
 const expectedKey = process.env.AMAZON_LOCATION_API_KEY?.trim() ?? '';
 if (!expectedKey) throw new Error('AMAZON_LOCATION_API_KEY is not configured');
@@ -48,8 +49,13 @@ if (Boolean(runtimeSupabaseUrl) !== Boolean(runtimeSupabaseAnonKey)) {
 if (runtimeSupabaseUrl !== expectedSupabaseUrl || runtimeSupabaseAnonKey !== expectedSupabaseAnonKey) {
   throw new Error('Supabase runtime configuration does not match the build environment');
 }
-if (runtimeSupabaseRequired && runtimeProviderTestMode) {
-  throw new Error('Provider test mode must be disabled in production');
+const expectedProviderTestMode = process.env.PROVIDER_TEST_MODE === 'true';
+const expectedProviderTestProviderId = process.env.PROVIDER_TEST_PROVIDER_ID?.trim() ?? '';
+const allowedProviderTestId = '2040840f-10c6-4acf-a800-1640e1520f4b';
+if (runtimeProviderTestMode !== expectedProviderTestMode
+  || (runtimeProviderTestMode && (runtimeProviderTestProviderId !== allowedProviderTestId
+    || expectedProviderTestProviderId !== allowedProviderTestId))) {
+  throw new Error('Provider test mode is not restricted to the authorized test provider');
 }
 
 console.log(`Runtime configuration verified (values redacted; Supabase: ${runtimeSupabaseUrl ? 'configured' : 'local fallback only'}).`);

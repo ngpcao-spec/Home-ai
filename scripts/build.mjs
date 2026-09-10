@@ -14,10 +14,12 @@ const supabaseUrl = process.env.SUPABASE_URL ?? '';
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY ?? '';
 const supabaseRequired = process.env.REQUIRE_SUPABASE_CONFIG === 'true';
 const providerTestModeRequested = process.env.PROVIDER_TEST_MODE === 'true';
-if (providerTestModeRequested && (process.env.CI || supabaseRequired)) {
-  throw new Error('PROVIDER_TEST_MODE is forbidden in production builds');
+const providerTestProviderId = process.env.PROVIDER_TEST_PROVIDER_ID ?? '';
+const allowedProviderTestId = '2040840f-10c6-4acf-a800-1640e1520f4b';
+if (providerTestModeRequested && providerTestProviderId !== allowedProviderTestId) {
+  throw new Error('PROVIDER_TEST_MODE requires the exact authorized test provider');
 }
-const providerTestMode = providerTestModeRequested && !process.env.CI && !supabaseRequired;
+const providerTestMode = providerTestModeRequested;
 const buildId = (process.env.GITHUB_SHA ?? 'local').replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 40) || 'local';
 if (process.env.CI && !mapsKey.trim()) throw new Error('AMAZON_LOCATION_API_KEY is required for the production build');
 if (Boolean(supabaseUrl.trim()) !== Boolean(supabaseAnonKey.trim())) {
@@ -32,6 +34,7 @@ await writeFile('dist/src/runtime-config.js', `globalThis.__HOME_AI_CONFIG__ = O
   SUPABASE_ANON_KEY: ${JSON.stringify(supabaseAnonKey)},
   SUPABASE_REQUIRED: ${supabaseRequired},
   PROVIDER_TEST_MODE: ${providerTestMode},
+  PROVIDER_TEST_PROVIDER_ID: ${JSON.stringify(providerTestMode ? providerTestProviderId : '')},
   BUILD_ID: ${JSON.stringify(buildId)},
 });\n`);
 if (!providerTestMode) {

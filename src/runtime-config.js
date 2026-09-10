@@ -5,4 +5,5 @@ globalThis.__HOME_AI_CONFIG__ = Object.freeze({
   SUPABASE_ANON_KEY: '',
   SUPABASE_REQUIRED: false,
   PROVIDER_TEST_MODE: false,
+  PROVIDER_TEST_PROVIDER_ID: '',
 });

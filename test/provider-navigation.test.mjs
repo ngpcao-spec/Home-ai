@@ -51,19 +51,29 @@ describe('navigation Provider App après acceptation', () => {
 
   it('n’affiche la simulation d’arrivée que dans un mode test explicite',()=>{
     const state={provider:{name:'Minh'},status:{},offers:[],assignment:{id:'m1',serviceCategory:'electricity',request:'Test',address:'Nha Trang',status:'travelling',clientLocation:{latitude:12.2,longitude:109.2}}};
-    assert.doesNotMatch(renderProviderDashboard(state),/TEST — Simuler arrivée|data-test-provider-arrival/);
-    assert.match(renderProviderDashboard(state,{testMode:true}),/data-test-provider-arrival[^>]*>TEST — Simuler arrivée/);
+    assert.doesNotMatch(renderProviderDashboard(state),/TEST — Giả lập đã đến|data-test-provider-arrival/);
+    assert.match(renderProviderDashboard(state,{testMode:true}),/data-test-provider-arrival[^>]*>TEST — Giả lập đã đến/);
     assert.doesNotMatch(renderProviderDashboard({...state,assignment:{...state.assignment,status:'accepted'}},{testMode:true}),/data-test-provider-arrival/);
+  });
+
+  it('refuse le mode arrivée simulée à tout autre provider même lorsqu’il est activé en production',async()=>{
+    const clientLocation={latitude:12.2315,longitude:109.1902};
+    const repository=createMockProviderAppRepository({provider:{id:'p1',name:'Provider Test Nha Trang'},status:{online:true,available:false},offers:[],assignment:{id:'m1',serviceCategory:'electricity',request:'Test',address:'Nha Trang',status:'travelling',clientLocation}});
+    const navigation={map:{setClientLocation(){},async render(){}},route:{distanceKm:1,durationMinutes:4,points:[]},providerLocation:{latitude:12.24,longitude:109.2},destination:clientLocation,arrived:false};
+    const dom=new JSDOM('<div id="provider-root"></div>',{pretendToBeVisual:true});const root=dom.window.document.querySelector('#provider-root');
+    const app=await initialiseProviderApp(root,async()=>repository,async()=>navigation,{enabled:false,getSession:async()=>null},()=>({sync(){},stop(){}}),undefined,{PROVIDER_TEST_MODE:true,PROVIDER_TEST_PROVIDER_ID:'2040840f-10c6-4acf-a800-1640e1520f4b',SUPABASE_REQUIRED:true});
+    try{assert.equal(root.querySelector('[data-test-provider-arrival]'),null);}
+    finally{app.stop();dom.window.close();}
   });
 
   it('simule la proximité puis suit le vrai workflow travelling vers arrived',async()=>{
     const clientLocation={latitude:12.2315,longitude:109.1902};
-    const seed={provider:{id:'p1',name:'Provider Test Nha Trang'},status:{online:true,available:false},offers:[],assignment:{id:'m1',serviceCategory:'electricity',request:'Test',address:'Nha Trang',status:'travelling',clientLocation}};
+    const seed={provider:{id:'2040840f-10c6-4acf-a800-1640e1520f4b',name:'Provider Test Nha Trang'},status:{online:true,available:false},offers:[],assignment:{id:'m1',serviceCategory:'electricity',request:'Test',address:'Nha Trang',status:'travelling',clientLocation}};
     const base=createMockProviderAppRepository(seed);let sentPosition;
     const repository={...base,async updateMissionProgress(id,status,position){sentPosition=position;return base.updateMissionProgress(id,status,position);}};
     const navigation={map:{setClientLocation(){},async render(){}},route:{distanceKm:1,durationMinutes:4,points:[]},providerLocation:{latitude:12.24,longitude:109.2},destination:clientLocation,arrived:false};
     const dom=new JSDOM('<div id="provider-root"></div>',{pretendToBeVisual:true});const root=dom.window.document.querySelector('#provider-root');
-    const app=await initialiseProviderApp(root,async()=>repository,async()=>navigation,{enabled:false,getSession:async()=>null},()=>({sync(){},stop(){}}),undefined,{PROVIDER_TEST_MODE:true,SUPABASE_REQUIRED:false});
+    const app=await initialiseProviderApp(root,async()=>repository,async()=>navigation,{enabled:false,getSession:async()=>null},()=>({sync(){},stop(){}}),undefined,{PROVIDER_TEST_MODE:true,PROVIDER_TEST_PROVIDER_ID:'2040840f-10c6-4acf-a800-1640e1520f4b',SUPABASE_REQUIRED:true});
     try{
       root.querySelector('[data-test-provider-arrival]').click();
       for(let index=0;index<5;index+=1)await new Promise(resolve=>setImmediate(resolve));
