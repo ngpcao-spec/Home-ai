@@ -1221,7 +1221,7 @@ export function initialiseHomePage(
     const stage = mission.querySelector('[data-mission-stage]');
     const missionCompleted = ['completed', 'completed_pending_payment'].includes(missionState.missionStatus);
     if (missionCompleted) {
-      const finalPrice = getCompletedMissionPricePresentation(missionState.quoteHistory);
+      const finalPrice = getCompletedMissionPricePresentation(missionState.quoteHistory, missionState.completion?.finalAuthorizedAmount);
       mission.querySelector('[data-mission-price-label]').textContent = finalPrice.label;
       mission.querySelector('[data-mission-price]').textContent = finalPrice.amount == null
         ? 'Đang cập nhật' : `${new Intl.NumberFormat('vi-VN').format(finalPrice.amount)}đ`;

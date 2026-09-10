@@ -14,10 +14,10 @@ export function getLatestAcceptedQuoteAmount(quoteHistory = []) {
   return latestAccepted?.totalAmount ?? null;
 }
 
-export function getCompletedMissionPricePresentation(quoteHistory = []) {
+export function getCompletedMissionPricePresentation(quoteHistory = [], finalAuthorizedAmount = null) {
   return Object.freeze({
     label: 'Tổng tiền cuối cùng',
-    amount: getLatestAcceptedQuoteAmount(quoteHistory),
+    amount: finalAuthorizedAmount ?? getLatestAcceptedQuoteAmount(quoteHistory),
   });
 }
 
@@ -25,6 +25,16 @@ export function createCompletionSummaryMarkup(completion, quoteHistory, context 
   if (!completion) return '';
   const acceptedQuote = quoteHistory.filter(({ status }) => status === 'accepted').at(-1);
   const history = quoteHistory.map(({ version, status, totalAmount }) => `<li><strong>v${version}</strong><span>${formatPrice(totalAmount)}</span><em>${status}</em></li>`).join('');
+  const invoice = completion.invoice;
+  const invoiceBreakdown = invoice?.pricingModel === 'hourly' ? `<div class="customer-invoice" data-customer-hourly-invoice>
+    <p class="quote-eyebrow">HÓA ĐƠN THEO GIỜ</p><dl>
+      <div><dt>Thời gian làm việc khai báo</dt><dd>${Math.floor(invoice.workedMinutes / 60)} giờ ${invoice.workedMinutes % 60} phút</dd></div>
+      <div><dt>Đơn giá theo giờ</dt><dd>${formatPrice(invoice.hourlyRate)}</dd></div>
+      <div><dt>Phí tối thiểu</dt><dd>${formatPrice(invoice.minimumCharge)}</dd></div>
+      <div><dt>Tiền công</dt><dd>${formatPrice(invoice.laborAmount)}</dd></div>
+      <div><dt>Vật tư</dt><dd>${formatPrice(invoice.materialAmount)}</dd></div>
+      <div class="payment-total"><dt>TỔNG THANH TOÁN</dt><dd>${formatPrice(invoice.totalAmount)}</dd></div>
+    </dl></div>` : '';
   return `<section class="completion-summary" aria-labelledby="completion-title">
     <div class="completion-check" aria-hidden="true">✓</div>
     <p class="quote-eyebrow">HOÀN THÀNH CAN THIỆP</p>
@@ -36,7 +46,7 @@ export function createCompletionSummaryMarkup(completion, quoteHistory, context 
       <div><dt>Trạng thái</dt><dd>Hoàn thành</dd></div>
     </dl>
     <div class="completed-work"><h4>Công việc đã thực hiện</h4><ul>${completion.completedWork.map((work) => `<li>${escapeHtml(work)}</li>`).join('')}</ul></div>
-    <div class="final-financial-summary">
+    ${invoiceBreakdown}<div class="final-financial-summary">
       <p class="quote-eyebrow">TÓM TẮT CHI PHÍ</p>
       <dl>
         <div><dt>Báo giá cuối cùng đã chấp nhận</dt><dd>${formatPrice(acceptedQuote?.totalAmount ?? completion.finalAuthorizedAmount)}</dd></div>

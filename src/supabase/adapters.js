@@ -39,6 +39,23 @@ export const adaptMissionRow = (row) => row ? Object.freeze({
   scheduledFor: row.scheduled_for ?? null,
 }) : null;
 
+export const adaptInvoiceRow = (row) => row ? Object.freeze({
+  id: row.id,
+  missionId: row.mission_id,
+  providerId: row.provider_id,
+  clientId: row.client_id,
+  providerServiceId: row.provider_service_id,
+  pricingModel: row.pricing_model,
+  workedMinutes: Number(row.worked_minutes),
+  hourlyRate: row.hourly_rate == null ? null : Number(row.hourly_rate),
+  minimumCharge: row.minimum_charge == null ? null : Number(row.minimum_charge),
+  laborAmount: Number(row.labor_amount),
+  materialAmount: Number(row.material_amount),
+  totalAmount: Number(row.total_amount),
+  currency: row.currency,
+  submittedAt: row.submitted_at,
+}) : null;
+
 export const adaptQuoteRow = (row) => {
   if (!row) return null;
   const items = [...(row.quote_items ?? [])]

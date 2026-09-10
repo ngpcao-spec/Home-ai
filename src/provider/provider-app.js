@@ -7,6 +7,8 @@ import { classifyGeolocationError, getLocationPermissionState, mountLocationPerm
 import { createIncomingOfferLayer, createProviderDispatchController, createProviderOfferAlert, renderIncomingOffer, updateDispatchCountdown } from './provider-dispatch.js';
 import { prepareProviderHistory, renderProviderIncome, renderProviderMissionHistory } from './provider-history.js';
 import { readInitialQuoteForm, renderInitialQuoteForm, updateInitialQuoteForm } from './initial-quote-form.js';
+import { readHourlyInvoiceForm, renderHourlyInvoiceForm, updateHourlyInvoiceForm } from './hourly-invoice-form.js';
+import { readProviderPricingForm, renderProviderPricing } from './provider-pricing.js';
 
 function ensureDispatchStyles(documentRef = globalThis.document) {
   if (!documentRef?.head || documentRef.querySelector?.('[data-provider-dispatch-styles]')) return;
@@ -22,7 +24,7 @@ const esc = (v='') => String(v).replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;'
 const money = (value) => `${new Intl.NumberFormat('vi-VN').format(value ?? 0)}đ`;
 const statusLabel = { accepted:'Đã nhận nhiệm vụ', travelling:'Đang di chuyển', arrived:'Đã đến nơi', quote_pending:'Báo giá đã được chấp nhận', supplement_pending:'Đang chờ duyệt bổ sung', in_progress:'Đang thực hiện', completed_pending_payment:'Đã hoàn tất · chờ thanh toán' };
 const serviceIcon = category => category==='electricity'?'⚡':'🛠';
-function renderQuoteWorkflow(assignment, { diagnosing=false, busy=false, supplementParent=null }={}) {
+function renderQuoteWorkflow(assignment, { diagnosing=false, busy=false, supplementParent=null, billing=false }={}) {
   if (assignment.status === 'completed_pending_payment') {
     const finalAmount = assignment.finalAuthorizedAmount ?? assignment.quote?.totalAmount;
     return `<section class="provider-completion-waiting" data-provider-completion-waiting>
@@ -34,6 +36,7 @@ function renderQuoteWorkflow(assignment, { diagnosing=false, busy=false, supplem
       <small>Khách hàng cần xác nhận đã thanh toán trực tiếp trước khi nhiệm vụ được đóng.</small>
     </section>`;
   }
+  if (billing) return renderHourlyInvoiceForm(assignment.pricing, { busy });
   if(supplementParent)return renderSupplementForm(supplementParent);
   if (assignment.quote && !['declined','rejected'].includes(assignment.quote.status)) { const accepted=assignment.quote.status==='accepted'; return `<section class="provider-quote provider-quote--waiting"><p>BÁO GIÁ V${assignment.quote.version}</p><h3>${esc(assignment.quote.diagnosis)}</h3><strong>${money(assignment.quote.totalAmount)}</strong><span>${accepted?'Khách hàng đã chấp nhận':'Đã gửi cho khách hàng'}</span><div class="waiting-pulse">${accepted?'✓ Công việc đã được phê duyệt':'⌛ Đang chờ khách hàng chấp nhận'}</div><small>${accepted?'Nội dung báo giá này đã khóa; mọi thay đổi phải tạo phiên bản mới.':'Không bắt đầu công việc tính phí trước khi khách hàng chấp nhận rõ ràng.'}</small>${accepted&&assignment.status==='quote_pending'?`<button data-start-intervention ${busy?'disabled':''}>Bắt đầu thực hiện</button>`:''}${assignment.status==='in_progress'?`<button data-provider-supplement>Đề xuất chi phí phát sinh</button><button data-finish-intervention ${busy?'disabled':''}>Hoàn tất công việc</button>`:''}</section>`; }
   if (assignment.status === 'in_progress' && assignment.quote?.status === 'rejected') return '<p>Chi phí phát sinh đã bị từ chối. Chỉ tiếp tục công việc đã chấp nhận.</p><button data-finish-intervention>Hoàn tất công việc</button>';
@@ -41,7 +44,7 @@ function renderQuoteWorkflow(assignment, { diagnosing=false, busy=false, supplem
   if (!diagnosing) return `<button class="diagnosis-start" data-start-diagnosis ${busy?'disabled':''}>Bắt đầu chẩn đoán</button>`;
   return renderInitialQuoteForm({ busy });
 }
-export function renderActiveProviderMission(assignment,{busy=false,message='',navigation=null,navigationLoading=false,navigationError='',diagnosing=false,supplementParent=null,testMode=false}={}){
+export function renderActiveProviderMission(assignment,{busy=false,message='',navigation=null,navigationLoading=false,navigationError='',diagnosing=false,supplementParent=null,billing=false,testMode=false}={}){
   const route=navigation?.route;const destination=navigation?.destination;
   const mapHref=Number.isFinite(destination?.latitude)&&Number.isFinite(destination?.longitude)?`https://maps.apple.com/?daddr=${encodeURIComponent(destination.latitude)},${encodeURIComponent(destination.longitude)}`:null;
   const acceptedAmount=assignment.quote?.status==='accepted'?assignment.quote.totalAmount:assignment.finalAuthorizedAmount;
@@ -54,14 +57,14 @@ export function renderActiveProviderMission(assignment,{busy=false,message='',na
   return `<main class="active-mission"><div class="mission-title"><span></span><h1>Chi tiết nhiệm vụ</h1><span class="mission-status">${esc(statusLabel[assignment.status]??assignment.status)}</span></div>
     ${showRoute?`<section class="mission-map-card"><div class="provider-map" data-provider-map aria-label="Bản đồ đường đến khách hàng"></div>${navigation?`<div class="map-metrics"><div><small>Vị trí của bạn</small><strong>${navigation.providerLocation.latitude.toFixed(5)}, ${navigation.providerLocation.longitude.toFixed(5)}</strong></div><div><strong>${Number(route.distanceKm).toFixed(1)} km</strong><span>ETA ${route.durationMinutes} phút</span></div>${mapHref?`<a href="${mapHref}" target="_blank" rel="noopener" data-open-provider-map>⌘ Mở bản đồ</a>`:''}</div>`:navigationError?`<div class="route-loading route-loading--error"><strong>Không thể tải chi tiết lộ trình.</strong><small>${esc(navigationError)}</small><button type="button" data-retry-provider-navigation>Thử lại</button></div>`:`<div class="route-loading">${navigationLoading?'Đang chuẩn bị lộ trình…':'Đang tải chi tiết nhiệm vụ…'}</div>`}</section>`:''}
     <section class="mission-detail-card"><div class="mission-service"><span>${serviceIcon(assignment.serviceCategory)}</span><div><small>Dịch vụ</small><h2>${esc(labels[assignment.serviceCategory]??assignment.serviceCategory)}</h2></div></div><div class="mission-detail-row"><small>Mô tả vấn đề</small><strong>${esc(assignment.request)}</strong></div><div class="mission-detail-row"><small>Địa chỉ</small><strong>${esc(assignment.address)}</strong></div>${route?`<div class="mission-trip"><div><small>Khoảng cách</small><strong>${Number(route.distanceKm).toFixed(1)} km</strong></div><div><small>Thời gian di chuyển</small><strong>${route.durationMinutes} phút</strong></div></div>`:''}${indicativeAmount!=null?`<div class="mission-price"><small>${priceLabel}</small><strong>${money(indicativeAmount)}</strong></div>`:''}</section>
-    <div class="mission-actions">${assignment.status==='accepted'?`<button data-start-travel ${busy?'disabled':''}>BẮT ĐẦU DI CHUYỂN</button>`:''}${assignment.status==='travelling'?`<button data-mark-arrived ${busy||!navigation?.arrived?'disabled':''}>TÔI ĐÃ ĐẾN</button>${!navigation?.arrived?'<small>Nút được mở khi bạn ở trong phạm vi 150 m.</small>':''}${testArrivalMarkup}`:''}</div>${renderQuoteWorkflow(assignment,{diagnosing,busy,supplementParent})}<p class="app-message" role="status">${esc(message)}</p></main>`;
+    <div class="mission-actions">${assignment.status==='accepted'?`<button data-start-travel ${busy?'disabled':''}>BẮT ĐẦU DI CHUYỂN</button>`:''}${assignment.status==='travelling'?`<button data-mark-arrived ${busy||!navigation?.arrived?'disabled':''}>TÔI ĐÃ ĐẾN</button>${!navigation?.arrived?'<small>Nút được mở khi bạn ở trong phạm vi 150 m.</small>':''}${testArrivalMarkup}`:''}</div>${renderQuoteWorkflow(assignment,{diagnosing,busy,supplementParent,billing})}<p class="app-message" role="status">${esc(message)}</p></main>`;
 }
 
-export function renderProviderDashboard(state, { source='mock', busy=false, message='', navigation=null, navigationLoading=false, navigationError='', diagnosing=false, supplementParent=null, testMode=false }={}) {
+export function renderProviderDashboard(state, { source='mock', busy=false, message='', navigation=null, navigationLoading=false, navigationError='', diagnosing=false, supplementParent=null, billing=false, testMode=false }={}) {
   const offers = state.offers ?? [];
   const assignment = state.assignment;
   const header=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0] ?? 'P')}</button></header>`;
-  if(assignment)return `${header}${renderActiveProviderMission(assignment,{busy,message,navigation,navigationLoading,navigationError,diagnosing,supplementParent,testMode})}${renderProviderNav('home')}`;
+  if(assignment)return `${header}${renderActiveProviderMission(assignment,{busy,message,navigation,navigationLoading,navigationError,diagnosing,supplementParent,billing,testMode})}${renderProviderNav('home')}`;
   return `${header}
   <main><section class="welcome"><div><p>Xin chào,</p><h1>${esc(state.provider?.name ?? 'Kỹ thuật viên')}</h1><span class="verified">✓ Đã xác minh</span></div><span class="source">${source==='supabase'?'Đã kết nối':'Chế độ demo'}</span></section>
   <section class="status-card"><div><p>Trạng thái hoạt động</p><strong>${state.status?.online?'Đang trực tuyến':'Đang ngoại tuyến'}</strong></div><button class="switch ${state.status?.online?'on':''}" data-toggle-online aria-label="Đang trực tuyến" aria-pressed="${Boolean(state.status?.online)}" ${busy?'disabled':''}><span></span></button></section>
@@ -91,8 +94,9 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   let state;
   try{state=await repository.load();}catch(error){error.safeStage='DASHBOARD_LOAD';throw error;}
   const openDashboard=async()=>{
-  let busy=false; let message=''; let navigation=null;let navigationLoading=false;let navigationError=''; let diagnosing=false; let editingMissionId=null; let supplementParent=null;let confirmingAcceptance=false;
+  let busy=false; let message=''; let navigation=null;let navigationLoading=false;let navigationError=''; let diagnosing=false; let editingMissionId=null; let supplementParent=null;let billingMissionId=null;let confirmingAcceptance=false;
   let currentView='home'; let history=[]; let historyLoading=false; let historyError=''; let selectedMissionId=null;
+  let pricingServices=[];let pricingLoading=false;let pricingError='';let pricingMessage='';
   let priorityOfferId=repository.source==='supabase' ? state.offers?.[0]?.id ?? null : null;
   const page=root.ownerDocument??globalThis.document;
   const providerTestMode=runtimeConfig?.PROVIDER_TEST_MODE===true&&runtimeConfig?.SUPABASE_REQUIRED!==true;
@@ -124,15 +128,23 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
       root.innerHTML=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0]??'P')}</button></header>${content}${renderProviderNav(currentView)}${offerLayer?'':renderIncomingOffer(priorityOffer)}`;
       return;
     }
-    const priorityOffer=state.offers?.find(({id})=>id===priorityOfferId);root.innerHTML=renderProviderDashboard(state,{source:repository.source,busy,message,navigation,navigationLoading,navigationError,diagnosing,supplementParent,testMode:providerTestMode})+(offerLayer?'':renderIncomingOffer(priorityOffer));const map=root.querySelector('[data-provider-map]');if(navigation&&map)await renderProviderNavigation(map,navigation,state.provider).catch(()=>{});
+    if(currentView==='profile'){
+      root.innerHTML=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0]??'P')}</button></header>${renderProviderPricing(pricingServices,{loading:pricingLoading,error:pricingError,message:pricingMessage,busy})}${renderProviderNav('profile')}`;
+      return;
+    }
+    const priorityOffer=state.offers?.find(({id})=>id===priorityOfferId);root.innerHTML=renderProviderDashboard(state,{source:repository.source,busy,message,navigation,navigationLoading,navigationError,diagnosing,supplementParent,billing:state.assignment?.id===billingMissionId,testMode:providerTestMode})+(offerLayer?'':renderIncomingOffer(priorityOffer));const map=root.querySelector('[data-provider-map]');if(navigation&&map)await renderProviderNavigation(map,navigation,state.provider).catch(()=>{});
   };
   const loadHistory=async()=>{historyLoading=true;historyError='';await renderDashboard();try{history=prepareProviderHistory(await repository.getHistory(),state.provider.id);}catch(error){history=[];historyError=error?.message??'Lỗi không xác định';}finally{historyLoading=false;await renderDashboard();}};
+  const loadPricing=async()=>{pricingLoading=true;pricingError='';await renderDashboard();try{pricingServices=await repository.getServices();}catch(error){pricingServices=[];pricingError=error?.message??'Lỗi không xác định';}finally{pricingLoading=false;await renderDashboard();}};
   const canSendQuote=()=>state.assignment?.id===editingMissionId
     && state.assignment.status==='arrived'
     && (!state.assignment.quote || ['declined','rejected'].includes(state.assignment.quote.status));
   const canSendSupplement=()=>state.assignment?.id===editingMissionId
     && state.assignment?.status==='in_progress' && state.assignment.quote?.status==='accepted'
     && state.assignment.quote.id===supplementParent?.id;
+  const canSendInvoice=()=>state.assignment?.id===billingMissionId
+    && state.assignment.status==='in_progress' && state.assignment.pricing?.pricingModel==='hourly'
+    && !state.assignment.invoice;
   const draw=async()=>{
     if(confirmingAcceptance)return;
     syncOfferLayer();
@@ -147,6 +159,12 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
       updateInitialQuoteForm(root,canSendQuote(),busy);
       const notice=root.querySelector('.app-message');
       if(notice)notice.textContent=canSendQuote()?message:'Nhiệm vụ đã thay đổi. Không thể gửi báo giá này.';
+      return;
+    }
+    if(billingMissionId && root.querySelector('[data-hourly-invoice-form]')){
+      updateHourlyInvoiceForm(root,state.assignment?.pricing,canSendInvoice(),busy);
+      const notice=root.querySelector('.app-message');
+      if(notice)notice.textContent=canSendInvoice()?message:'Nhiệm vụ đã thay đổi. Không thể gửi hóa đơn này.';
       return;
     }
     await renderDashboard();
@@ -173,17 +191,29 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   page?.addEventListener?.('visibilitychange',syncHeartbeat);
   globalThis.addEventListener?.('pagehide',()=>{heartbeat.stop();dispatch.stop();globalThis.clearInterval?.(countdownTimer);},{once:true});
   heartbeat.sync();
-  root.addEventListener('input',()=>{if(supplementParent)updateSupplementForm(root,supplementParent,canSendSupplement(),busy);else if(diagnosing)updateInitialQuoteForm(root,canSendQuote(),busy);});
+  root.addEventListener('input',()=>{if(supplementParent)updateSupplementForm(root,supplementParent,canSendSupplement(),busy);else if(diagnosing)updateInitialQuoteForm(root,canSendQuote(),busy);else if(billingMissionId)updateHourlyInvoiceForm(root,state.assignment?.pricing,canSendInvoice(),busy);});
   const wait=milliseconds=>new Promise(resolve=>globalThis.setTimeout(resolve,milliseconds));
   const handleProviderClick=async e=>{
     if(e.target.closest('[data-enable-offer-audio]')){await offerAlert.unlock();updateAudioControl();return;}
     if(!e.target.closest('[data-accept]')&&!e.target.closest('[data-decline]'))void offerAlert.unlock().then(updateAudioControl);
     if(e.target.closest('[data-retry-provider-navigation]')){if(navigationLoading)return;void loadNavigation().then(draw);await draw();return;}
     const view=e.target.closest('[data-provider-view]');
-    if(view){currentView=view.dataset.providerView;selectedMissionId=null;if(currentView==='missions'||currentView==='income')await loadHistory();else await draw();return;}
+    if(view){currentView=view.dataset.providerView;selectedMissionId=null;if(currentView==='missions'||currentView==='income')await loadHistory();else if(currentView==='profile')await loadPricing();else await draw();return;}
     const mission=e.target.closest('[data-history-mission]');if(mission){selectedMissionId=mission.dataset.historyMission;await draw();return;}
     if(e.target.closest('[data-history-back]')){selectedMissionId=null;await draw();return;}
     if(e.target.closest('[data-history-retry]')){await loadHistory();return;}
+    if(e.target.closest('[data-pricing-retry]')){await loadPricing();return;}
+    const pricingForm=e.target.closest('[data-save-pricing]')?.closest('[data-pricing-service]');
+    if(pricingForm){
+      e.preventDefault?.();if(busy)return;
+      const draft=readProviderPricingForm(pricingForm);
+      if(!draft.valid){pricingMessage='Vui lòng nhập đơn giá và mức tối thiểu hợp lệ.';await draw();return;}
+      busy=true;pricingMessage='';
+      try{await repository.setServicePricing(draft.serviceCategory,draft);pricingServices=await repository.getServices();pricingMessage='Đã lưu giá dịch vụ.';}
+      catch(error){pricingMessage=error?.message??'Không thể lưu giá dịch vụ.';}
+      finally{busy=false;await draw();}
+      return;
+    }
     if(e.target.closest('[data-provider-supplement]')){
       if(busy || supplementParent || state.assignment?.status!=='in_progress' || state.assignment.quote?.status!=='accepted')return;
       editingMissionId=state.assignment.id; supplementParent=structuredClone(state.assignment.quote);
@@ -205,7 +235,18 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
       finally{busy=false; await draw();}
       return;
     }
-    const logout=e.target.closest('[data-provider-logout]');const online=e.target.closest('[data-toggle-online]');const accept=e.target.closest('[data-accept]');const decline=e.target.closest('[data-decline]');const start=e.target.closest('[data-start-travel]');const arrived=e.target.closest('[data-mark-arrived]');const testArrival=e.target.closest('[data-test-provider-arrival]');const diagnose=e.target.closest('[data-start-diagnosis]');const send=e.target.closest('[data-send-quote]');const begin=e.target.closest('[data-start-intervention]');const finish=e.target.closest('[data-finish-intervention]');const supplement=e.target.closest('[data-provider-supplement]');if(logout){offerAlert.stop();heartbeat.stop();await auth.signOut();globalThis.location?.reload();return;}if(busy||(!online&&!accept&&!decline&&!start&&!arrived&&!testArrival&&!diagnose&&!send&&!begin&&!finish&&!supplement))return;if(diagnose){editingMissionId=state.assignment?.id;diagnosing=true;await draw();return;}let respondingOffer=null;if(accept||decline){respondingOffer=state.offers?.find(({id})=>id===(accept?.dataset.accept??decline?.dataset.decline));if(!respondingOffer||new Date(respondingOffer.expiresAt).getTime()<=Date.now()){priorityOfferId=null;offerAlert.stop();await draw();return;}offerAlert.stop(respondingOffer.id);}busy=true;await draw();try{if(online){const next=!state.status.online;state=await repository.setAvailability({online:next,available:next&&!state.assignment});}if(accept){state=await repository.accept(accept.dataset.accept);if(!state.assignment){state=await repository.load();if(!state.assignment)throw new Error('Mission acceptée introuvable.');}priorityOfferId=null;if(offerLayer){confirmingAcceptance=true;offerLayer.confirm();const navigationPromise=loadNavigation();await wait(1000);confirmingAcceptance=false;await draw();void navigationPromise.then(draw);}else void loadNavigation().then(draw);}if(decline){state=await repository.decline(decline.dataset.decline);priorityOfferId=null;}if(start||arrived){navigation=await navigationLoader(state.assignment,{source:repository.source});if(arrived&&!navigation.arrived)throw new Error('Provider not at destination');state=await repository.updateMissionProgress(state.assignment.id,start?'travelling':'arrived',navigation.providerLocation);}if(testArrival){if(!providerTestMode||state.assignment?.status!=='travelling'||!state.assignment.clientLocation)throw new Error('Provider test mode unavailable');state=await repository.updateMissionProgress(state.assignment.id,'arrived',state.assignment.clientLocation);navigation=null;}if(send){if(!canSendQuote())throw new Error('Mission is no longer ready for this quote');const {draft,valid}=readInitialQuoteForm(root);if(!valid)throw new Error('Invalid quote');state=await repository.createQuote(editingMissionId,draft);diagnosing=false;}if(begin)state=await repository.startIntervention(state.assignment.id);if(finish)state=await repository.finishIntervention(state.assignment.id);message='Đã cập nhật thành công.';}catch{confirmingAcceptance=false;message='Không thể cập nhật. Vui lòng thử lại.';if(respondingOffer&&new Date(respondingOffer.expiresAt).getTime()>Date.now()){priorityOfferId=respondingOffer.id;offerAlert.start(respondingOffer);}}finally{busy=false;heartbeat.sync();await draw();}};
+    if(e.target.closest('[data-cancel-invoice]')){if(busy)return;billingMissionId=null;await draw();return;}
+    if(e.target.closest('[data-send-invoice]')){
+      if(busy||!canSendInvoice())return;
+      const result=readHourlyInvoiceForm(root,state.assignment.pricing);
+      if(!result.valid)return;
+      busy=true;await draw();
+      try{state=await repository.submitHourlyInvoice(billingMissionId,result.invoice);billingMissionId=null;message='Đã gửi hóa đơn cho khách hàng.';}
+      catch(error){message=error?.message??'Không thể gửi hóa đơn. Vui lòng thử lại.';}
+      finally{busy=false;heartbeat.sync();await draw();}
+      return;
+    }
+    const logout=e.target.closest('[data-provider-logout]');const online=e.target.closest('[data-toggle-online]');const accept=e.target.closest('[data-accept]');const decline=e.target.closest('[data-decline]');const start=e.target.closest('[data-start-travel]');const arrived=e.target.closest('[data-mark-arrived]');const testArrival=e.target.closest('[data-test-provider-arrival]');const diagnose=e.target.closest('[data-start-diagnosis]');const send=e.target.closest('[data-send-quote]');const begin=e.target.closest('[data-start-intervention]');const finish=e.target.closest('[data-finish-intervention]');const supplement=e.target.closest('[data-provider-supplement]');if(logout){offerAlert.stop();heartbeat.stop();await auth.signOut();globalThis.location?.reload();return;}if(busy||(!online&&!accept&&!decline&&!start&&!arrived&&!testArrival&&!diagnose&&!send&&!begin&&!finish&&!supplement))return;if(diagnose){editingMissionId=state.assignment?.id;diagnosing=true;await draw();return;}if(finish){billingMissionId=state.assignment?.id;await draw();return;}let respondingOffer=null;if(accept||decline){respondingOffer=state.offers?.find(({id})=>id===(accept?.dataset.accept??decline?.dataset.decline));if(!respondingOffer||new Date(respondingOffer.expiresAt).getTime()<=Date.now()){priorityOfferId=null;offerAlert.stop();await draw();return;}offerAlert.stop(respondingOffer.id);}busy=true;await draw();try{if(online){const next=!state.status.online;state=await repository.setAvailability({online:next,available:next&&!state.assignment});}if(accept){state=await repository.accept(accept.dataset.accept);if(!state.assignment){state=await repository.load();if(!state.assignment)throw new Error('Mission acceptée introuvable.');}priorityOfferId=null;if(offerLayer){confirmingAcceptance=true;offerLayer.confirm();const navigationPromise=loadNavigation();await wait(1000);confirmingAcceptance=false;await draw();void navigationPromise.then(draw);}else void loadNavigation().then(draw);}if(decline){state=await repository.decline(decline.dataset.decline);priorityOfferId=null;}if(start||arrived){navigation=await navigationLoader(state.assignment,{source:repository.source});if(arrived&&!navigation.arrived)throw new Error('Provider not at destination');state=await repository.updateMissionProgress(state.assignment.id,start?'travelling':'arrived',navigation.providerLocation);}if(testArrival){if(!providerTestMode||state.assignment?.status!=='travelling'||!state.assignment.clientLocation)throw new Error('Provider test mode unavailable');state=await repository.updateMissionProgress(state.assignment.id,'arrived',state.assignment.clientLocation);navigation=null;}if(send){if(!canSendQuote())throw new Error('Mission is no longer ready for this quote');const {draft,valid}=readInitialQuoteForm(root);if(!valid)throw new Error('Invalid quote');state=await repository.createQuote(editingMissionId,draft);diagnosing=false;}if(begin)state=await repository.startIntervention(state.assignment.id);message='Đã cập nhật thành công.';}catch{confirmingAcceptance=false;message='Không thể cập nhật. Vui lòng thử lại.';if(respondingOffer&&new Date(respondingOffer.expiresAt).getTime()>Date.now()){priorityOfferId=respondingOffer.id;offerAlert.start(respondingOffer);}}finally{busy=false;heartbeat.sync();await draw();}};
   root.addEventListener('click',handleProviderClick);
   offerLayer?.host.addEventListener('click',handleProviderClick);
   return {getState:()=>structuredClone(state),stop:()=>{offerLayer?.stop();offerAlert.stop();heartbeat.stop();dispatch.stop();globalThis.clearInterval?.(countdownTimer);}};

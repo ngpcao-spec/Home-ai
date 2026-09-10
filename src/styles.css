@@ -248,6 +248,11 @@ h1 em { color: var(--green); font-style: normal; }
 .completed-work h4 { margin: 0 0 7px; color: #173d34; }
 .completed-work ul { display: grid; gap: 5px; margin: 0; padding-left: 18px; color: #36564e; font-size: 10px; }
 .final-financial-summary .payment-total { color: var(--dark-green); font-size: 13px; }
+.customer-invoice { margin-top: 13px; padding: 13px; border: 1px solid #b9ddd1; border-radius: 13px; background: #eef8f4; text-align: left; }
+.customer-invoice dl { margin: 8px 0 0; }
+.customer-invoice dl > div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid #d8eae4; }
+.customer-invoice dl > div:last-child { border-bottom: 0; }
+.customer-invoice dd { margin: 0; font-weight: 800; }
 .payment-preparation-status { min-height: 17px; color: var(--green) !important; font-weight: 750; }
 .paid-external, .provider-review { text-align: center; }
 .paid-external h3 { margin-bottom: 5px; color: #173d34; font-size: 22px; }

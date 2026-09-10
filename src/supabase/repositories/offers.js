@@ -1,4 +1,4 @@
-import { adaptMissionRow } from '../adapters.js';
+import { adaptInvoiceRow, adaptMissionRow } from '../adapters.js';
 import { requireSupabaseClient, unwrap } from './shared.js';
 
 export function createSupabaseOffersRepository(supabase) {
@@ -33,6 +33,36 @@ export function createSupabaseOffersRepository(supabase) {
       return unwrap(await client.rpc('set_current_provider_availability', {
         new_online: online, new_available: online,
       }), 'offers.setProviderAvailability');
+    },
+    async getCurrentProviderBillingState(missionId) {
+      return Object.freeze({ ...(unwrap(await client.rpc('get_current_provider_billing_state', {
+        target_mission_id: missionId,
+      }), 'offers.getCurrentProviderBillingState') ?? {}) });
+    },
+    async listCurrentProviderServices(providerId) {
+      const rows = unwrap(await client.from('provider_services')
+        .select('id,provider_id,service_category,base_price,pricing_model,hourly_rate,minimum_charge,currency,enabled')
+        .eq('provider_id', providerId).eq('enabled', true)
+        .order('service_category'), 'offers.listCurrentProviderServices') ?? [];
+      return Object.freeze(rows.map((row) => Object.freeze({
+        id: row.id, providerId: row.provider_id, serviceCategory: row.service_category,
+        legacyBasePrice: row.base_price == null ? null : Number(row.base_price),
+        pricingModel: row.pricing_model, hourlyRate: row.hourly_rate == null ? null : Number(row.hourly_rate),
+        minimumCharge: row.minimum_charge == null ? null : Number(row.minimum_charge), currency: row.currency, enabled: row.enabled,
+      })));
+    },
+    async setCurrentProviderServicePricing(serviceCategory, { hourlyRate, minimumCharge }) {
+      const row = unwrap(await client.rpc('set_current_provider_service_hourly_pricing', {
+        target_service_category: serviceCategory,
+        new_hourly_rate: Number(hourlyRate),
+        new_minimum_charge: Number(minimumCharge),
+      }), 'offers.setCurrentProviderServicePricing');
+      return Object.freeze({
+        id: row.id, providerId: row.provider_id, serviceCategory: row.service_category,
+        legacyBasePrice: row.base_price == null ? null : Number(row.base_price),
+        pricingModel: row.pricing_model, hourlyRate: row.hourly_rate == null ? null : Number(row.hourly_rate),
+        minimumCharge: row.minimum_charge == null ? null : Number(row.minimum_charge), currency: row.currency, enabled: row.enabled,
+      });
     },
     async updateProviderLocation({ latitude, longitude }) {
       return unwrap(await client.rpc('update_current_provider_location', {
@@ -77,6 +107,13 @@ export function createSupabaseOffersRepository(supabase) {
       return adaptMissionRow(unwrap(await client.rpc('finish_current_provider_intervention', {
         target_mission_id: missionId, expected_version: version,
       }), 'offers.finishIntervention'));
+    },
+    async submitHourlyInvoice(missionId, version, invoice) {
+      return adaptInvoiceRow(unwrap(await client.rpc('submit_current_provider_hourly_invoice', {
+        target_mission_id: missionId, expected_version: version,
+        new_worked_hours: invoice.hours, new_worked_minutes: invoice.minutes,
+        new_material_amount: invoice.materialAmount,
+      }), 'offers.submitHourlyInvoice'));
     },
     async getMissionHistory() {
       return Object.freeze([...(unwrap(await client.rpc('get_current_user_mission_history'), 'offers.getMissionHistory') ?? [])]);

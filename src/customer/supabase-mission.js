@@ -41,7 +41,7 @@ export function createAssignedCustomerTechnician(provider, mission) {
   });
 }
 
-export function createCustomerMissionStateFromServer({ mission, quotes, review = null }) {
+export function createCustomerMissionStateFromServer({ mission, quotes, review = null, invoice = null }) {
   const state = createMissionState();
   const statusForTimeline = mission.status === 'completed' ? 'completed_pending_payment' : mission.status;
   const timelineStatus = ['quote_pending', 'supplement_pending'].includes(statusForTimeline) ? 'in_progress' : statusForTimeline;
@@ -77,9 +77,10 @@ export function createCustomerMissionStateFromServer({ mission, quotes, review =
         .filter(({ status }) => status === 'accepted')
         .flatMap(({ recommendedTasks = [] }) => recommendedTasks)),
       acceptedQuoteId: acceptedQuote.id,
-      finalAuthorizedAmount: mission.finalAuthorizedAmount,
-      currency: acceptedQuote.currency ?? mission.currency,
+      finalAuthorizedAmount: invoice?.totalAmount ?? mission.finalAuthorizedAmount,
+      currency: invoice?.currency ?? acceptedQuote.currency ?? mission.currency,
       warrantyDays: acceptedQuote.warrantyDays,
+      invoice,
     }) : null,
     reviewStage: mission.status === 'completed' ? 'rating' : 'hidden',
     rating: review?.rating ?? 0,
@@ -166,15 +167,16 @@ export function createCustomerMissionSynchronizer({
   const load = async (missionId) => {
     const mission = await missionRepository.getById(missionId);
     if (!mission) throw new Error('Mission Supabase introuvable');
-    const [provider, quotes, offers, providerLocation, review] = await Promise.all([
+    const [provider, quotes, offers, providerLocation, review, invoice] = await Promise.all([
       mission.providerId ? providerRepository.getById(mission.providerId) : null,
       missionRepository.getQuoteHistory(mission.id),
       missionRepository.getOffers?.(mission.id) ?? [],
       missionRepository.getAssignedProviderLocation?.(mission) ?? null,
       missionRepository.getReview?.(mission.id) ?? null,
+      missionRepository.getInvoice?.(mission.id) ?? null,
     ]);
     if (mission.providerId && !provider) throw new Error('Prestataire assigné introuvable');
-    return Object.freeze({ mission, provider, quotes, offers, providerLocation, review });
+    return Object.freeze({ mission, provider, quotes, offers, providerLocation, review, invoice });
   };
 
   const create = (draft, { replaceMission = null } = {}) => {

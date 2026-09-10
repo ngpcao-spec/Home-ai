@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { createSupabaseMissionsRepository } from '../src/supabase/repositories/missions.js';
 import { createMockProviderAppRepository } from '../src/provider/provider-repository.js';
+import { calculateHourlyInvoice } from '../src/billing/hourly-pricing.js';
 
 describe('mission completion repositories', () => {
   it('uses RPCs for payment, review and history', async () => {
@@ -16,7 +17,10 @@ describe('mission completion repositories', () => {
     const repo=createMockProviderAppRepository({provider:{name:'P'},status:{online:true,available:false},offers:[],assignment:{id:'m1',status:'quote_pending',quote:{status:'pending'}}});
     await assert.rejects(()=>repo.startIntervention('m1'));
     const accepted=createMockProviderAppRepository({provider:{name:'P'},status:{online:true,available:false},offers:[],assignment:{id:'m1',status:'quote_pending',quote:{status:'accepted'}}});
-    assert.equal((await accepted.startIntervention('m1')).assignment.status,'in_progress');
-    assert.equal((await accepted.finishIntervention('m1')).assignment.status,'completed_pending_payment');
+    const started = await accepted.startIntervention('m1');
+    assert.equal(started.assignment.status,'in_progress');
+    const invoice = calculateHourlyInvoice({ hourlyRate: started.assignment.pricing.hourlyRate,
+      minimumCharge: started.assignment.pricing.minimumCharge, hours: 1, minutes: 0, materialAmount: 0 });
+    assert.equal((await accepted.submitHourlyInvoice('m1', invoice)).assignment.status,'completed_pending_payment');
   });
 });

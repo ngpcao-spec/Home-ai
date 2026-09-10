@@ -1,4 +1,4 @@
-import { adaptMissionRow, adaptQuoteRow } from '../adapters.js';
+import { adaptInvoiceRow, adaptMissionRow, adaptQuoteRow } from '../adapters.js';
 import { requireSupabaseClient, unwrap } from './shared.js';
 
 const missionColumns = [
@@ -114,6 +114,12 @@ export function createSupabaseMissionsRepository(supabase) {
         id: review.id, missionId: review.mission_id, rating: review.rating,
         comment: review.comment ?? '', createdAt: review.created_at,
       }) : null;
+    },
+    async getInvoice(missionId) {
+      const result = await client.from('mission_invoices')
+        .select('id,mission_id,provider_id,client_id,provider_service_id,pricing_model,worked_minutes,hourly_rate,minimum_charge,labor_amount,material_amount,total_amount,currency,submitted_at')
+        .eq('mission_id', missionId).maybeSingle();
+      return adaptInvoiceRow(unwrap(result, 'missions.getInvoice'));
     },
     async decideCurrentQuote(quoteId, decision) {
       const result = await client.rpc('decide_current_customer_quote', {

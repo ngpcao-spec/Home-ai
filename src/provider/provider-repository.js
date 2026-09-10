@@ -4,6 +4,11 @@ import { mockProviderDashboard } from './mock-provider-data.js';
 const clone = (value) => structuredClone(value);
 export function createMockProviderAppRepository(seed = mockProviderDashboard) {
   let state = clone(seed);
+  let services = clone(seed.services ?? [{
+    id: 'provider-service-demo', providerId: seed.provider?.id ?? 'provider-demo',
+    serviceCategory: 'electricity', pricingModel: 'hourly', hourlyRate: 300000,
+    minimumCharge: 400000, currency: 'VND', enabled: true,
+  }]);
   return Object.freeze({
     source: 'mock', async load() { return clone(state); },
     async setAvailability(next) { state.status = { ...state.status, ...next }; return clone(state); },
@@ -38,8 +43,18 @@ export function createMockProviderAppRepository(seed = mockProviderDashboard) {
       state.assignment = { ...state.assignment, status: 'quote_pending', quote };
       return clone(state);
     },
-    async startIntervention(missionId) { if (state.assignment?.id !== missionId || state.assignment.quote?.status !== 'accepted') throw new Error('Accepted quote required'); state.assignment.status='in_progress'; return clone(state); },
-    async finishIntervention(missionId) { if (state.assignment?.id !== missionId || state.assignment.status !== 'in_progress') throw new Error('Mission is not in progress'); state.assignment.status='completed_pending_payment'; return clone(state); },
+    async startIntervention(missionId) { if (state.assignment?.id !== missionId || state.assignment.quote?.status !== 'accepted') throw new Error('Accepted quote required'); const pricing=services.find(({serviceCategory})=>serviceCategory===state.assignment.serviceCategory)??services[0]; state.assignment={...state.assignment,status:'in_progress',pricing}; return clone(state); },
+    async submitHourlyInvoice(missionId, invoice) {
+      if (state.assignment?.id !== missionId) throw new Error('Mission is not in progress');
+      if (state.assignment.invoice) {
+        if (state.assignment.invoice.workedMinutes === invoice.workedMinutes && state.assignment.invoice.materialAmount === invoice.materialAmount) return clone(state);
+        throw new Error('Mission invoice was already submitted');
+      }
+      if (state.assignment.status !== 'in_progress') throw new Error('Mission is not in progress');
+      state.assignment = { ...state.assignment, status: 'completed_pending_payment',
+        finalAuthorizedAmount: invoice.totalAmount, invoice: { ...invoice, id: 'invoice-demo', missionId } };
+      return clone(state);
+    },
     async createSupplement(id, discovery) {
       const parent = state.assignment?.quote;
       if(state.assignment?.id !== id || state.assignment.status !== 'in_progress' || parent?.status !== 'accepted') throw new Error('Accepted intervention required');
@@ -51,6 +66,13 @@ export function createMockProviderAppRepository(seed = mockProviderDashboard) {
       return clone(state);
     },
     async getHistory() { return clone(state.history ?? []); },
+    async getServices() { return clone(services); },
+    async setServicePricing(serviceCategory, pricing) {
+      const index = services.findIndex((service) => service.serviceCategory === serviceCategory);
+      if (index < 0) throw new Error('Provider service not found');
+      services[index] = { ...services[index], pricingModel: 'hourly', ...pricing };
+      return clone(services[index]);
+    },
   });
 }
 
@@ -65,8 +87,12 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
   const loadDashboard = async () => {
     const dashboard = await repositories.offers.getProviderDashboard();
     if (!dashboard.assignment) return dashboard;
-    const quote = await repositories.offers.getCurrentProviderQuoteState();
-    return { ...dashboard, assignment: { ...dashboard.assignment, quote } };
+    const [quote, billing] = await Promise.all([
+      repositories.offers.getCurrentProviderQuoteState(),
+      repositories.offers.getCurrentProviderBillingState(dashboard.assignment.id),
+    ]);
+    return { ...dashboard, assignment: { ...dashboard.assignment, quote,
+      pricing: billing.pricing ?? null, invoice: billing.invoice ?? null } };
   };
   return Object.freeze({
     source: 'supabase', load: loadDashboard,
@@ -80,7 +106,7 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
     async updateMissionProgress(id, status, location) { await repositories.offers.updateProviderMissionProgress(id, status, location); return loadDashboard(); },
     async createQuote(id, draft) { await repositories.offers.createCurrentProviderQuote(id, draft); return loadDashboard(); },
     async startIntervention(id) { const current=await loadDashboard(); await repositories.offers.startIntervention(id,current.assignment.version); return loadDashboard(); },
-    async finishIntervention(id) { const current=await loadDashboard(); await repositories.offers.finishIntervention(id,current.assignment.version); return loadDashboard(); },
+    async submitHourlyInvoice(id, invoice) { const current=await loadDashboard(); await repositories.offers.submitHourlyInvoice(id,current.assignment.version,invoice); return loadDashboard(); },
     async createSupplement(id, discovery) {
       const current = await loadDashboard();
       if(current.assignment?.id !== id || current.assignment.status !== 'in_progress') throw new Error('Intervention required');
@@ -94,6 +120,10 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
       const clients = await Promise.all(clientIds.map(async (clientId) => [clientId, await repositories.profiles.getById(clientId)]));
       const names = new Map(clients.map(([clientId, profile]) => [clientId, profile?.name]));
       return history.map((mission) => ({ ...mission, clientName: names.get(mission.clientId) ?? null }));
+    },
+    async getServices() { return repositories.offers.listCurrentProviderServices(initial.provider.id); },
+    async setServicePricing(serviceCategory, pricing) {
+      return repositories.offers.setCurrentProviderServicePricing(serviceCategory, pricing);
     },
   });
 }
