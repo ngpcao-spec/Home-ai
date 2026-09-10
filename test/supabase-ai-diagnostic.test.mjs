@@ -51,12 +51,20 @@ it('rejects unknown fields, categories and malformed AI output', () => {
 
 it('prioritizes provider-useful clarification without a rigid category questionnaire', () => {
   assert.match(diagnosticInstructions, /not a technical diagnostician/i);
-  assert.match(diagnosticInstructions, /single missing fact has the highest real value for the provider/i);
-  for (const criterion of ['quantity', 'requested action', 'scope', 'duration', 'date or time', 'logistics', 'required equipment']) {
+  assert.match(diagnosticInstructions, /single missing fact with the highest practical value for that decision/i);
+  for (const criterion of ['quantity', 'requested action', 'scope', 'duration', 'date', 'logistics', 'equipment requirements']) {
     assert.match(diagnosticInstructions, new RegExp(criterion, 'i'));
   }
   assert.match(diagnosticInstructions, /future services such as drivers, car rental, furniture repair, cleaning/i);
   assert.match(diagnosticInstructions, /Never apply a rigid category-specific questionnaire/i);
+});
+
+it('uses minimum sufficient information and treats three turns only as a ceiling', () => {
+  assert.match(diagnosticInstructions, /Does the provider already have enough information to understand the requested service and decide whether they can take it\?/i);
+  assert.match(diagnosticInstructions, /If yes, return missingQuestions=\[\] immediately/i);
+  assert.match(diagnosticInstructions, /Three clarification turns are a maximum[\s\S]*never a target/i);
+  assert.match(diagnosticInstructions, /stop as soon as the provider can understand the service and decide whether to accept and quote it/i);
+  assert.match(diagnosticInstructions, /Do not continue toward a complete technical diagnosis/i);
 });
 
 it('asks quantity first for multiple outlets and multiple bulbs', () => {
@@ -66,7 +74,11 @@ it('asks quantity first for multiple outlets and multiple bulbs', () => {
 });
 
 it('guides plumbing and air-conditioning questions toward useful work information', () => {
-  assert.match(diagnosticInstructions, /For a plumbing request[\s\S]*requested work[\s\S]*quantity[\s\S]*scope\/symptom/);
+  assert.match(diagnosticInstructions, /Một vòi nước dưới bồn rửa bị rò[\s\S]*Return missingQuestions=\[\]/);
+  assert.match(diagnosticInstructions, /vietnameseSummary should state only “Một vòi nước dưới bồn rửa bị rò\.”/);
+  assert.match(diagnosticInstructions, /Do not infer an unstated requested action/i);
+  assert.match(diagnosticInstructions, /Nhiều vòi nước bị rò[\s\S]*Bao nhiêu vòi nước bị rò\?/);
+  assert.match(diagnosticInstructions, /Avoid questions whose main purpose is finding the technical cause/i);
   assert.match(diagnosticInstructions, /For an air-conditioning request[\s\S]*number\/type of units[\s\S]*observable symptom/);
 });
 
@@ -90,6 +102,9 @@ it('stops when provider-useful facts are sufficient and never delegates technica
   assert.match(diagnosticInstructions, /Do not ask the customer to predict a technical cause/i);
   assert.match(diagnosticInstructions, /choose the provider's tools or materials/i);
   assert.match(diagnosticInstructions, /never ask whether the provider should bring or refill refrigerant/i);
+  assert.match(diagnosticInstructions, /never replaces the provider's professional diagnosis/i);
+  assert.match(diagnosticInstructions, /Include a desired action only when the customer actually stated it/i);
+  assert.match(diagnosticInstructions, /Never add meta commentary/i);
 });
 
 it('keeps Khác in the UI, allows Không biết when useful, and produces a provider summary', () => {
