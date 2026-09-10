@@ -26,7 +26,7 @@ it('adapts the strict Edge Function contract to the existing C05 diagnostic mode
   assert.equal(result.categoryId, 'electricity');
   assert.equal(result.summary, valid.vietnameseSummary);
   assert.equal(result.source, 'openai');
-  assert.deepEqual(calls[0][1].body, { description: 'Nhà bị mất điện', preferredCategory: 'electricity' });
+  assert.deepEqual(calls[0][1].body, { description: 'Nhà bị mất điện', preferredCategory: 'electricity', clarifications: [] });
   assert.ok(calls[0][1].signal);
   assert.deepEqual(logs, [
     { event: 'edge_function_call_started', functionName: 'diagnose-home-request' },
@@ -99,6 +99,9 @@ it('keeps the Edge Function authenticated, secret-only and strictly validated', 
   assert.match(source, /AbortController/);
   assert.match(source, /AI_TIMEOUT/);
   assert.match(contract, /additionalProperties: false/);
+  assert.match(contract, /rawClarifications\.length > 3/);
+  assert.match(source, /initialProblem: input\.description/);
+  assert.match(source, /clarificationHistory: input\.clarifications/);
   assert.match(contract, /required: \['serviceCategory', 'understoodProblem', 'confidence', 'missingQuestions', 'vietnameseSummary'\]/);
   assert.match(config, /\[functions\.diagnose-home-request\][\s\S]*verify_jwt = true/);
   for (const category of ['electricity', 'plumbing', 'air-conditioning', 'appliances']) assert.match(contract, new RegExp(`'${category}'`));

@@ -40,11 +40,18 @@ export function createSupabaseAiDiagnostic({
   });
 
   return Object.freeze({
-    async analyse({ description, preferredCategory }) {
+    async analyse({ description, preferredCategory, clarifications = [] }) {
       const cleanDescription = String(description ?? '').trim();
+      const cleanClarifications = Array.isArray(clarifications) ? clarifications.map(item => ({
+        question: String(item?.question ?? '').trim(),
+        answer: String(item?.answer ?? '').trim(),
+      })) : [];
       if (!cleanDescription || cleanDescription.length > 2000) {
         throw new AiDiagnosticError('INVALID_INPUT', 'Diagnostic description is invalid');
       }
+      if (cleanClarifications.length > 3 || cleanClarifications.some(({ question, answer }) => (
+        !question || question.length > 300 || !answer || answer.length > 500
+      ))) throw new AiDiagnosticError('INVALID_INPUT', 'Diagnostic clarifications are invalid');
       if (!client || !getVerifiedUserId()) {
         throw new AiDiagnosticError('AUTH_REQUIRED', 'Supabase authentication is required');
       }
@@ -53,7 +60,11 @@ export function createSupabaseAiDiagnostic({
       try {
         logger({ event: 'edge_function_call_started', functionName: 'diagnose-home-request' });
         const { data, error } = await client.functions.invoke('diagnose-home-request', {
-          body: { description: cleanDescription, preferredCategory: preferredCategory ?? null },
+          body: {
+            description: cleanDescription,
+            preferredCategory: preferredCategory ?? null,
+            clarifications: cleanClarifications,
+          },
           signal: controller.signal,
         });
         if (error) throw normalizeInvokeError(error);

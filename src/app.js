@@ -297,8 +297,17 @@ export function createHomeAiMarkup() {
                 <div><dt>Thợ được đề xuất:</dt><dd data-result-technician></dd></div>
                 <div data-result-confidence-row hidden><dt>Độ tin cậy:</dt><dd data-result-confidence></dd></div>
               </dl>
-              <div data-result-questions hidden><strong>Cần bổ sung:</strong><ul data-result-question-list></ul></div>
-              <p class="result-note">HOME AI đề xuất tìm một chuyên gia phù hợp với vấn đề này.</p>
+              <div class="clarification" data-result-questions hidden>
+                <strong>Cần bổ sung</strong>
+                <p data-clarification-question></p>
+                <form data-clarification-form>
+                  <label for="clarification-answer">Câu trả lời của bạn</label>
+                  <input id="clarification-answer" name="answer" maxlength="500" autocomplete="off" required />
+                  <button type="submit">Gửi câu trả lời</button>
+                </form>
+                <small data-clarification-progress></small>
+              </div>
+              <p class="result-note" data-result-note>HOME AI đề xuất tìm một chuyên gia phù hợp với vấn đề này.</p>
               <div class="result-actions">
                 <button class="find-button" type="button" data-find-technician>Tìm thợ phù hợp</button>
                 <button class="edit-button" type="button" data-edit-description>Chỉnh sửa mô tả</button>
@@ -498,6 +507,7 @@ export function initialiseHomePage(
   let diagnosedCategory;
   let selectedTechnician;
   let currentDiagnosis;
+  let diagnosticConversation = { initialDescription: '', clarifications: [], currentQuestion: '', pending: false };
   let matchedTechnicians = [];
   let currentRadiusKm = 2;
   let mapProvider;
@@ -677,57 +687,82 @@ export function initialiseHomePage(
     });
   });
 
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const description = input.value.trim();
-    if (!description) return;
-
+  const renderDiagnosis = diagnosis => {
+    const category = serviceCategories.find(({ id }) => id === diagnosis.categoryId) ?? serviceCategories[3];
+    diagnosedCategory = category.id;
+    currentDiagnosis = { ...diagnosis, service: category.label };
+    root.querySelector('[data-result-summary]').textContent = diagnosis.summary;
+    root.querySelector('[data-result-category]').textContent = category.label;
+    root.querySelector('[data-result-technician]').textContent = category.technician;
+    const confidenceRow = root.querySelector('[data-result-confidence-row]');
+    const confidence = root.querySelector('[data-result-confidence]');
+    if (confidenceRow && confidence) {
+      confidenceRow.hidden = !Number.isFinite(diagnosis.confidence);
+      confidence.textContent = Number.isFinite(diagnosis.confidence) ? `${Math.round(diagnosis.confidence * 100)}%` : '';
+    }
+    const questions = root.querySelector('[data-result-questions]');
+    const missing = Array.isArray(diagnosis.missingQuestions) ? diagnosis.missingQuestions : [];
+    const canClarify = diagnosis.source === 'openai' && missing.length > 0 && diagnosticConversation.clarifications.length < 3;
+    diagnosticConversation.currentQuestion = canClarify ? missing[0] : '';
+    diagnosticConversation.pending = canClarify;
+    questions.hidden = !canClarify;
+    root.querySelector('[data-clarification-question]').textContent = diagnosticConversation.currentQuestion;
+    root.querySelector('[data-clarification-progress]').textContent = canClarify
+      ? `Câu hỏi ${diagnosticConversation.clarifications.length + 1}/3`
+      : '';
+    root.querySelector('[data-clarification-form]').reset();
+    root.querySelector('[data-find-technician]').hidden = canClarify;
+    root.querySelector('[data-result-note]').hidden = canClarify;
+    status.textContent = '';
+    resultCard.hidden = false;
+    resultCard.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+    if (canClarify) root.querySelector('[data-clarification-form] input').focus();
+  };
+  const analyseCurrentConversation = async () => {
     const submitButton = form.querySelector('[type="submit"]');
     submitButton.disabled = true;
-    resultCard.hidden = true;
+    root.querySelector('[data-clarification-form] button').disabled = true;
     status.textContent = 'AI đang phân tích vấn đề của bạn...';
-
     try {
-      const diagnosis = await diagnosticService.analyse({ description, preferredCategory: selectedCategory });
-      const category = serviceCategories.find(({ id }) => id === diagnosis.categoryId) ?? serviceCategories[3];
-      diagnosedCategory = category.id;
-      currentDiagnosis = { ...diagnosis, service: category.label };
-      root.querySelector('[data-result-summary]').textContent = diagnosis.summary;
-      root.querySelector('[data-result-category]').textContent = category.label;
-      root.querySelector('[data-result-technician]').textContent = category.technician;
-      const confidenceRow = root.querySelector('[data-result-confidence-row]');
-      const confidence = root.querySelector('[data-result-confidence]');
-      if (confidenceRow && confidence) {
-        confidenceRow.hidden = !Number.isFinite(diagnosis.confidence);
-        confidence.textContent = Number.isFinite(diagnosis.confidence) ? `${Math.round(diagnosis.confidence * 100)}%` : '';
-      }
-      const questions = root.querySelector('[data-result-questions]');
-      const questionList = root.querySelector('[data-result-question-list]');
-      if (questions && questionList) {
-        const missing = Array.isArray(diagnosis.missingQuestions) ? diagnosis.missingQuestions : [];
-        questions.hidden = missing.length === 0;
-        questionList.replaceChildren(...missing.map(question => {
-          const item = root.ownerDocument.createElement('li');
-          item.textContent = question;
-          return item;
-        }));
-      }
-      status.textContent = '';
-      resultCard.hidden = false;
-      resultCard.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+      const diagnosis = await diagnosticService.analyse({
+        description: diagnosticConversation.initialDescription,
+        preferredCategory: selectedCategory,
+        clarifications: diagnosticConversation.clarifications,
+      });
+      renderDiagnosis(diagnosis);
     } catch {
       status.textContent = 'Không thể phân tích lúc này. Vui lòng thử lại.';
     } finally {
       submitButton.disabled = false;
+      root.querySelector('[data-clarification-form] button').disabled = false;
     }
+  };
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const description = input.value.trim();
+    if (!description) return;
+    diagnosticConversation = { initialDescription: description, clarifications: [], currentQuestion: '', pending: false };
+    resultCard.hidden = true;
+    await analyseCurrentConversation();
+  });
+
+  root.querySelector('[data-clarification-form]').addEventListener('submit', async event => {
+    event.preventDefault();
+    if (!diagnosticConversation.pending || diagnosticConversation.clarifications.length >= 3) return;
+    const answer = event.target.elements.answer.value.trim();
+    if (!answer) return;
+    diagnosticConversation.clarifications.push({ question: diagnosticConversation.currentQuestion, answer });
+    await analyseCurrentConversation();
   });
 
   root.querySelector('[data-edit-description]').addEventListener('click', () => {
+    diagnosticConversation = { initialDescription: '', clarifications: [], currentQuestion: '', pending: false };
     resultCard.hidden = true;
     input.focus();
   });
 
   root.querySelector('[data-find-technician]').addEventListener('click', async () => {
+    if (diagnosticConversation.pending) return;
     const generation = ++searchGeneration;
     const scheduleSearchTask = (task, delay) => scheduleTask(() => { if (generation === searchGeneration) task(); }, delay);
     const search = root.querySelector('[data-map-search]');

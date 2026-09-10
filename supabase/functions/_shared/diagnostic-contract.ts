@@ -17,15 +17,25 @@ const plainObject = (value: unknown): value is Record<string, unknown> => value 
   && typeof value === 'object' && !Array.isArray(value);
 
 export function validateRequest(value: unknown) {
-  if (!plainObject(value) || Object.keys(value).some(key => !['description', 'preferredCategory'].includes(key))) {
+  if (!plainObject(value) || Object.keys(value).some(key => !['description', 'preferredCategory', 'clarifications'].includes(key))) {
     throw new Error('INVALID_INPUT');
   }
   const description = typeof value.description === 'string' ? value.description.trim() : '';
   const preferredCategory = value.preferredCategory == null ? null : String(value.preferredCategory);
-  if (!description || description.length > 2000 || (preferredCategory !== null && !categories.includes(preferredCategory as typeof categories[number]))) {
+  const rawClarifications = value.clarifications ?? [];
+  if (!description || description.length > 2000
+      || (preferredCategory !== null && !categories.includes(preferredCategory as typeof categories[number]))
+      || !Array.isArray(rawClarifications) || rawClarifications.length > 3) {
     throw new Error('INVALID_INPUT');
   }
-  return { description, preferredCategory };
+  const clarifications = rawClarifications.map(item => {
+    if (!plainObject(item) || Object.keys(item).some(key => !['question', 'answer'].includes(key))) throw new Error('INVALID_INPUT');
+    const question = typeof item.question === 'string' ? item.question.trim() : '';
+    const answer = typeof item.answer === 'string' ? item.answer.trim() : '';
+    if (!question || question.length > 300 || !answer || answer.length > 500) throw new Error('INVALID_INPUT');
+    return { question, answer };
+  });
+  return { description, preferredCategory, clarifications };
 }
 
 export function validateDiagnostic(value: unknown) {

@@ -72,8 +72,11 @@ Deno.serve(async request => {
         reasoning: { effort: 'minimal' },
         max_output_tokens: 400,
         store: false,
-        instructions: 'Classify the HOME AI repair request. Return only the required JSON. Use Vietnamese for understoodProblem, missingQuestions and vietnameseSummary. Do not invent prices, urgency, causes or repairs. If information is insufficient, ask up to three short questions.',
-        input: [{ role: 'user', content: [{ type: 'input_text', text: input.description }] }],
+        instructions: 'Classify the HOME AI repair request using the initial problem and every clarification. Return only the required JSON. Use Vietnamese for understoodProblem, missingQuestions and vietnameseSummary. Ask only for information still missing. Do not provide medical advice and do not invent safety claims, prices, urgency, causes or repairs. If information is insufficient, ask up to three short questions.',
+        input: [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify({
+          initialProblem: input.description,
+          clarificationHistory: input.clarifications,
+        }) }] }],
         text: { format: { type: 'json_schema', name: 'home_ai_diagnostic', strict: true, schema: diagnosticSchema } },
       }),
     });
