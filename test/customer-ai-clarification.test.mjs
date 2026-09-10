@@ -1,7 +1,10 @@
 import { JSDOM } from 'jsdom';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { it } from 'node:test';
 import { initialiseHomePage } from '../src/app.js';
+
+const customerStyles = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
 
 const question = (text, suggestedAnswers = ['Lựa chọn A', 'Lựa chọn B', 'Lựa chọn C'], allowUnknown = false) => ({
   question: text, suggestedAnswers, allowUnknown,
@@ -14,7 +17,7 @@ const settle = async () => {
 };
 
 function setup(responses) {
-  const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.com/' });
+  const dom = new JSDOM(`<style>${customerStyles}</style><div id="root"></div>`, { url: 'https://example.com/' });
   const root = dom.window.document.querySelector('#root');
   const calls = [];
   let missionConnections = 0;
@@ -63,7 +66,9 @@ it('submits a proposed answer and stops early when no question remains', async (
     await submitInitial(state.root);
     assert.deepEqual([...state.root.querySelectorAll('[data-clarification-options] button')].map(item => item.textContent),
       ['Phòng khách', 'Phòng ngủ', 'Nhà bếp', 'Khác']);
-    assert.equal(state.root.querySelector('[data-clarification-form]').hidden, true);
+    const form = state.root.querySelector('[data-clarification-form]');
+    assert.equal(form.hidden, true);
+    assert.equal(state.dom.window.getComputedStyle(form).display, 'none');
     await choose(state.root, 'Phòng khách');
     assert.deepEqual(state.calls[1].clarifications, [{ question: 'Ổ cắm ở phòng nào?', answer: 'Phòng khách' }]);
     assert.equal(state.root.querySelector('[data-result-questions]').hidden, true);
@@ -93,8 +98,10 @@ it('reveals free text only after choosing Khác and submits the custom answer', 
     await submitInitial(state.root);
     const form = state.root.querySelector('[data-clarification-form]');
     assert.equal(form.hidden, true);
+    assert.equal(state.dom.window.getComputedStyle(form).display, 'none');
     await choose(state.root, 'Khác');
     assert.equal(form.hidden, false);
+    assert.equal(state.dom.window.getComputedStyle(form).display, 'grid');
     assert.equal(state.calls.length, 1);
     await submitOther(state.root, 'Ngoài ban công');
     assert.equal(state.calls[1].clarifications[0].answer, 'Ngoài ban công');

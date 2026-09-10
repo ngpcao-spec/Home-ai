@@ -87,7 +87,8 @@ h1 em { color: var(--green); font-style: normal; }
 .clarification-options { display: grid; gap: 8px; }
 .clarification-options button { min-height: 44px; padding: 10px 12px; border: 1px solid #b7d7cd; border-radius: 11px; background: #fff; color: #174b3e; font-weight: 750; text-align: left; }
 .clarification-options button:active { border-color: #087b61; background: #dff2eb; }
-.clarification form { display: grid; gap: 8px; }
+.clarification form:not([hidden]) { display: grid; gap: 8px; }
+.clarification form[hidden] { display: none; }
 .clarification form:not([hidden]) { margin-top: 10px; }
 .clarification label { color: #617770; font-size: 11px; font-weight: 700; }
 .clarification input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid #bdd9d0; border-radius: 11px; background: #fff; color: #17342d; font: inherit; }
