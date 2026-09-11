@@ -11,6 +11,7 @@ const providerColumns = `
 export function createSupabaseProvidersRepository(supabase) {
   const client = requireSupabaseClient(supabase);
   const adaptProfessionalProfile = (value = {}) => Object.freeze({
+    id: value.providerId,
     providerId: value.providerId,
     name: value.name ?? '',
     avatarUrl: value.avatarPath
@@ -64,6 +65,10 @@ export function createSupabaseProvidersRepository(supabase) {
         target_mission_id: missionId,
       });
       return adaptProfessionalProfile(unwrap(result, 'providers.getProfessionalProfile'));
+    },
+    async getAssignedContact(providerId) {
+      const result = await client.rpc('get_profile_phone', { target_user_id: providerId });
+      return Object.freeze({ phone: unwrap(result, 'providers.getAssignedContact') ?? null });
     },
   });
 }

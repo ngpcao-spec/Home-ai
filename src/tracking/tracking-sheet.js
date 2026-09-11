@@ -10,6 +10,39 @@ const escapeHtml = (value) => String(value)
   .replaceAll('"', '&quot;')
   .replaceAll("'", '&#039;');
 
+export function createAssignedProviderCompactMarkup(technician, { tracking = false, showProfileAction = true } = {}) {
+  const name = technician.name || 'Đối tác HOME AI';
+  const avatar = technician.avatarUrl
+    ? `<img src="${escapeHtml(technician.avatarUrl)}" alt="Ảnh đại diện của ${escapeHtml(name)}">`
+    : escapeHtml(technician.initials ?? name.split(/\s+/).filter(Boolean).slice(-2).map(part => part[0]).join('').toUpperCase());
+  const activity = technician.activityName ?? technician.specialty ?? technician.shortDescription ?? technician.category;
+  const rating = Number(technician.rating) || 0;
+  const reviewCount = Number(technician.reviewCount) || 0;
+  return `<article class="assigned-provider-card" data-assigned-provider-summary>
+    <div class="assigned-provider-heading">
+      <span class="assigned-provider-photo">${avatar}</span>
+      <div><h3>${escapeHtml(name)}</h3><p>★ ${rating} · ${reviewCount} đánh giá</p>
+        ${technician.verified ? '<span class="verified-badge">✓ Đã xác minh</span>' : ''}</div>
+      ${tracking ? '<strong data-tracking-status>Thợ đang đến</strong>' : '<strong>Đã nhận nhiệm vụ</strong>'}
+    </div>
+    <dl class="assigned-provider-facts">
+      <div><dt>Hoạt động</dt><dd>${escapeHtml(activity || '')}</dd></div>
+      ${technician.experienceYears == null ? '' : `<div><dt>Kinh nghiệm</dt><dd>${Number(technician.experienceYears)} năm</dd></div>`}
+    </dl>
+    ${technician.introduction ? `<p class="assigned-provider-introduction">${escapeHtml(technician.introduction)}</p>` : ''}
+    <div class="assigned-provider-contact">
+      ${showProfileAction ? '<button type="button" data-view-assigned-provider-profile>Xem hồ sơ</button>' : ''}
+      ${technician.phone
+        ? `<span><small>Số điện thoại</small><strong>${escapeHtml(technician.phone)}</strong></span><a href="tel:${escapeHtml(technician.phone)}">☎ Gọi điện</a>`
+        : '<span class="assigned-provider-contact-unavailable">Số điện thoại chưa khả dụng.</span>'}
+    </div>
+  </article>`;
+}
+
+export function createAcceptedProviderStageMarkup(technician) {
+  return `<section class="accepted-provider-stage"><p>Thợ đang chuẩn bị dụng cụ cho nhiệm vụ.</p>${createAssignedProviderCompactMarkup(technician)}</section>`;
+}
+
 export function createInterventionQuoteMarkup(quote, phase = 'quote_pending') {
   const decision = phase === 'quote_accepted'
     ? '<p class="quote-decision quote-decision--accepted" role="status">Bạn đã chấp nhận báo giá. Đang chờ thợ bắt đầu công việc.</p>'
@@ -94,19 +127,13 @@ export function createTrackingStageMarkup(technician) {
   return `<div class="tracking-shell">
     <div class="tracking-map" data-tracking-map aria-label="Bản đồ theo dõi thợ"></div>
     <article class="tracking-bottom-sheet" aria-label="Thông tin thợ đang đến">
-      <div class="tracking-provider">
-        <span class="technician-avatar" aria-hidden="true">${technician.initials}</span>
-        <div><h3>${technician.name}</h3><p>⭐ ${technician.rating} · ${technician.reviewCount ?? 0} đánh giá</p><small>${technician.specialty ?? technician.shortDescription ?? technician.category}</small></div>
-        <strong data-tracking-status>Thợ đang đến</strong>
-      </div>
+      ${createAssignedProviderCompactMarkup(technician, { tracking: true })}
       <p class="tracking-status-message" data-tracking-message hidden></p>
       <div class="tracking-metrics" data-tracking-metrics>
         <div><span>Thời gian đến</span><strong data-tracking-eta>Đang tính...</strong></div>
         <div><span>Quãng đường còn lại</span><strong data-tracking-distance>Đang tính...</strong></div>
       </div>
       <div class="tracking-contact-actions">
-        <button type="button" data-view-assigned-provider-profile>Xem hồ sơ</button>
-        <button type="button" data-tracking-call>☎ Gọi thợ</button>
         <button type="button" data-tracking-message>💬 Nhắn tin</button>
       </div>
       <p class="tracking-action-status" data-tracking-action-status role="status"></p>

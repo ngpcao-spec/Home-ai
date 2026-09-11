@@ -11,6 +11,8 @@ import { createCompletionSummaryMarkup, createPaidExternalMarkup, createProvider
 import {
   createInterventionQuoteMarkup,
   createInterventionProgressMarkup,
+  createAcceptedProviderStageMarkup,
+  createAssignedProviderCompactMarkup,
   createTrackingStageMarkup,
   updateInterventionQuotePresentation,
   updateInterventionPresentation,
@@ -88,8 +90,29 @@ describe('suivi C13', () => {
   });
 
   it('rend la bottom sheet C13 avec les informations et actions attendues', () => {
-    const markup = createTrackingStageMarkup({ initials: 'NM', name: 'Nguyễn Văn Minh', rating: 4.9, reviewCount: 186, shortDescription: 'Thợ điện dân dụng' });
-    ['Thợ đang đến', 'Thời gian đến', 'Quãng đường còn lại', 'Gọi thợ', 'Nhắn tin', 'Bắt đầu sửa chữa'].forEach((text) => assert.match(markup, new RegExp(text)));
+    const markup = createTrackingStageMarkup({ initials: 'NM', name: 'Nguyễn Văn Minh', rating: 4.9, reviewCount: 186,
+      activityName: 'Thợ điện', phone: '+84912345678', shortDescription: 'Thợ điện dân dụng' });
+    ['Thợ đang đến', 'Thời gian đến', 'Quãng đường còn lại', 'Gọi điện', 'Nhắn tin', 'Bắt đầu sửa chữa'].forEach((text) => assert.match(markup, new RegExp(text)));
+    assert.match(markup, /href="tel:\+84912345678"/);
+  });
+
+  it('affiche le profil professionnel compact dès accepted avec les champs facultatifs', () => {
+    const markup = createAcceptedProviderStageMarkup({
+      name: 'Provider Test Nha Trang', initials: 'PT', avatarUrl: 'https://cdn.test/provider.jpg',
+      verified: true, rating: 5, reviewCount: 1, activityName: 'Thợ điện', experienceYears: 8,
+      introduction: 'Sửa chữa điện dân dụng.', phone: '+84901234567',
+    });
+    for (const text of ['Provider Test Nha Trang', 'Đã xác minh', '5 · 1 đánh giá', 'Thợ điện', '8 năm',
+      'Sửa chữa điện dân dụng.', '+84901234567', 'Gọi điện']) assert.match(markup, new RegExp(text.replace('+', '\\+')));
+    assert.match(markup, /src="https:\/\/cdn\.test\/provider\.jpg"/);
+    assert.match(markup, /href="tel:\+84901234567"/);
+  });
+
+  it('n’invente ni badge KYC ni données facultatives absentes', () => {
+    const markup = createAssignedProviderCompactMarkup({ name: 'Provider', initials: 'P', rating: 0, reviewCount: 0,
+      activityName: 'Thợ điện', verified: false, phone: null });
+    assert.doesNotMatch(markup, /Đã xác minh|Kinh nghiệm|assigned-provider-introduction|href="tel:/);
+    assert.match(markup, /Số điện thoại chưa khả dụng/);
   });
 
   it('affiche l’arrivée à zéro puis masque les métriques au démarrage manuel', () => {

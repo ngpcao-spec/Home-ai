@@ -76,3 +76,30 @@ it('reloads authoritative accepted state when cancellation loses to provider acc
   assert.equal(result.snapshot.mission.status, 'accepted');
   assert.equal(result.snapshot.provider.id, 'p1');
 });
+
+it('loads the mission-scoped professional profile only after server acceptance', async () => {
+  let mission = { id: 'm1', status: 'offered', providerId: null, version: 1 };
+  const calls = [];
+  const sync = createCustomerMissionSynchronizer({
+    missionRepository: { getById: async () => mission, getQuoteHistory: async () => [], getOffers: async () => [] },
+    providerRepository: {
+      getProfessionalProfile: async (providerId) => {
+        calls.push(['profile', providerId]);
+        return { id: providerId, providerId, name: 'Provider Test', verified: true,
+          rating: 5, reviewCount: 4, experienceYears: 7, introduction: 'Thợ điện dân dụng.',
+          activities: [{ serviceCategory: 'electricity', name: 'Thợ điện' }] };
+      },
+      getAssignedContact: async providerId => { calls.push(['contact', providerId]); return { phone: '+84901234567' }; },
+    },
+  });
+  assert.equal((await sync.load('m1')).provider, null);
+  assert.deepEqual(calls, []);
+  mission = { ...mission, status: 'accepted', providerId: 'p1', serviceCategory: 'electricity', version: 2 };
+  const snapshot = await sync.load('m1');
+  assert.deepEqual(calls, [['profile', 'p1'], ['contact', 'p1']]);
+  const technician = createAssignedCustomerTechnician(snapshot.provider, mission);
+  assert.equal(technician.activityName, 'Thợ điện');
+  assert.equal(technician.phone, '+84901234567');
+  assert.equal(technician.experienceYears, 7);
+  assert.equal(technician.introduction, 'Thợ điện dân dụng.');
+});

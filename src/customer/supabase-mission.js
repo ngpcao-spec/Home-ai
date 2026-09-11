@@ -25,15 +25,21 @@ export function createCustomerMissionDraft({ diagnosis, problemDescription, serv
 }
 
 export function createAssignedCustomerTechnician(provider, mission) {
-  if (!provider || !mission?.providerId || provider.id !== mission.providerId
+  const providerId = provider?.id ?? provider?.providerId;
+  if (!provider || !mission?.providerId || providerId !== mission.providerId
       || getCustomerDispatchState({ mission }).phase !== 'accepted') return null;
+  const missionActivity = provider.activities?.find(({ serviceCategory }) => serviceCategory === mission.serviceCategory);
   const name = provider.name || 'Đối tác HOME AI';
   return Object.freeze({
     ...provider,
+    id: providerId,
     initials: name.split(/\s+/).filter(Boolean).slice(-2).map((part) => part[0]).join('').toUpperCase(),
     category: mission.serviceCategory,
-    categoryLabel: provider.specialty,
-    shortDescription: provider.description || provider.specialty,
+    categoryLabel: missionActivity?.name ?? provider.specialty,
+    activityName: missionActivity?.name ?? provider.specialty,
+    activityDescription: missionActivity?.description ?? null,
+    specialty: missionActivity?.name ?? provider.specialty,
+    shortDescription: provider.introduction || missionActivity?.description || provider.description || provider.specialty,
     verified: provider.verified === true,
     availability: 'Đã nhận nhiệm vụ',
     estimatedArrivalMinutes: null,
@@ -167,15 +173,26 @@ export function createCustomerMissionSynchronizer({
   const load = async (missionId) => {
     const mission = await missionRepository.getById(missionId);
     if (!mission) throw new Error('Mission Supabase introuvable');
+    const assigned = mission.providerId && getCustomerDispatchState({ mission }).phase === 'accepted';
+    const loadAssignedProvider = () => {
+      if (!assigned) return null;
+      if (typeof providerRepository.getProfessionalProfile === 'function') {
+        return Promise.all([
+          providerRepository.getProfessionalProfile(mission.providerId),
+          providerRepository.getAssignedContact?.(mission.providerId),
+        ]).then(([profile, contact]) => Object.freeze({ ...profile, phone: contact?.phone ?? null }));
+      }
+      return providerRepository.getById(mission.providerId);
+    };
     const [provider, quotes, offers, providerLocation, review, invoice] = await Promise.all([
-      mission.providerId ? providerRepository.getById(mission.providerId) : null,
+      loadAssignedProvider(),
       missionRepository.getQuoteHistory(mission.id),
       missionRepository.getOffers?.(mission.id) ?? [],
       missionRepository.getAssignedProviderLocation?.(mission) ?? null,
       missionRepository.getReview?.(mission.id) ?? null,
       missionRepository.getInvoice?.(mission.id) ?? null,
     ]);
-    if (mission.providerId && !provider) throw new Error('Prestataire assigné introuvable');
+    if (assigned && !provider) throw new Error('Prestataire assigné introuvable');
     return Object.freeze({ mission, provider, quotes, offers, providerLocation, review, invoice });
   };
 

@@ -20,7 +20,7 @@ import {
   createMissionHistoryMarkup,
   getClientMissionHistory,
 } from './mission/history.js';
-import { createTrackingStageMarkup, updateInterventionQuotePresentation, updateTrackingPresentation } from './tracking/tracking-sheet.js';
+import { createAcceptedProviderStageMarkup, createAssignedProviderCompactMarkup, createTrackingStageMarkup, updateInterventionQuotePresentation, updateTrackingPresentation } from './tracking/tracking-sheet.js';
 import { createSearchPlan, getNextTechnician, prototypeSearchTiming, searchRadiiKm } from './search/map-search.js';
 import { createNoTechnicianMarkup, createTechnicianSheetMarkup } from './search/technician-sheet.js';
 import {
@@ -334,7 +334,7 @@ export function createHomeAiMarkup() {
               <button class="submit-booking" type="submit">Gửi yêu cầu</button><p class="booking-status" data-booking-status role="status" aria-live="polite"></p>
             </form>
           </section>
-          <section class="booking-confirmation" data-booking-confirmation hidden aria-live="polite"><div class="confirmation-check">✓</div><p>YÊU CẦU ĐÃ ĐƯỢC XÁC NHẬN</p><h2 data-confirmation-title>Thợ đã nhận yêu cầu!</h2><dl><div data-confirmation-mission-row hidden><dt>Mã nhiệm vụ</dt><dd data-confirmation-mission></dd></div><div data-confirmation-state-row hidden><dt>Trạng thái</dt><dd data-confirmation-state></dd></div><div><dt>Thợ</dt><dd data-confirmation-technician></dd></div><div><dt>Thời gian dự kiến đến</dt><dd data-confirmation-arrival></dd></div><div><dt>Địa chỉ</dt><dd data-confirmation-address></dd></div><div><dt>Vấn đề</dt><dd data-confirmation-problem></dd></div><div><dt>Giá tham khảo</dt><dd data-confirmation-estimate></dd></div></dl><div class="confirmation-actions"><button type="button" data-track-technician>Theo dõi thợ</button><button type="button" data-cancel-request>Hủy yêu cầu</button></div><p data-confirmation-status role="status"></p></section>
+          <section class="booking-confirmation" data-booking-confirmation hidden aria-live="polite"><div class="confirmation-check">✓</div><p>YÊU CẦU ĐÃ ĐƯỢC XÁC NHẬN</p><h2 data-confirmation-title>Thợ đã nhận yêu cầu!</h2><div data-confirmation-provider-profile hidden></div><dl><div data-confirmation-mission-row hidden><dt>Mã nhiệm vụ</dt><dd data-confirmation-mission></dd></div><div data-confirmation-state-row hidden><dt>Trạng thái</dt><dd data-confirmation-state></dd></div><div><dt>Thợ</dt><dd data-confirmation-technician></dd></div><div><dt>Thời gian dự kiến đến</dt><dd data-confirmation-arrival></dd></div><div><dt>Địa chỉ</dt><dd data-confirmation-address></dd></div><div><dt>Vấn đề</dt><dd data-confirmation-problem></dd></div><div><dt>Giá tham khảo</dt><dd data-confirmation-estimate></dd></div></dl><div class="confirmation-actions"><button type="button" data-track-technician>Theo dõi thợ</button><button type="button" data-cancel-request>Hủy yêu cầu</button></div><p data-confirmation-status role="status"></p></section>
           </div>
           ${createMissionMarkup()}
         </section>
@@ -1113,6 +1113,10 @@ export function initialiseHomePage(
     confirmation.querySelector('[data-confirmation-state-row]').hidden = !remoteMission;
     confirmation.querySelector('[data-confirmation-mission]').textContent = remoteMission?.id ?? '';
     confirmation.querySelector('[data-confirmation-state]').textContent = remoteSearching ? 'Đang tìm thợ' : remoteMission?.status ?? '';
+    const providerProfile = confirmation.querySelector('[data-confirmation-provider-profile]');
+    providerProfile.hidden = Boolean(remoteSearching || !selectedTechnician);
+    providerProfile.innerHTML = providerProfile.hidden ? ''
+      : createAssignedProviderCompactMarkup(selectedTechnician, { showProfileAction: false });
     confirmation.querySelector('[data-track-technician]').disabled = Boolean(remoteSearching || (remoteMission && !remoteMission.providerId));
     bookingPanel.hidden = true;
     confirmation.hidden = false;
@@ -1242,7 +1246,7 @@ export function initialiseHomePage(
           problem: persistedMission?.problemDescription ?? currentDiagnosis?.summary,
         });
     const stageMarkup = {
-      accepted: '<h3>Thợ đã nhận yêu cầu</h3><p>Thợ đang chuẩn bị dụng cụ cho nhiệm vụ.</p>',
+      accepted: createAcceptedProviderStageMarkup(selectedTechnician),
       travelling: createTrackingStageMarkup(selectedTechnician),
       arrived: createTrackingStageMarkup(selectedTechnician),
       in_progress: createTrackingStageMarkup(selectedTechnician),

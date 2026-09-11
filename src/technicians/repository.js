@@ -54,7 +54,11 @@ export function createProgressiveTechnicianRepository(
       const { data, error } = await repositories.client.auth.getUser();
       if (error) throw error;
       if (!data?.user) return fallback.getProfile({ providerId, missionId });
-      return repositories.providers.getProfessionalProfile(providerId, missionId);
+      const [profile, contact] = await Promise.all([
+        repositories.providers.getProfessionalProfile(providerId),
+        missionId ? repositories.providers.getAssignedContact(providerId) : null,
+      ]);
+      return Object.freeze({ ...profile, phone: contact?.phone ?? null });
     },
   });
 }
