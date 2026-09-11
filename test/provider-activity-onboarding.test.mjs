@@ -41,6 +41,20 @@ describe('Provider activity onboarding', () => {
     assert.doesNotMatch(noReference, /Tarif conseillé par HOME AI/);
   });
 
+  it('shows user-facing Vietnamese activity names and never technical category ids', () => {
+    const markup = renderProviderActivities([
+      { id: 'e', serviceCategory: 'electricity', pricingModel: 'hourly', hourlyRate: 1, enabled: true },
+      { id: 'p', serviceCategory: 'plumbing', pricingModel: 'hourly', hourlyRate: 1, enabled: true },
+      { id: 'a', serviceCategory: 'air-conditioning', pricingModel: 'hourly', hourlyRate: 1, enabled: true },
+      { id: 'h', serviceCategory: 'appliances', pricingModel: 'hourly', hourlyRate: 1, enabled: true },
+      { id: 'x', serviceCategory: 'future-technical-id', pricingModel: 'hourly', hourlyRate: 1, enabled: true },
+    ]);
+    for (const label of ['Thợ điện', 'Thợ sửa ống nước', 'Điều hòa', 'Điện gia dụng', 'Dịch vụ HOME AI']) {
+      assert.match(markup, new RegExp(label));
+    }
+    assert.doesNotMatch(markup, />electricity<|>plumbing<|>air-conditioning<|>appliances<|future-technical-id/);
+  });
+
   it('runs list → profession → AI proposal → rate → create without extra selection steps', async () => {
     const dom = new JSDOM('<div id="provider-root"></div>', { pretendToBeVisual: true });
     const root = dom.window.document.querySelector('#provider-root');

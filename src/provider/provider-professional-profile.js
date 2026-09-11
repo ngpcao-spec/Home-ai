@@ -1,3 +1,5 @@
+import { getProviderActivityLabel } from './provider-activities.js';
+
 const esc = (value = '') => String(value).replace(/[&<>"']/g, character => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
 }[character]));
@@ -66,7 +68,7 @@ export function updateProviderProfessionalProfileDraft(root, photoUrl = '') {
 
 export function renderProviderActivitiesSummary(services = []) {
   return `<section class="provider-profile-activities"><div><p class="pricing-kicker">DỊCH VỤ</p><h1>Hoạt động của tôi</h1></div>
-    <div>${services.length ? services.map(service => `<span>${esc(service.activityName ?? service.serviceCategory)}</span>`).join('') : '<small>Chưa có hoạt động.</small>'}</div>
+    <div>${services.length ? services.map(service => `<span>${esc(getProviderActivityLabel(service))}</span>`).join('') : '<small>Chưa có hoạt động.</small>'}</div>
     <button type="button" data-open-provider-activities>Quản lý hoạt động</button>
   </section>`;
 }

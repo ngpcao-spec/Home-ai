@@ -14,6 +14,12 @@ const activityDescriptions = {
 };
 const activityIcons = { electricity: '⚡', plumbing: '◆', 'air-conditioning': '❄', appliances: '⌁' };
 
+export function getProviderActivityLabel(service = {}) {
+  return String(service.activityName ?? '').trim()
+    || activityLabels[service.serviceCategory]
+    || 'Dịch vụ HOME AI';
+}
+
 const progress = active => `<div class="activity-progress" aria-label="Bước ${active} trên 3">
   ${[1, 2, 3].map(step => `<span class="${step <= active ? 'is-active' : ''}"></span>${step < 3 ? '<i></i>' : ''}`).join('')}
 </div>`;
@@ -25,7 +31,7 @@ export function renderProviderActivities(services = [], flow = {}) {
     const service = flow.service;
     if (!service) return renderProviderActivities(services, { ...flow, step: 'list' });
     return `<main class="provider-activities activity-flow">${back('list')}<div class="activity-page-title">Chỉnh sửa hoạt động</div>
-      <h1>${escapeHtml(service.activityName ?? activityLabels[service.serviceCategory] ?? service.serviceCategory)}</h1>
+      <h1>${escapeHtml(getProviderActivityLabel(service))}</h1>
       <p>${escapeHtml(service.activityDescription ?? activityDescriptions[service.serviceCategory] ?? 'Dịch vụ được cung cấp trên HOME AI.')}</p>
       <form class="activity-rate-form activity-edit-form" data-activity-edit-form data-provider-service-id="${escapeHtml(service.id)}">
         <label>Đơn giá theo giờ <b>*</b><span><input type="number" inputmode="numeric" min="1" max="1000000000" step="1000" value="${Number(service.hourlyRate)}" data-activity-hourly-rate required><em>đ/giờ</em></span></label>
@@ -88,7 +94,7 @@ export function renderProviderActivities(services = [], flow = {}) {
 
   return `<main class="provider-activities"><p class="activities-kicker">DỊCH VỤ PROVIDER</p><h1>Hoạt động của tôi</h1><p>Đây là các hoạt động bạn cung cấp trên HOME AI.</p>
     <div class="activity-list">${services.map(service => `<button type="button" class="activity-card" data-provider-activity="${escapeHtml(service.id)}">
-      <span>${activityIcons[service.serviceCategory] ?? '◆'}</span><div><h2>${escapeHtml(service.activityName ?? activityLabels[service.serviceCategory] ?? service.serviceCategory)}</h2>
+      <span>${activityIcons[service.serviceCategory] ?? '◆'}</span><div><h2>${escapeHtml(getProviderActivityLabel(service))}</h2>
       <p>${escapeHtml(service.activityDescription ?? activityDescriptions[service.serviceCategory] ?? 'Dịch vụ được cung cấp trên HOME AI.')}</p>
       <strong>${service.pricingModel === 'hourly' && service.hourlyRate != null ? `${formatMoney(service.hourlyRate)}/giờ` : 'Theo báo giá'}</strong></div>
       <em>${service.enabled ? '✓ Đã đăng' : 'Đã tắt'}</em></button>`).join('') || '<div class="empty">Bạn chưa có hoạt động nào.</div>'}</div>

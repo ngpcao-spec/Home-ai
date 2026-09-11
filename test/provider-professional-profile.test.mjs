@@ -4,7 +4,7 @@ import { describe, it } from 'node:test';
 import { JSDOM } from 'jsdom';
 
 import { initialiseProviderApp } from '../src/provider/provider-app.js';
-import { readProviderProfessionalProfile, renderProviderProfessionalProfile } from '../src/provider/provider-professional-profile.js';
+import { readProviderProfessionalProfile, renderProviderActivitiesSummary, renderProviderProfessionalProfile } from '../src/provider/provider-professional-profile.js';
 import { createMockProviderAppRepository, createProgressiveProviderAppRepository } from '../src/provider/provider-repository.js';
 import { createSupabaseOffersRepository } from '../src/supabase/repositories/offers.js';
 import { createSupabaseProvidersRepository } from '../src/supabase/repositories/providers.js';
@@ -14,6 +14,15 @@ import { createProviderProfileMarkup } from '../src/technicians/provider-profile
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
 describe('Provider professional profile V1', () => {
+  it('uses Vietnamese activity labels in the profile summary when activity_name is absent', () => {
+    const markup = renderProviderActivitiesSummary([
+      { serviceCategory: 'electricity' }, { serviceCategory: 'plumbing' },
+      { serviceCategory: 'air-conditioning' }, { serviceCategory: 'appliances' },
+    ]);
+    for (const label of ['Thợ điện', 'Thợ sửa ống nước', 'Điều hòa', 'Điện gia dụng']) assert.match(markup, new RegExp(label));
+    assert.doesNotMatch(markup, />electricity<|>plumbing<|>air-conditioning<|>appliances</);
+  });
+
   it('renders and validates one phone, optional experience and a 300-character introduction', () => {
     const dom = new JSDOM(renderProviderProfessionalProfile({
       name: 'Provider Test', phone: '+84912345678', experienceYears: null, introduction: '',
@@ -48,7 +57,7 @@ describe('Provider professional profile V1', () => {
     try {
       root.querySelector('[data-provider-view="profile"]').click();
       await tick(); await tick();
-      for (const text of ['Hồ sơ nghề nghiệp', 'Hoạt động của tôi', 'Zone d’intervention', 'Lịch nhận việc', 'Xác minh danh tính']) {
+      for (const text of ['Hồ sơ nghề nghiệp', 'Hoạt động của tôi', 'Khu vực hoạt động', 'Lịch nhận việc', 'Xác minh danh tính']) {
         assert.match(root.textContent, new RegExp(text));
       }
       const form = root.querySelector('[data-professional-profile-form]');

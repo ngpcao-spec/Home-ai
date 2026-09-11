@@ -13,8 +13,10 @@ describe('Provider service area',()=>{
   it('renders the 20 km default and only the five allowed choices',()=>{
     const dom=new JSDOM(renderProviderServiceArea(null));
     const document=dom.window.document;
-    assert.match(document.body.textContent,/Zone d’intervention/);
-    assert.match(document.body.textContent,/Rayon maximum : 20 km/);
+    assert.match(document.body.textContent,/Khu vực hoạt động/);
+    assert.match(document.body.textContent,/Bán kính tối đa: 20 km/);
+    assert.match(document.body.textContent,/tự động di chuyển theo vị trí GPS hiện tại/);
+    assert.doesNotMatch(document.body.textContent,/Zone d.intervention|Rayon maximum|La zone suit/);
     assert.deepEqual([...document.querySelectorAll('[data-service-area-radius]')].map(input=>Number(input.value)),PROVIDER_SERVICE_AREA_RADII);
     assert.equal(document.querySelector('[data-service-area-radius][value="20"]').checked,true);
     dom.window.close();
@@ -39,7 +41,7 @@ describe('Provider service area',()=>{
       assert.match(root.textContent,/Đã xác minh/);
       root.querySelector('[data-service-area-radius][value="50"]').click();
       root.querySelector('[data-save-service-area]').click();await tick();await tick();await tick();
-      assert.match(root.textContent,/Rayon maximum : 50 km/);
+      assert.match(root.textContent,/Bán kính tối đa: 50 km/);
       assert.match(root.textContent,/Đã lưu khu vực hoạt động/);
     }finally{app.stop();dom.window.close();}
   });
