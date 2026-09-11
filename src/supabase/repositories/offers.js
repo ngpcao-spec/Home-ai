@@ -1,6 +1,7 @@
 import { adaptInvoiceRow, adaptMissionRow } from '../adapters.js';
 import { requireSupabaseClient, unwrap } from './shared.js';
 import { analyzeProviderActivity } from '../../provider/provider-activity-ai.js';
+import { getProviderKycFileFormat } from '../../provider/provider-kyc.js';
 
 const adaptProviderService = (row) => Object.freeze({
   id: row.id, providerId: row.provider_id, serviceCategory: row.service_category,
@@ -42,6 +43,28 @@ export function createSupabaseOffersRepository(supabase) {
       return unwrap(await client.rpc('set_current_provider_availability', {
         new_online: online, new_available: online,
       }), 'offers.setProviderAvailability');
+    },
+    async getCurrentProviderKycState() {
+      return Object.freeze({ ...(unwrap(await client.rpc('get_current_provider_kyc_state'), 'offers.getCurrentProviderKycState') ?? {}) });
+    },
+    async uploadAndAnalyzeCurrentProviderIdentity(file) {
+      const { data: userData, error: userError } = await client.auth.getUser();
+      if (userError || !userData?.user) throw userError ?? new Error('Provider authentication required');
+      const format = getProviderKycFileFormat(file);
+      if (!format || !file.size || file.size > 8388608) throw new Error('Invalid KYC image');
+      const path = `provider/${userData.user.id}/identity/front/${globalThis.crypto.randomUUID()}.${format.extension}`;
+      unwrap(await client.storage.from('provider-kyc').upload(path, file, { cacheControl: '0', contentType: format.contentType, upsert: false }), 'offers.uploadProviderIdentity');
+      unwrap(await client.functions.invoke('analyze-provider-identity', { body: { documentPath: path } }), 'offers.analyzeProviderIdentity');
+      return Object.freeze({ ...(unwrap(await client.rpc('get_current_provider_kyc_state'), 'offers.getCurrentProviderKycState') ?? {}) });
+    },
+    async createCurrentProviderKycSignedUrl(documentPath) {
+      const value = unwrap(await client.storage.from('provider-kyc').createSignedUrl(documentPath, 300), 'offers.createProviderKycSignedUrl');
+      return value.signedUrl;
+    },
+    async confirmCurrentProviderKycSubmission(submissionId, fields) {
+      return Object.freeze({ ...(unwrap(await client.rpc('confirm_current_provider_kyc_submission', {
+        target_submission_id: submissionId, new_fields: fields,
+      }), 'offers.confirmProviderKycSubmission') ?? {}) });
     },
     async getCurrentProviderBillingState(missionId) {
       return Object.freeze({ ...(unwrap(await client.rpc('get_current_provider_billing_state', {

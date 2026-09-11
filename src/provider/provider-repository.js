@@ -124,6 +124,16 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
   const { data, error } = await repositories.client.auth.getUser();
   if (error) throw error;
   if (!data?.user) return fallback;
+  const initialKyc = typeof repositories.offers.getCurrentProviderKycState === 'function'
+    ? await repositories.offers.getCurrentProviderKycState() : null;
+  if (initialKyc && !initialKyc.provider?.id) throw new Error('Authenticated provider is not provisioned');
+  if (initialKyc && initialKyc.provider.kycStatus !== 'verified') return Object.freeze({
+    source: 'supabase', kycRequired: true,
+    async loadKyc() { return repositories.offers.getCurrentProviderKycState(); },
+    async uploadIdentity(file) { return repositories.offers.uploadAndAnalyzeCurrentProviderIdentity(file); },
+    async getIdentityPreview(documentPath) { return repositories.offers.createCurrentProviderKycSignedUrl(documentPath); },
+    async confirmKyc(submissionId, fields) { return repositories.offers.confirmCurrentProviderKycSubmission(submissionId, fields); },
+  });
   const initial = await repositories.offers.getProviderDashboard();
   if (!initial?.provider?.id) throw new Error('Authenticated provider is not provisioned');
   const loadDashboard = async () => {

@@ -12,6 +12,7 @@ import { readProviderPricingForm, renderProviderPricing } from './provider-prici
 import { readProviderActivityEdit, readProviderActivityInput, readProviderActivityPricing, renderProviderActivities } from './provider-activities.js';
 import { readProviderServiceArea, renderProviderServiceArea, updateProviderServiceAreaPreview } from './provider-service-area.js';
 import { readProviderAvailabilitySchedule, renderProviderAvailabilitySchedule, syncProviderAvailabilityScheduleForm } from './provider-availability-schedule.js';
+import { readProviderKycForm, renderProviderKyc, validateProviderKycFile } from './provider-kyc.js';
 
 function ensureDispatchStyles(documentRef = globalThis.document) {
   if (!documentRef?.head || documentRef.querySelector?.('[data-provider-dispatch-styles]')) return;
@@ -109,6 +110,30 @@ export function renderProviderStartupError(safeStage = 'STARTUP') {
   return `<main class="provider-auth" data-provider-startup-error><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><h1>Không thể khởi động ứng dụng</h1><p>Vui lòng tải lại trang. Nếu lỗi vẫn còn, hãy cung cấp mã chẩn đoán bên dưới.</p><small data-provider-error-stage>Mã: ${esc(safeStage)}</small><button type="button" data-provider-reload>Tải lại</button></main>`;
 }
 
+export async function initialiseProviderKycFlow(root, repository) {
+  let state=await repository.loadKyc();let stage=state.submission?.status==='draft'?'confirm':'capture';let previewUrl='';let error='';let busy=false;
+  const loadPreview=async()=>{if(state.submission?.documentPath)try{previewUrl=await repository.getIdentityPreview(state.submission.documentPath);}catch{previewUrl='';}};
+  if(stage==='confirm')await loadPreview();
+  const draw=()=>{root.innerHTML=renderProviderKyc(state,{stage,previewUrl,error,busy});};draw();
+  root.addEventListener('change',async event=>{
+    const input=event.target.closest?.('[data-provider-kyc-file]');if(!input||busy)return;
+    const file=input.files?.[0];if(!validateProviderKycFile(file)){error='Vui lòng chọn ảnh JPG, PNG hoặc WebP dưới 8 MB.';draw();return;}
+    busy=true;stage='analyzing';error='';draw();
+    try{state=await repository.uploadIdentity(file);stage='confirm';await loadPreview();}
+    catch{stage='capture';error='Không thể đọc rõ CCCD. Vui lòng chụp lại toàn bộ thẻ, đủ sáng và không phản chiếu.';}
+    finally{busy=false;draw();}
+  });
+  root.addEventListener('click',async event=>{
+    if(!event.target.closest?.('[data-confirm-provider-kyc]')||busy)return;event.preventDefault?.();
+    const draft=readProviderKycForm(root);if(!draft.valid){error='Vui lòng kiểm tra họ tên, số CCCD và ngày sinh.';draw();return;}
+    busy=true;error='';draw();
+    try{state=await repository.confirmKyc(state.submission.id,draft.fields);stage='capture';}
+    catch(cause){error=cause?.message??'Không thể gửi hồ sơ xác minh.';stage='confirm';}
+    finally{busy=false;draw();}
+  });
+  return {getState:()=>structuredClone(state)};
+}
+
 export async function initialiseProviderApp(root, repositoryLoader=createProgressiveProviderAppRepository, navigationLoader=prepareProviderNavigation, auth=createProviderGoogleAuth(), heartbeatFactory=createProviderLocationHeartbeat, locationAccess={classifyError:classifyGeolocationError,getState:getLocationPermissionState,mount:mountLocationPermissionGate,request:requestCurrentPosition,geolocation:globalThis.navigator?.geolocation},runtimeConfig=globalThis.__HOME_AI_CONFIG__) {
   ensureDispatchStyles(root?.ownerDocument);
   let session;
@@ -116,6 +141,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   if(auth.enabled&&!session?.user){root.innerHTML=renderProviderLogin();root.addEventListener('click',async e=>{if(!e.target.closest('[data-provider-google-login]'))return;try{await auth.signIn();}catch{root.innerHTML=renderProviderLogin({error:'Không thể đăng nhập bằng Google. Vui lòng thử lại.'});}});return{getState:()=>null};}
   let repository;
   try{repository=await repositoryLoader();}catch{root.innerHTML=renderProviderLogin({provisioning:true});root.addEventListener('click',async e=>{if(e.target.closest('[data-provider-logout]')){await auth.signOut();globalThis.location?.reload();}});return{getState:()=>null};}
+  if(repository.kycRequired)return initialiseProviderKycFlow(root,repository);
   let state;
   try{state=await repository.load();}catch(error){error.safeStage='DASHBOARD_LOAD';throw error;}
   const openDashboard=async()=>{
