@@ -16,6 +16,11 @@ export function createMockTechnicianRepository(data = mockTechnicians) {
         categoryLabel: ({ electricity: 'điện', plumbing: 'nước', 'air-conditioning': 'điều hòa', appliances: 'sửa điện gia dụng' })[technician.category],
       }));
     },
+    async getProfile({ providerId }) {
+      const technician = data.find(({ id }) => id === providerId);
+      return technician ? { ...technician, providerId: technician.id, introduction: technician.shortDescription,
+        activities: [{ serviceCategory: technician.category, name: technician.categoryLabel ?? technician.category }] } : null;
+    },
   };
 }
 
@@ -43,6 +48,13 @@ export function createProgressiveTechnicianRepository(
         latitude: location.latitude,
         longitude: location.longitude,
       });
+    },
+    async getProfile({ providerId, missionId = null }) {
+      if (!repositories.enabled) return fallback.getProfile({ providerId, missionId });
+      const { data, error } = await repositories.client.auth.getUser();
+      if (error) throw error;
+      if (!data?.user) return fallback.getProfile({ providerId, missionId });
+      return repositories.providers.getProfessionalProfile(providerId, missionId);
     },
   });
 }

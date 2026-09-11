@@ -4,6 +4,14 @@ import { mockProviderDashboard } from './mock-provider-data.js';
 const clone = (value) => structuredClone(value);
 export function createMockProviderAppRepository(seed = mockProviderDashboard) {
   let state = clone(seed);
+  let professionalProfile = {
+    providerId: seed.provider?.id ?? 'provider-demo', name: seed.provider?.name ?? 'Provider Demo',
+    phone: '+84912345678', avatarPath: null, avatarUrl: seed.provider?.avatarUrl ?? null,
+    experienceYears: seed.provider?.experienceYears ?? 5,
+    introduction: seed.provider?.description ?? 'Kỹ thuật viên HOME AI.',
+    kycStatus: seed.provider?.kycStatus ?? 'verified', verified: (seed.provider?.kycStatus ?? 'verified') === 'verified',
+    rating: Number(seed.provider?.rating) || 0, reviewCount: Number(seed.provider?.reviewCount) || 0,
+  };
   let kycState = { provider: { ...clone(seed.provider), kycStatus: seed.provider?.kycStatus ?? 'verified' }, submission: null };
   let availabilityPreferences = clone(seed.availabilityPreferences ?? { mode: 'manual', available24h: false, weeklySchedule: [] });
   let services = clone(seed.services ?? [{
@@ -15,6 +23,13 @@ export function createMockProviderAppRepository(seed = mockProviderDashboard) {
   return Object.freeze({
     source: 'mock', async load() { return clone(state); },
     async loadKyc() { return clone(kycState); },
+    async getProfessionalProfile() { return clone(professionalProfile); },
+    async saveProfessionalProfile(profile) {
+      professionalProfile = { ...professionalProfile, ...profile, photoFile: undefined,
+        avatarUrl: profile.photoFile ? `blob:mock-${profile.photoFile.name}` : professionalProfile.avatarUrl };
+      state.provider = { ...state.provider, name: professionalProfile.name };
+      return clone(professionalProfile);
+    },
     async uploadIdentity() { throw new Error('KYC unavailable in demo mode'); },
     async previewIdentity() { throw new Error('KYC preview unavailable in demo mode'); },
     async getIdentityPreview() { return ''; },
@@ -154,6 +169,24 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
   };
   return Object.freeze({
     source: 'supabase', load: loadDashboard,
+    async getProfessionalProfile() { return repositories.offers.getCurrentProviderProfessionalProfile(); },
+    async saveProfessionalProfile(profile) {
+      const current = await repositories.offers.getCurrentProviderProfessionalProfile();
+      let uploaded = null;
+      try {
+        if (profile.photoFile) uploaded = await repositories.offers.uploadCurrentProviderAvatar(profile.photoFile);
+        const saved = await repositories.offers.updateCurrentProviderProfessionalProfile({
+          ...profile, avatarPath: uploaded?.path ?? current.avatarPath,
+        });
+        if (uploaded && current.avatarPath && current.avatarPath !== uploaded.path) {
+          await repositories.offers.deleteCurrentProviderAvatar(current.avatarPath).catch(() => {});
+        }
+        return saved;
+      } catch (error) {
+        if (uploaded?.path) await repositories.offers.deleteCurrentProviderAvatar(uploaded.path).catch(() => {});
+        throw error;
+      }
+    },
     async loadKyc() { return repositories.offers.getCurrentProviderKycState(); },
     async uploadIdentity(file) { return repositories.offers.uploadAndAnalyzeCurrentProviderIdentity(file); },
     async previewIdentity(file) { return repositories.offers.previewCurrentProviderIdentity(file); },

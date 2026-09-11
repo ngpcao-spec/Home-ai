@@ -105,10 +105,12 @@ export function createTrackingStageMarkup(technician) {
         <div><span>Quãng đường còn lại</span><strong data-tracking-distance>Đang tính...</strong></div>
       </div>
       <div class="tracking-contact-actions">
+        <button type="button" data-view-assigned-provider-profile>Xem hồ sơ</button>
         <button type="button" data-tracking-call>☎ Gọi thợ</button>
         <button type="button" data-tracking-message>💬 Nhắn tin</button>
       </div>
       <p class="tracking-action-status" data-tracking-action-status role="status"></p>
+      <div data-assigned-provider-profile hidden></div>
       <button class="start-repair" type="button" data-start-repair hidden>Bắt đầu sửa chữa</button>
       <section class="intervention-quote" data-intervention-quote hidden aria-label="Chẩn đoán và báo giá sửa chữa"></section>
     </article>

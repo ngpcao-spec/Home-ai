@@ -13,6 +13,7 @@ import { readProviderActivityEdit, readProviderActivityInput, readProviderActivi
 import { readProviderServiceArea, renderProviderServiceArea, updateProviderServiceAreaPreview } from './provider-service-area.js';
 import { readProviderAvailabilitySchedule, renderProviderAvailabilitySchedule, syncProviderAvailabilityScheduleForm } from './provider-availability-schedule.js';
 import { readProviderKycForm, renderProviderKyc, renderProviderKycProfileSection, validateProviderKycFile } from './provider-kyc.js';
+import { readProviderProfessionalProfile, renderProviderActivitiesSummary, renderProviderProfessionalProfile, updateProviderProfessionalProfileDraft } from './provider-professional-profile.js';
 
 function ensureDispatchStyles(documentRef = globalThis.document) {
   if (!documentRef?.head || documentRef.querySelector?.('[data-provider-dispatch-styles]')) return;
@@ -167,7 +168,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   const openDashboard=async()=>{
   let busy=false; let message=''; let navigation=null;let navigationLoading=false;let navigationError=''; let diagnosing=false; let editingMissionId=null; let supplementParent=null;let billingMissionId=null;let confirmingAcceptance=false;
   let currentView='home'; let history=[]; let historyLoading=false; let historyError=''; let selectedMissionId=null;
-  let pricingServices=[];let serviceArea=null;let availabilityPreferences=null;let kycState=null;let pricingLoading=false;let pricingError='';let pricingMessage='';let serviceAreaMessage='';let availabilityMessage='';
+  let pricingServices=[];let serviceArea=null;let availabilityPreferences=null;let kycState=null;let professionalProfile=null;let pricingLoading=false;let pricingError='';let pricingMessage='';let serviceAreaMessage='';let availabilityMessage='';let professionalMessage='';let professionalPhotoFile=null;let professionalPhotoPreview='';
   let activityFlow={step:'list',mode:null,input:'',proposal:null,reference:null,error:'',message:''};
   let priorityOfferId=repository.source==='supabase' ? state.offers?.[0]?.id ?? null : null;
   const page=root.ownerDocument??globalThis.document;
@@ -202,7 +203,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
       return;
     }
     if(currentView==='profile'){
-      root.innerHTML=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0]??'P')}</button></header>${renderProviderKycProfileSection(kycState,{loading:pricingLoading,error:pricingError,testMode:providerTestKycMode})}${renderProviderServiceArea(serviceArea,{loading:pricingLoading,error:pricingError,message:serviceAreaMessage,busy})}${renderProviderAvailabilitySchedule(availabilityPreferences,{loading:pricingLoading,error:pricingError,message:availabilityMessage,busy})}${renderProviderPricing(pricingServices,{loading:pricingLoading,error:pricingError,message:pricingMessage,busy})}${renderProviderNav('profile')}`;
+      root.innerHTML=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0]??'P')}</button></header>${renderProviderProfessionalProfile(professionalProfile,{loading:pricingLoading,error:pricingError,message:professionalMessage,busy,previewUrl:professionalPhotoPreview})}${renderProviderActivitiesSummary(pricingServices)}${renderProviderServiceArea(serviceArea,{loading:pricingLoading,error:pricingError,message:serviceAreaMessage,busy})}${renderProviderAvailabilitySchedule(availabilityPreferences,{loading:pricingLoading,error:pricingError,message:availabilityMessage,busy})}${renderProviderKycProfileSection(kycState,{loading:pricingLoading,error:pricingError,testMode:providerTestKycMode})}${renderProviderPricing(pricingServices,{loading:pricingLoading,error:pricingError,message:pricingMessage,busy})}${renderProviderNav('profile')}`;
       return;
     }
     if(currentView==='activities'){
@@ -213,7 +214,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   };
   const loadHistory=async()=>{historyLoading=true;historyError='';await renderDashboard();try{history=prepareProviderHistory(await repository.getHistory(),state.provider.id);}catch(error){history=[];historyError=error?.message??'Lỗi không xác định';}finally{historyLoading=false;await renderDashboard();}};
   const loadPricing=async()=>{pricingLoading=true;pricingError='';await renderDashboard();try{[pricingServices,serviceArea,availabilityPreferences]=await Promise.all([repository.getServices(),repository.getServiceArea(),repository.getAvailabilityPreferences()]);}catch(error){pricingServices=[];serviceArea=null;availabilityPreferences=null;pricingError=error?.message??'Lỗi không xác định';}finally{pricingLoading=false;await renderDashboard();}};
-  const loadProfile=async()=>{pricingLoading=true;pricingError='';await renderDashboard();try{[pricingServices,serviceArea,availabilityPreferences,kycState]=await Promise.all([repository.getServices(),repository.getServiceArea(),repository.getAvailabilityPreferences(),repository.loadKyc()]);}catch(error){pricingServices=[];serviceArea=null;availabilityPreferences=null;kycState=null;pricingError=error?.message??'Lỗi không xác định';}finally{pricingLoading=false;await renderDashboard();}};
+  const loadProfile=async()=>{pricingLoading=true;pricingError='';await renderDashboard();try{[pricingServices,serviceArea,availabilityPreferences,kycState,professionalProfile]=await Promise.all([repository.getServices(),repository.getServiceArea(),repository.getAvailabilityPreferences(),repository.loadKyc(),repository.getProfessionalProfile()]);}catch(error){pricingServices=[];serviceArea=null;availabilityPreferences=null;kycState=null;professionalProfile=null;pricingError=error?.message??'Lỗi không xác định';}finally{pricingLoading=false;await renderDashboard();}};
   const canSendQuote=()=>state.assignment?.id===editingMissionId
     && state.assignment.status==='arrived'
     && state.assignment.pricing?.pricingModel!=='hourly'
@@ -268,7 +269,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   page?.addEventListener?.('visibilitychange',syncHeartbeat);
   globalThis.addEventListener?.('pagehide',()=>{heartbeat.stop();dispatch.stop();globalThis.clearInterval?.(countdownTimer);},{once:true});
   heartbeat.sync();
-  root.addEventListener('input',event=>{if(event?.target?.closest?.('[data-availability-form]'))syncProviderAvailabilityScheduleForm(root);else if(root.querySelector('[data-service-area-form]'))updateProviderServiceAreaPreview(root);else if(supplementParent)updateSupplementForm(root,supplementParent,canSendSupplement(),busy);else if(diagnosing)updateInitialQuoteForm(root,canSendQuote(),busy);else if(billingMissionId)updateHourlyInvoiceForm(root,state.assignment?.pricing,canSendInvoice(),busy);});
+  root.addEventListener('input',event=>{if(event?.target?.matches?.('[data-professional-photo-input]')){const file=event.target.files?.[0]??null;professionalPhotoFile=file;if(professionalPhotoPreview)URL.revokeObjectURL?.(professionalPhotoPreview);professionalPhotoPreview=file?URL.createObjectURL(file):'';updateProviderProfessionalProfileDraft(root,professionalPhotoPreview);}else if(event?.target?.closest?.('[data-professional-profile-form]'))updateProviderProfessionalProfileDraft(root,professionalPhotoPreview);else if(event?.target?.closest?.('[data-availability-form]'))syncProviderAvailabilityScheduleForm(root);else if(root.querySelector('[data-service-area-form]'))updateProviderServiceAreaPreview(root);else if(supplementParent)updateSupplementForm(root,supplementParent,canSendSupplement(),busy);else if(diagnosing)updateInitialQuoteForm(root,canSendQuote(),busy);else if(billingMissionId)updateHourlyInvoiceForm(root,state.assignment?.pricing,canSendInvoice(),busy);});
   const wait=milliseconds=>new Promise(resolve=>globalThis.setTimeout(resolve,milliseconds));
   const handleProviderClick=async e=>{
     if(e.target.closest('[data-enable-offer-audio]')){await offerAlert.unlock();updateAudioControl();return;}
@@ -282,6 +283,19 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
     if(e.target.closest('[data-pricing-retry]')){await loadPricing();return;}
     if(e.target.closest('[data-service-area-retry]')){await loadPricing();return;}
     if(e.target.closest('[data-availability-retry]')){await loadPricing();return;}
+    if(e.target.closest('[data-professional-profile-retry]')){await loadProfile();return;}
+    if(e.target.closest('[data-open-provider-activities]')){currentView='activities';activityFlow={step:'list',mode:null,input:'',proposal:null,reference:null,error:'',message:''};await loadPricing();return;}
+    if(e.target.closest('[data-save-professional-profile]')){
+      e.preventDefault?.();if(busy)return;
+      const form=e.target.closest('[data-professional-profile-form]');
+      const draft=readProviderProfessionalProfile(form,professionalPhotoFile);
+      if(!draft.valid){professionalMessage='Vui lòng kiểm tra họ tên, số điện thoại, kinh nghiệm và ảnh.';await draw();return;}
+      busy=true;professionalMessage='';await draw();
+      try{professionalProfile=await repository.saveProfessionalProfile(draft);state={...state,provider:{...state.provider,name:professionalProfile.name}};professionalMessage='Đã lưu hồ sơ nghề nghiệp.';professionalPhotoFile=null;if(professionalPhotoPreview)URL.revokeObjectURL?.(professionalPhotoPreview);professionalPhotoPreview='';}
+      catch(error){professionalMessage=error?.message??'Không thể lưu hồ sơ nghề nghiệp.';}
+      finally{busy=false;await draw();}
+      return;
+    }
     const openKyc=e.target.closest('[data-open-provider-kyc]');
     const openKycTest=e.target.closest('[data-open-provider-kyc-test]');
     if(openKyc||openKycTest){

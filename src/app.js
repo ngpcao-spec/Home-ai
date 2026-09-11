@@ -972,7 +972,7 @@ export function initialiseHomePage(
     panel.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   };
 
-  root.querySelector('[data-map-search]').addEventListener('click', (event) => {
+  root.querySelector('[data-map-search]').addEventListener('click', async (event) => {
     const profilePanel = root.querySelector('[data-provider-profile]');
     const technicianSheet = root.querySelector('[data-technician-sheet]');
     const cancelSearchButton = event.target.closest?.('[data-cancel-provider-search]');
@@ -1024,10 +1024,17 @@ export function initialiseHomePage(
       const technician = matchedTechnicians.find(({ id }) => id === technicianId) ?? selectedTechnician;
       if (technician) {
         selectedTechnician = technician;
-        profilePanel.innerHTML = createProviderProfileMarkup(createProviderProfile(technician));
+        profilePanel.innerHTML = '<div class="provider-profile-card"><p>Đang tải hồ sơ…</p></div>';
         profilePanel.hidden = false;
         technicianSheet.hidden = true;
         profilePanel.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+        try {
+          const missionId = remoteMissionState?.mission?.providerId === technician.id ? remoteMissionState.mission.id : null;
+          const professional = await technicianRepository.getProfile({ providerId: technician.id, missionId });
+          profilePanel.innerHTML = createProviderProfileMarkup(createProviderProfile({ ...technician, ...professional }));
+        } catch {
+          profilePanel.innerHTML = '<div class="provider-profile-card history-error" role="alert">Không thể tải hồ sơ kỹ thuật viên.<button type="button" data-close-provider-profile>Quay lại</button></div>';
+        }
       }
       return;
     }
@@ -1369,8 +1376,34 @@ export function initialiseHomePage(
     if (!remoteMissionState) void startTrackingMap();
   });
   mission.addEventListener('click', async (event) => {
+    if (event.target.closest('[data-view-assigned-provider-profile]')) {
+      const container = mission.querySelector('[data-assigned-provider-profile]');
+      container.hidden = false;
+      container.innerHTML = '<div class="provider-profile-card"><p>Đang tải hồ sơ…</p></div>';
+      try {
+        const profile = await technicianRepository.getProfile({
+          providerId: selectedTechnician.id,
+          missionId: remoteMissionState?.mission?.id ?? null,
+        });
+        container.innerHTML = createProviderProfileMarkup(createProviderProfile({ ...selectedTechnician, ...profile }), { assigned: true });
+      } catch {
+        container.innerHTML = '<div class="history-error" role="alert">Không thể tải hồ sơ kỹ thuật viên.</div>';
+      }
+      return;
+    }
+    if (event.target.closest('[data-assigned-provider-profile] [data-close-provider-profile]')) {
+      const container = mission.querySelector('[data-assigned-provider-profile]');
+      container.hidden = true;
+      container.innerHTML = '';
+      return;
+    }
     if (event.target.closest('[data-tracking-call]')) {
-      mission.querySelector('[data-tracking-action-status]').textContent = 'Bản demo: cuộc gọi với thợ sẽ được mở tại đây.';
+      const action = mission.querySelector('[data-tracking-action-status]');
+      if (!remoteMissionState) { action.textContent = 'Bản demo: cuộc gọi với thợ sẽ được mở tại đây.'; return; }
+      try {
+        const profile = await technicianRepository.getProfile({ providerId: selectedTechnician.id, missionId: remoteMissionState.mission.id });
+        action.innerHTML = profile.phone ? `<a href="tel:${profile.phone}">Gọi ${profile.phone}</a>` : 'Số điện thoại chưa khả dụng.';
+      } catch { action.textContent = 'Không thể tải số điện thoại.'; }
       return;
     }
     if (event.target.closest('[data-tracking-message]')) {

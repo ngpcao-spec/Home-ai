@@ -20,6 +20,23 @@ const encodeFileBase64 = async (file) => {
   return globalThis.btoa(binary);
 };
 
+const adaptProfessionalProfile = (client, value = {}) => Object.freeze({
+  providerId: value.providerId,
+  name: value.name ?? '',
+  phone: value.phone ?? '',
+  avatarPath: value.avatarPath ?? null,
+  avatarUrl: value.avatarPath
+    ? client.storage.from('provider-avatars').getPublicUrl(value.avatarPath).data.publicUrl
+    : null,
+  experienceYears: value.experienceYears == null ? null : Number(value.experienceYears),
+  introduction: value.introduction ?? '',
+  kycStatus: value.kycStatus ?? null,
+  verified: value.verified === true || value.kycStatus === 'verified',
+  rating: Number(value.ratingAverage) || 0,
+  reviewCount: Number(value.reviewCount) || 0,
+  activities: Object.freeze([...(value.activities ?? [])].map(activity => Object.freeze({ ...activity }))),
+});
+
 export function createSupabaseOffersRepository(supabase) {
   const client = requireSupabaseClient(supabase);
   return Object.freeze({
@@ -55,6 +72,36 @@ export function createSupabaseOffersRepository(supabase) {
     },
     async getCurrentProviderKycState() {
       return Object.freeze({ ...(unwrap(await client.rpc('get_current_provider_kyc_state'), 'offers.getCurrentProviderKycState') ?? {}) });
+    },
+    async getCurrentProviderProfessionalProfile() {
+      const value = unwrap(await client.rpc('get_current_provider_professional_profile'), 'offers.getCurrentProviderProfessionalProfile') ?? {};
+      return adaptProfessionalProfile(client, value);
+    },
+    async updateCurrentProviderProfessionalProfile(profile) {
+      const value = unwrap(await client.rpc('update_current_provider_professional_profile', {
+        new_display_name: profile.name,
+        new_phone: profile.phone || null,
+        new_experience_years: profile.experienceYears,
+        new_introduction: profile.introduction || null,
+        new_avatar_path: profile.avatarPath || null,
+      }), 'offers.updateCurrentProviderProfessionalProfile') ?? {};
+      return adaptProfessionalProfile(client, value);
+    },
+    async uploadCurrentProviderAvatar(file) {
+      const { data: userData, error: userError } = await client.auth.getUser();
+      if (userError || !userData?.user) throw userError ?? new Error('Provider authentication required');
+      const formats = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+      const extension = formats[file?.type];
+      if (!extension || !file.size || file.size > 5_242_880) throw new Error('Invalid provider avatar');
+      const path = `${userData.user.id}/avatar/${globalThis.crypto.randomUUID()}.${extension}`;
+      unwrap(await client.storage.from('provider-avatars').upload(path, file, {
+        cacheControl: '31536000', contentType: file.type, upsert: false,
+      }), 'offers.uploadProviderAvatar');
+      return Object.freeze({ path, url: client.storage.from('provider-avatars').getPublicUrl(path).data.publicUrl });
+    },
+    async deleteCurrentProviderAvatar(path) {
+      if (!path) return;
+      unwrap(await client.storage.from('provider-avatars').remove([path]), 'offers.deleteProviderAvatar');
     },
     async uploadAndAnalyzeCurrentProviderIdentity(file) {
       const { data: userData, error: userError } = await client.auth.getUser();

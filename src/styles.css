@@ -313,6 +313,8 @@ h1 em { color: var(--green); font-style: normal; }
 .provider-profile-header p { color: var(--dark-green); font-size: 10px; font-weight: 800; letter-spacing: .12em; }
 .provider-profile-header h2 { margin: 4px 0; color: #173d34; font-size: 22px; }
 .provider-profile-photo { display: grid; width: 72px; height: 72px; place-items: center; border: 4px solid #dff3eb; border-radius: 50%; color: white; background: linear-gradient(145deg, #369578, #174d41); font-size: 23px; font-weight: 800; }
+.provider-profile-photo img { width: 100%; height: 100%; border-radius: inherit; object-fit: cover; }
+.provider-profile-phone a { display: inline-flex; padding: 11px 16px; border-radius: 14px; color: white; background: #087b61; font-weight: 800; text-decoration: none; }
 .provider-profile-rating { color: #657a74; font-size: 11px; }
 .provider-profile-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 20px 0; }
 .provider-profile-facts div { padding: 12px; border-radius: 13px; background: #f2f8f6; }

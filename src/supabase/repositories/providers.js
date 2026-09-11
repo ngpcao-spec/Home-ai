@@ -10,6 +10,22 @@ const providerColumns = `
 
 export function createSupabaseProvidersRepository(supabase) {
   const client = requireSupabaseClient(supabase);
+  const adaptProfessionalProfile = (value = {}) => Object.freeze({
+    providerId: value.providerId,
+    name: value.name ?? '',
+    avatarUrl: value.avatarPath
+      ? client.storage.from('provider-avatars').getPublicUrl(value.avatarPath).data.publicUrl
+      : null,
+    verified: value.verified === true,
+    rating: Number(value.ratingAverage) || 0,
+    reviewCount: Number(value.reviewCount) || 0,
+    experienceYears: value.experienceYears == null ? null : Number(value.experienceYears),
+    introduction: value.introduction ?? '',
+    phone: value.phone ?? null,
+    activities: Object.freeze([...(value.activities ?? [])].map(activity => Object.freeze({ ...activity }))),
+    reviews: Object.freeze([]),
+    professional: true,
+  });
   return Object.freeze({
     async getById(providerId) {
       const result = await client.from('provider_profiles')
@@ -41,6 +57,13 @@ export function createSupabaseProvidersRepository(supabase) {
         candidate_limit: limit,
       });
       return Object.freeze((unwrap(result, 'providers.listMatchingCandidates') ?? []).map(adaptMatchingProviderRow));
+    },
+    async getProfessionalProfile(providerId, missionId = null) {
+      const result = await client.rpc('get_provider_professional_profile', {
+        target_provider_id: providerId,
+        target_mission_id: missionId,
+      });
+      return adaptProfessionalProfile(unwrap(result, 'providers.getProfessionalProfile'));
     },
   });
 }

@@ -35,7 +35,7 @@ const defaultReviews = [
 ];
 
 export function createProviderProfile(technician) {
-  if (!technician?.id) throw new TypeError('A technician is required to create a ProviderProfile.');
+  if (!technician?.id && !technician?.providerId) throw new TypeError('A technician is required to create a ProviderProfile.');
   const category = categoryProfiles[technician.category] ?? {
     specialty: technician.categoryLabel ?? 'Kỹ thuật viên gia đình',
     skills: [],
@@ -43,18 +43,20 @@ export function createProviderProfile(technician) {
   const override = profileOverrides[technician.id] ?? {};
 
   return Object.freeze({
-    providerId: technician.id,
-    avatar: Object.freeze({ initials: technician.initials, label: `Ảnh đại diện của ${technician.name}` }),
+    providerId: technician.providerId ?? technician.id,
+    avatar: Object.freeze({ initials: technician.initials ?? technician.name?.split(/\s+/).slice(-2).map(part=>part[0]).join('').toUpperCase() ?? 'P', label: `Ảnh đại diện của ${technician.name}`, url: technician.avatarUrl ?? null }),
     name: technician.name,
     rating: technician.rating,
     reviewCount: technician.reviewCount,
     verified: technician.kycVerified ?? technician.verified === true,
-    specialty: override.specialty ?? category.specialty,
-    experienceYears: override.experienceYears ?? Math.max(2, Math.round((technician.completedJobs ?? 100) / 48)),
+    specialty: override.specialty ?? technician.activities?.map(activity=>activity.name).filter(Boolean).join(', ') ?? category.specialty,
+    experienceYears: override.experienceYears ?? technician.experienceYears ?? Math.max(2, Math.round((technician.completedJobs ?? 100) / 48)),
     serviceArea: override.serviceArea ?? `${technician.location ?? 'Nha Trang, Khánh Hòa'} · bán kính ${technician.serviceRadiusKm ?? 10} km`,
     languages: Object.freeze(override.languages ?? ['Tiếng Việt']),
-    skills: Object.freeze(override.skills ?? category.skills),
-    introduction: override.introduction ?? technician.shortDescription,
-    reviews: Object.freeze((override.reviews ?? defaultReviews).map((review) => Object.freeze({ ...review }))),
+    skills: Object.freeze(override.skills ?? technician.activities?.map(activity=>activity.name).filter(Boolean) ?? category.skills),
+    introduction: override.introduction ?? technician.introduction ?? technician.shortDescription ?? '',
+    phone: technician.phone ?? null,
+    professional: technician.professional === true,
+    reviews: Object.freeze((override.reviews ?? technician.reviews ?? defaultReviews).map((review) => Object.freeze({ ...review }))),
   });
 }
