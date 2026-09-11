@@ -142,6 +142,18 @@ export async function initialiseProviderKycFlow(root, repository, { testMode=fal
   return {getState:()=>structuredClone(state),stop:close};
 }
 
+async function initialiseProviderKycProfileGate(root,repository,auth){
+  let kycState=await repository.loadKyc();let activeFlow=null;
+  const draw=()=>{root.innerHTML=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(kycState.provider?.name?.split(' ').at(-1)?.[0]??'P')}</button></header><main class="provider-profile-gate"><h1>Hồ sơ</h1>${renderProviderKycProfileSection(kycState)}</main>${renderProviderNav('profile')}`;};
+  const handleClick=async event=>{
+    if(event.target.closest?.('[data-provider-logout]')){await auth.signOut();globalThis.location?.reload();return;}
+    if(!event.target.closest?.('[data-open-provider-kyc]'))return;
+    activeFlow=await initialiseProviderKycFlow(root,repository,{showBack:true,onClose:async()=>{kycState=await repository.loadKyc();activeFlow=null;draw();}});
+  };
+  root.addEventListener('click',handleClick);draw();
+  return {getState:()=>structuredClone(kycState),stop:()=>{activeFlow?.stop();root.removeEventListener('click',handleClick);}};
+}
+
 export async function initialiseProviderApp(root, repositoryLoader=createProgressiveProviderAppRepository, navigationLoader=prepareProviderNavigation, auth=createProviderGoogleAuth(), heartbeatFactory=createProviderLocationHeartbeat, locationAccess={classifyError:classifyGeolocationError,getState:getLocationPermissionState,mount:mountLocationPermissionGate,request:requestCurrentPosition,geolocation:globalThis.navigator?.geolocation},runtimeConfig=globalThis.__HOME_AI_CONFIG__) {
   ensureDispatchStyles(root?.ownerDocument);
   let session;
@@ -149,7 +161,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   if(auth.enabled&&!session?.user){root.innerHTML=renderProviderLogin();root.addEventListener('click',async e=>{if(!e.target.closest('[data-provider-google-login]'))return;try{await auth.signIn();}catch{root.innerHTML=renderProviderLogin({error:'Không thể đăng nhập bằng Google. Vui lòng thử lại.'});}});return{getState:()=>null};}
   let repository;
   try{repository=await repositoryLoader();}catch{root.innerHTML=renderProviderLogin({provisioning:true});root.addEventListener('click',async e=>{if(e.target.closest('[data-provider-logout]')){await auth.signOut();globalThis.location?.reload();}});return{getState:()=>null};}
-  if(repository.kycRequired)return initialiseProviderKycFlow(root,repository);
+  if(repository.kycRequired)return initialiseProviderKycProfileGate(root,repository,auth);
   let state;
   try{state=await repository.load();}catch(error){error.safeStage='DASHBOARD_LOAD';throw error;}
   const openDashboard=async()=>{
