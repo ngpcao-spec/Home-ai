@@ -4,6 +4,7 @@ import { mockProviderDashboard } from './mock-provider-data.js';
 const clone = (value) => structuredClone(value);
 export function createMockProviderAppRepository(seed = mockProviderDashboard) {
   let state = clone(seed);
+  let availabilityPreferences = clone(seed.availabilityPreferences ?? { mode: 'manual', available24h: false, weeklySchedule: [] });
   let services = clone(seed.services ?? [{
     id: 'provider-service-demo', providerId: seed.provider?.id ?? 'provider-demo',
     serviceCategory: 'electricity', activityName: 'Thợ điện',
@@ -79,6 +80,13 @@ export function createMockProviderAppRepository(seed = mockProviderDashboard) {
       if(![5,10,20,30,50].includes(serviceRadiusKm))throw new Error('Invalid service radius');
       state.provider={...state.provider,serviceRadiusKm};
       return {serviceRadiusKm};
+    },
+    async getAvailabilityPreferences() { return clone(availabilityPreferences); },
+    async setAvailabilityPreferences(preferences) {
+      if(!['manual','scheduled'].includes(preferences.mode)
+        || (preferences.mode==='scheduled'&&!preferences.available24h&&!preferences.weeklySchedule?.length)) throw new Error('Invalid availability preferences');
+      availabilityPreferences={mode:preferences.mode,available24h:Boolean(preferences.available24h),weeklySchedule:clone(preferences.weeklySchedule??[])};
+      return clone(availabilityPreferences);
     },
     async setServicePricing(serviceCategory, pricing) {
       const index = services.findIndex((service) => service.serviceCategory === serviceCategory);
@@ -158,6 +166,8 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
     async getServices() { return repositories.offers.listCurrentProviderServices(initial.provider.id); },
     async getServiceArea() { return repositories.offers.getCurrentProviderServiceArea(); },
     async setServiceArea(serviceRadiusKm) { return repositories.offers.setCurrentProviderServiceArea(serviceRadiusKm); },
+    async getAvailabilityPreferences() { return repositories.offers.getCurrentProviderAvailabilityPreferences(); },
+    async setAvailabilityPreferences(preferences) { return repositories.offers.setCurrentProviderAvailabilityPreferences(preferences); },
     async setServicePricing(serviceCategory, pricing) {
       return repositories.offers.setCurrentProviderServicePricing(serviceCategory, pricing);
     },

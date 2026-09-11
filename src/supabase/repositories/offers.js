@@ -65,6 +65,27 @@ export function createSupabaseOffersRepository(supabase) {
       }), 'offers.setCurrentProviderServiceArea') ?? {};
       return Object.freeze({ serviceRadiusKm: Number(value.service_radius_km) });
     },
+    async getCurrentProviderAvailabilityPreferences() {
+      const value = unwrap(await client.rpc('get_current_provider_availability_preferences'), 'offers.getCurrentProviderAvailabilityPreferences') ?? {};
+      return Object.freeze({
+        mode: value.mode === 'scheduled' ? 'scheduled' : 'manual',
+        available24h: Boolean(value.available_24h),
+        weeklySchedule: Object.freeze([...(value.weekly_schedule ?? [])].map(slot => Object.freeze({
+          day: Number(slot.day), start: String(slot.start), end: String(slot.end),
+        }))),
+      });
+    },
+    async setCurrentProviderAvailabilityPreferences({ mode, available24h, weeklySchedule }) {
+      const value = unwrap(await client.rpc('set_current_provider_availability_preferences', {
+        new_mode: mode, new_available_24h: Boolean(available24h), new_weekly_schedule: weeklySchedule,
+      }), 'offers.setCurrentProviderAvailabilityPreferences') ?? {};
+      return Object.freeze({
+        mode: value.mode, available24h: Boolean(value.available_24h),
+        weeklySchedule: Object.freeze([...(value.weekly_schedule ?? [])].map(slot => Object.freeze({
+          day: Number(slot.day), start: String(slot.start), end: String(slot.end),
+        }))),
+      });
+    },
     async setCurrentProviderServicePricing(serviceCategory, { hourlyRate, minimumCharge }) {
       const row = unwrap(await client.rpc('set_current_provider_service_hourly_pricing', {
         target_service_category: serviceCategory,

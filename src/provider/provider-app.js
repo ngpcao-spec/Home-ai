@@ -11,6 +11,7 @@ import { readHourlyInvoiceForm, renderHourlyInvoiceForm, updateHourlyInvoiceForm
 import { readProviderPricingForm, renderProviderPricing } from './provider-pricing.js';
 import { readProviderActivityEdit, readProviderActivityInput, readProviderActivityPricing, renderProviderActivities } from './provider-activities.js';
 import { readProviderServiceArea, renderProviderServiceArea, updateProviderServiceAreaPreview } from './provider-service-area.js';
+import { readProviderAvailabilitySchedule, renderProviderAvailabilitySchedule, syncProviderAvailabilityScheduleForm } from './provider-availability-schedule.js';
 
 function ensureDispatchStyles(documentRef = globalThis.document) {
   if (!documentRef?.head || documentRef.querySelector?.('[data-provider-dispatch-styles]')) return;
@@ -120,7 +121,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   const openDashboard=async()=>{
   let busy=false; let message=''; let navigation=null;let navigationLoading=false;let navigationError=''; let diagnosing=false; let editingMissionId=null; let supplementParent=null;let billingMissionId=null;let confirmingAcceptance=false;
   let currentView='home'; let history=[]; let historyLoading=false; let historyError=''; let selectedMissionId=null;
-  let pricingServices=[];let serviceArea=null;let pricingLoading=false;let pricingError='';let pricingMessage='';let serviceAreaMessage='';
+  let pricingServices=[];let serviceArea=null;let availabilityPreferences=null;let pricingLoading=false;let pricingError='';let pricingMessage='';let serviceAreaMessage='';let availabilityMessage='';
   let activityFlow={step:'list',mode:null,input:'',proposal:null,reference:null,error:'',message:''};
   let priorityOfferId=repository.source==='supabase' ? state.offers?.[0]?.id ?? null : null;
   const page=root.ownerDocument??globalThis.document;
@@ -154,7 +155,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
       return;
     }
     if(currentView==='profile'){
-      root.innerHTML=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0]??'P')}</button></header>${renderProviderServiceArea(serviceArea,{loading:pricingLoading,error:pricingError,message:serviceAreaMessage,busy})}${renderProviderPricing(pricingServices,{loading:pricingLoading,error:pricingError,message:pricingMessage,busy})}${renderProviderNav('profile')}`;
+      root.innerHTML=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0]??'P')}</button></header>${renderProviderServiceArea(serviceArea,{loading:pricingLoading,error:pricingError,message:serviceAreaMessage,busy})}${renderProviderAvailabilitySchedule(availabilityPreferences,{loading:pricingLoading,error:pricingError,message:availabilityMessage,busy})}${renderProviderPricing(pricingServices,{loading:pricingLoading,error:pricingError,message:pricingMessage,busy})}${renderProviderNav('profile')}`;
       return;
     }
     if(currentView==='activities'){
@@ -164,7 +165,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
     const priorityOffer=state.offers?.find(({id})=>id===priorityOfferId);root.innerHTML=renderProviderDashboard(state,{source:repository.source,busy,message,navigation,navigationLoading,navigationError,diagnosing,supplementParent,billing:state.assignment?.id===billingMissionId,testMode:providerTestMode})+(offerLayer?'':renderIncomingOffer(priorityOffer));const map=root.querySelector('[data-provider-map]');if(navigation&&map)await renderProviderNavigation(map,navigation,state.provider).catch(()=>{});
   };
   const loadHistory=async()=>{historyLoading=true;historyError='';await renderDashboard();try{history=prepareProviderHistory(await repository.getHistory(),state.provider.id);}catch(error){history=[];historyError=error?.message??'Lỗi không xác định';}finally{historyLoading=false;await renderDashboard();}};
-  const loadPricing=async()=>{pricingLoading=true;pricingError='';await renderDashboard();try{[pricingServices,serviceArea]=await Promise.all([repository.getServices(),repository.getServiceArea()]);}catch(error){pricingServices=[];serviceArea=null;pricingError=error?.message??'Lỗi không xác định';}finally{pricingLoading=false;await renderDashboard();}};
+  const loadPricing=async()=>{pricingLoading=true;pricingError='';await renderDashboard();try{[pricingServices,serviceArea,availabilityPreferences]=await Promise.all([repository.getServices(),repository.getServiceArea(),repository.getAvailabilityPreferences()]);}catch(error){pricingServices=[];serviceArea=null;availabilityPreferences=null;pricingError=error?.message??'Lỗi không xác định';}finally{pricingLoading=false;await renderDashboard();}};
   const canSendQuote=()=>state.assignment?.id===editingMissionId
     && state.assignment.status==='arrived'
     && state.assignment.pricing?.pricingModel!=='hourly'
@@ -219,7 +220,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   page?.addEventListener?.('visibilitychange',syncHeartbeat);
   globalThis.addEventListener?.('pagehide',()=>{heartbeat.stop();dispatch.stop();globalThis.clearInterval?.(countdownTimer);},{once:true});
   heartbeat.sync();
-  root.addEventListener('input',()=>{if(root.querySelector('[data-service-area-form]'))updateProviderServiceAreaPreview(root);else if(supplementParent)updateSupplementForm(root,supplementParent,canSendSupplement(),busy);else if(diagnosing)updateInitialQuoteForm(root,canSendQuote(),busy);else if(billingMissionId)updateHourlyInvoiceForm(root,state.assignment?.pricing,canSendInvoice(),busy);});
+  root.addEventListener('input',event=>{if(event?.target?.closest?.('[data-availability-form]'))syncProviderAvailabilityScheduleForm(root);else if(root.querySelector('[data-service-area-form]'))updateProviderServiceAreaPreview(root);else if(supplementParent)updateSupplementForm(root,supplementParent,canSendSupplement(),busy);else if(diagnosing)updateInitialQuoteForm(root,canSendQuote(),busy);else if(billingMissionId)updateHourlyInvoiceForm(root,state.assignment?.pricing,canSendInvoice(),busy);});
   const wait=milliseconds=>new Promise(resolve=>globalThis.setTimeout(resolve,milliseconds));
   const handleProviderClick=async e=>{
     if(e.target.closest('[data-enable-offer-audio]')){await offerAlert.unlock();updateAudioControl();return;}
@@ -232,6 +233,17 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
     if(e.target.closest('[data-history-retry]')){await loadHistory();return;}
     if(e.target.closest('[data-pricing-retry]')){await loadPricing();return;}
     if(e.target.closest('[data-service-area-retry]')){await loadPricing();return;}
+    if(e.target.closest('[data-availability-retry]')){await loadPricing();return;}
+    if(e.target.closest('[data-save-availability]')){
+      e.preventDefault?.();if(busy)return;
+      const draft=readProviderAvailabilitySchedule(root);
+      if(!draft.valid){availabilityMessage='Vui lòng chọn ít nhất một ngày và nhập giờ hợp lệ.';await draw();return;}
+      busy=true;availabilityMessage='';await draw();
+      try{availabilityPreferences=await repository.setAvailabilityPreferences(draft);availabilityMessage='Đã lưu lịch nhận việc.';}
+      catch(error){availabilityMessage=error?.message??'Không thể lưu lịch nhận việc.';}
+      finally{busy=false;await draw();}
+      return;
+    }
     if(e.target.closest('[data-save-service-area]')){
       e.preventDefault?.();if(busy)return;
       const draft=readProviderServiceArea(root);
