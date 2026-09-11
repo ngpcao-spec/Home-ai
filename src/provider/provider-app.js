@@ -117,7 +117,7 @@ export async function initialiseProviderKycFlow(root, repository) {
   const draw=()=>{root.innerHTML=renderProviderKyc(state,{stage,previewUrl,error,busy});};draw();
   root.addEventListener('change',async event=>{
     const input=event.target.closest?.('[data-provider-kyc-file]');if(!input||busy)return;
-    const file=input.files?.[0];if(!validateProviderKycFile(file)){error='Vui lòng chọn ảnh JPG, PNG hoặc WebP dưới 8 MB.';draw();return;}
+    const file=input.files?.[0];if(!validateProviderKycFile(file)){error='Vui lòng chọn ảnh JPG, PNG, WebP, HEIC hoặc HEIF dưới 8 MB.';draw();return;}
     busy=true;stage='analyzing';error='';draw();
     try{state=await repository.uploadIdentity(file);stage='confirm';await loadPreview();}
     catch{stage='capture';error='Không thể đọc rõ CCCD. Vui lòng chụp lại toàn bộ thẻ, đủ sáng và không phản chiếu.';}
