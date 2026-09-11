@@ -94,6 +94,13 @@ export function createMockProviderAppRepository(seed = mockProviderDashboard) {
         ...proposal,...pricing,currency:'VND',enabled:true};
       services.push(service);return clone(service);
     },
+    async updateActivity(serviceId, changes) {
+      const index=services.findIndex(({id})=>id===serviceId);
+      if(index<0)throw new Error('Provider service not found');
+      services[index]={...services[index],pricingModel:'hourly',hourlyRate:changes.hourlyRate,
+        minimumCharge:changes.minimumCharge,enabled:changes.enabled};
+      return clone(services[index]);
+    },
   });
 }
 
@@ -152,6 +159,9 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
     },
     async createActivity(proposal, pricing) {
       return repositories.offers.createCurrentProviderActivity(proposal, pricing);
+    },
+    async updateActivity(serviceId, changes) {
+      return repositories.offers.updateCurrentProviderActivity(serviceId, changes);
     },
   });
 }

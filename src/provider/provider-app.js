@@ -9,7 +9,7 @@ import { prepareProviderHistory, renderProviderIncome, renderProviderMissionHist
 import { readInitialQuoteForm, renderInitialQuoteForm, updateInitialQuoteForm } from './initial-quote-form.js';
 import { readHourlyInvoiceForm, renderHourlyInvoiceForm, updateHourlyInvoiceForm } from './hourly-invoice-form.js';
 import { readProviderPricingForm, renderProviderPricing } from './provider-pricing.js';
-import { readProviderActivityInput, readProviderActivityPricing, renderProviderActivities } from './provider-activities.js';
+import { readProviderActivityEdit, readProviderActivityInput, readProviderActivityPricing, renderProviderActivities } from './provider-activities.js';
 
 function ensureDispatchStyles(documentRef = globalThis.document) {
   if (!documentRef?.head || documentRef.querySelector?.('[data-provider-dispatch-styles]')) return;
@@ -230,6 +230,8 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
     if(e.target.closest('[data-history-back]')){selectedMissionId=null;await draw();return;}
     if(e.target.closest('[data-history-retry]')){await loadHistory();return;}
     if(e.target.closest('[data-pricing-retry]')){await loadPricing();return;}
+    const existingActivity=e.target.closest('[data-provider-activity]');
+    if(existingActivity){const service=pricingServices.find(({id})=>id===existingActivity.dataset.providerActivity);if(service){activityFlow={step:'edit',service,error:'',message:''};await draw();}return;}
     if(e.target.closest('[data-add-activity]')){activityFlow={step:'choose',mode:null,input:'',proposal:null,reference:null,error:'',message:''};await draw();return;}
     const activityBack=e.target.closest('[data-activity-back]');
     if(activityBack){activityFlow={...activityFlow,step:activityBack.dataset.activityBack,error:''};await draw();return;}
@@ -254,6 +256,16 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
       busy=true;activityFlow={...activityFlow,...pricing,error:''};await draw();
       try{await repository.createActivity(activityFlow.proposal,pricing);pricingServices=await repository.getServices();activityFlow={step:'list',mode:null,input:'',proposal:null,reference:null,error:'',message:'Đã thêm hoạt động.'};}
       catch(error){activityFlow={...activityFlow,error:error?.message??'Không thể thêm hoạt động.'};}
+      finally{busy=false;await draw();}
+      return;
+    }
+    if(e.target.closest('[data-save-activity]')){
+      e.preventDefault?.();if(busy||activityFlow.step!=='edit'||!activityFlow.service)return;
+      const draft=readProviderActivityEdit(root);
+      if(!draft.valid){activityFlow={...activityFlow,error:'Vui lòng nhập đơn giá và mức phí tối thiểu hợp lệ.'};await draw();return;}
+      busy=true;activityFlow={...activityFlow,error:''};await draw();
+      try{await repository.updateActivity(activityFlow.service.id,draft);pricingServices=await repository.getServices();activityFlow={step:'list',mode:null,input:'',proposal:null,reference:null,error:'',message:'Đã lưu thay đổi.'};}
+      catch(error){activityFlow={...activityFlow,error:error?.message??'Không thể lưu hoạt động.'};}
       finally{busy=false;await draw();}
       return;
     }

@@ -21,6 +21,20 @@ const back = target => `<button type="button" class="activity-back" data-activit
 
 export function renderProviderActivities(services = [], flow = {}) {
   const step = flow.step ?? 'list';
+  if (step === 'edit') {
+    const service = flow.service;
+    if (!service) return renderProviderActivities(services, { ...flow, step: 'list' });
+    return `<main class="provider-activities activity-flow">${back('list')}<div class="activity-page-title">Chỉnh sửa hoạt động</div>
+      <h1>${escapeHtml(service.activityName ?? activityLabels[service.serviceCategory] ?? service.serviceCategory)}</h1>
+      <p>${escapeHtml(service.activityDescription ?? activityDescriptions[service.serviceCategory] ?? 'Dịch vụ được cung cấp trên HOME AI.')}</p>
+      <form class="activity-rate-form activity-edit-form" data-activity-edit-form data-provider-service-id="${escapeHtml(service.id)}">
+        <label>Đơn giá theo giờ <b>*</b><span><input type="number" inputmode="numeric" min="1" max="1000000000" step="1000" value="${Number(service.hourlyRate)}" data-activity-hourly-rate required><em>đ/giờ</em></span></label>
+        <label>Mức phí tối thiểu <b>*</b><span><input type="number" inputmode="numeric" min="0" max="1000000000000" step="1000" value="${Number(service.minimumCharge)}" data-activity-minimum-charge required><em>đ</em></span></label>
+        <label class="activity-enabled"><span><strong>Hoạt động đang bật</strong><small>Tắt để ngừng nhận nhiệm vụ mới cho hoạt động này.</small></span><input type="checkbox" role="switch" data-activity-enabled ${service.enabled ? 'checked' : ''}></label>
+        <button type="submit" data-save-activity ${flow.busy ? 'disabled' : ''}>Lưu thay đổi</button>
+      </form><p class="activity-message" role="status">${escapeHtml(flow.error ?? '')}</p>
+    </main>`;
+  }
   if (step === 'choose') {
     const input = escapeHtml(flow.input ?? '');
     const entry = flow.mode ? `<form class="activity-entry" data-activity-entry>
@@ -73,11 +87,11 @@ export function renderProviderActivities(services = [], flow = {}) {
   }
 
   return `<main class="provider-activities"><p class="activities-kicker">DỊCH VỤ PROVIDER</p><h1>Hoạt động của tôi</h1><p>Đây là các hoạt động bạn cung cấp trên HOME AI.</p>
-    <div class="activity-list">${services.map(service => `<article class="activity-card" data-provider-activity="${escapeHtml(service.serviceCategory)}">
+    <div class="activity-list">${services.map(service => `<button type="button" class="activity-card" data-provider-activity="${escapeHtml(service.id)}">
       <span>${activityIcons[service.serviceCategory] ?? '◆'}</span><div><h2>${escapeHtml(service.activityName ?? activityLabels[service.serviceCategory] ?? service.serviceCategory)}</h2>
       <p>${escapeHtml(service.activityDescription ?? activityDescriptions[service.serviceCategory] ?? 'Dịch vụ được cung cấp trên HOME AI.')}</p>
       <strong>${service.pricingModel === 'hourly' && service.hourlyRate != null ? `${formatMoney(service.hourlyRate)}/giờ` : 'Theo báo giá'}</strong></div>
-      <em>${service.enabled ? '✓ Đã đăng' : 'Bản nháp'}</em></article>`).join('') || '<div class="empty">Bạn chưa có hoạt động nào.</div>'}</div>
+      <em>${service.enabled ? '✓ Đã đăng' : 'Đã tắt'}</em></button>`).join('') || '<div class="empty">Bạn chưa có hoạt động nào.</div>'}</div>
     <button type="button" class="activity-primary" data-add-activity>＋ Thêm hoạt động</button>
     <p class="activity-message" role="status">${escapeHtml(flow.message ?? flow.error ?? '')}</p>
   </main>`;
@@ -99,5 +113,13 @@ export function readProviderActivityPricing(root) {
       && Number.isInteger(hourlyRate) && hourlyRate > 0 && hourlyRate <= 1_000_000_000
       && Number.isInteger(minimumCharge) && minimumCharge >= 0 && minimumCharge <= 1_000_000_000_000,
     hourlyRate, minimumCharge,
+  });
+}
+
+export function readProviderActivityEdit(root) {
+  const pricing = readProviderActivityPricing(root);
+  return Object.freeze({
+    ...pricing,
+    enabled: Boolean(root.querySelector('[data-activity-enabled]')?.checked),
   });
 }

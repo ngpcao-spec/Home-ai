@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { describe, it } from 'node:test';
 import { JSDOM } from 'jsdom';
 import { adaptProviderActivityProposal, analyzeProviderActivity } from '../src/provider/provider-activity-ai.js';
-import { readProviderActivityPricing, renderProviderActivities } from '../src/provider/provider-activities.js';
+import { readProviderActivityEdit, readProviderActivityPricing, renderProviderActivities } from '../src/provider/provider-activities.js';
 import { initialiseProviderApp } from '../src/provider/provider-app.js';
 import { createMockProviderAppRepository } from '../src/provider/provider-repository.js';
 import { createSupabaseOffersRepository } from '../src/supabase/repositories/offers.js';
@@ -75,6 +75,45 @@ describe('Provider activity onboarding', () => {
     } finally { app.stop(); dom.window.close(); }
   });
 
+  it('opens an existing activity with editable pricing and activation', () => {
+    const service = { id:'s1', ...proposal, hourlyRate:300000, minimumCharge:400000, enabled:true };
+    const edit = renderProviderActivities([service], { step:'edit', service });
+    const dom = new JSDOM(edit);
+    const document = dom.window.document;
+    assert.match(document.body.textContent, /Chỉnh sửa hoạt động/);
+    assert.match(document.body.textContent, /Lưu thay đổi/);
+    assert.equal(document.querySelector('[data-activity-hourly-rate]').required, true);
+    assert.equal(document.querySelector('[data-activity-minimum-charge]').required, true);
+    assert.equal(document.querySelector('[data-activity-enabled]').checked, true);
+    document.querySelector('[data-activity-hourly-rate]').value='350000';
+    document.querySelector('[data-activity-minimum-charge]').value='0';
+    document.querySelector('[data-activity-enabled]').checked=false;
+    assert.deepEqual(readProviderActivityEdit(document), {valid:true,hourlyRate:350000,minimumCharge:0,enabled:false});
+    assert.doesNotMatch(edit, /Supprimer|Xóa/);
+    dom.window.close();
+  });
+
+  it('runs activity card → edit → save and refreshes the activity list', async () => {
+    const dom = new JSDOM('<div id="provider-root"></div>', { pretendToBeVisual:true });
+    const root=dom.window.document.querySelector('#provider-root');
+    const repository=createMockProviderAppRepository({provider:{id:'p1',name:'Provider Test'},status:{online:true,available:true},offers:[],assignment:null,
+      services:[{id:'s1',...proposal,hourlyRate:300000,minimumCharge:400000,enabled:true}]});
+    const app=await initialiseProviderApp(root,async()=>repository,async()=>null,
+      {enabled:false,getSession:async()=>null},()=>({sync(){},stop(){}}));
+    try {
+      root.querySelector('[data-provider-view="activities"]').click();await tick();await tick();
+      root.querySelector('[data-provider-activity="s1"]').click();await tick();
+      assert.match(root.textContent,/Chỉnh sửa hoạt động/);
+      root.querySelector('[data-activity-hourly-rate]').value='375000';
+      root.querySelector('[data-activity-minimum-charge]').value='0';
+      root.querySelector('[data-activity-enabled]').checked=false;
+      root.querySelector('[data-save-activity]').click();await tick();await tick();await tick();
+      assert.match(root.textContent,/Đã lưu thay đổi/);
+      assert.match(root.textContent,/375\.000đ\/giờ/);
+      assert.match(root.textContent,/Đã tắt/);
+    } finally { app.stop();dom.window.close(); }
+  });
+
   it('uses only the authenticated Edge Function and aggregate RPC from the browser', async () => {
     const calls = [];
     const client = {
@@ -93,9 +132,13 @@ describe('Provider activity onboarding', () => {
     assert.deepEqual(await repository.getCurrentProviderHourlyRateReference('electricity'),
       { medianHourlyRate: 300000, providerCount: 8, radiusKm: 5 });
     await repository.createCurrentProviderActivity(proposal, { hourlyRate: 300000, minimumCharge: 400000 });
+    await repository.updateCurrentProviderActivity('s1', { hourlyRate: 350000, minimumCharge: 0, enabled: false });
     assert.deepEqual(calls[0], ['function', 'classify-provider-activity',
       { body: { inputMode: 'profession', text: 'Électricien' } }]);
     assert.equal(calls.some(([, , args]) => args && ('provider_id' in args || 'service_role' in args)), false);
+    assert.deepEqual(calls.at(-1), ['rpc', 'update_current_provider_activity', {
+      target_provider_service_id:'s1', new_hourly_rate:350000, new_minimum_charge:0, new_enabled:false,
+    }]);
   });
 
   it('strictly validates the AI contract', () => {
@@ -143,5 +186,21 @@ describe('Provider activity onboarding', () => {
     assert.match(sql, /values\(\s*uid,normalized_category,null,'VND',true,'hourly'/);
     assert.match(sql, /revoke all on function public\.create_current_provider_activity[\s\S]*from public,anon/);
     assert.doesNotMatch(sql, /disable row level security|drop policy|create policy/);
+  });
+
+  it('binds activity edits to auth.uid and preserves immutable historical pricing', async () => {
+    const [sql, historical, dispatch] = await Promise.all([
+      readFile(new URL('../supabase/migrations/20260911000227_edit_provider_activity.sql', import.meta.url), 'utf8'),
+      readFile(new URL('../supabase/migrations/20260911000100_historical_hourly_rate_reference.sql', import.meta.url), 'utf8'),
+      readFile(new URL('../supabase/migrations/20260903001000_realtime_provider_dispatch.sql', import.meta.url), 'utf8'),
+    ]);
+    assert.match(sql, /where id = target_provider_service_id and provider_id = uid/);
+    assert.match(sql, /minimum_charge = new_minimum_charge/);
+    assert.match(sql, /enabled = new_enabled/);
+    assert.doesNotMatch(sql, /update public\.missions|update public\.mission_invoices|disable row level security|create policy|drop policy/);
+    assert.match(historical, /join public\.mission_invoices mi/);
+    assert.doesNotMatch(historical, /join public\.provider_services/);
+    assert.match(dispatch, /svc\.service_category=mission_row\.service_category and svc\.enabled/);
+    assert.match(dispatch, /service_row\.id is null or not service_row\.enabled/);
   });
 });

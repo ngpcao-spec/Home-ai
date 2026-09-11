@@ -87,6 +87,15 @@ export function createSupabaseOffersRepository(supabase) {
       }), 'offers.createCurrentProviderActivity');
       return adaptProviderService(row);
     },
+    async updateCurrentProviderActivity(providerServiceId, { hourlyRate, minimumCharge, enabled }) {
+      const row = unwrap(await client.rpc('update_current_provider_activity', {
+        target_provider_service_id: providerServiceId,
+        new_hourly_rate: Number(hourlyRate),
+        new_minimum_charge: Number(minimumCharge),
+        new_enabled: Boolean(enabled),
+      }), 'offers.updateCurrentProviderActivity');
+      return adaptProviderService(row);
+    },
     async updateProviderLocation({ latitude, longitude }) {
       return unwrap(await client.rpc('update_current_provider_location', {
         new_latitude: latitude, new_longitude: longitude,
