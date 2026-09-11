@@ -49,6 +49,9 @@ insert into storage.objects(bucket_id,name,owner_id) values
    '54000000-0000-0000-0000-000000000001');
 do $$ declare profile jsonb;
 begin
+  if not exists(select 1 from storage.objects where bucket_id='provider-avatars'
+    and name='54000000-0000-0000-0000-000000000001/avatar/54000000-0000-0000-0000-000000000021.jpg') then
+    raise exception 'Provider cannot resolve own avatar for replacement'; end if;
   profile:=public.update_current_provider_professional_profile('Nguyễn Văn A','+84912345678',9,
     'Làm việc cẩn thận.','54000000-0000-0000-0000-000000000001/avatar/54000000-0000-0000-0000-000000000021.jpg');
   if profile->>'avatarPath'<>'54000000-0000-0000-0000-000000000001/avatar/54000000-0000-0000-0000-000000000021.jpg' then
@@ -137,6 +140,9 @@ begin
   if exists(select 1 from storage.objects where bucket_id='provider-kyc'
     and name='provider/54000000-0000-0000-0000-000000000001/identity/front/54000000-0000-0000-0000-000000000020.jpg') then
     raise exception 'Provider B can read Provider A KYC object or sign its URL'; end if;
+  if exists(select 1 from storage.objects where bucket_id='provider-avatars'
+    and name like '54000000-0000-0000-0000-000000000001/%') then
+    raise exception 'Provider B can list Provider A avatars'; end if;
 end $$;
 
 set local "request.jwt.claims"='{"sub":"54000000-0000-0000-0000-000000000004","role":"authenticated"}';
