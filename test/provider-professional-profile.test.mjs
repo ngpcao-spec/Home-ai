@@ -159,24 +159,25 @@ describe('Provider professional profile V1', () => {
   });
 
   it('keeps profile photos separate from KYC and enforces server-side privacy in SQL', async () => {
-    const [migration, sqlTest, providerRepository] = await Promise.all([
+    const [migration, phoneHardening, sqlTest, providerRepository] = await Promise.all([
       readFile(new URL('../supabase/migrations/20260911060203_provider_professional_profile.sql', import.meta.url), 'utf8'),
+      readFile(new URL('../supabase/migrations/20260911120000_mission_calls_foundation.sql', import.meta.url), 'utf8'),
       readFile(new URL('../supabase/tests/018_provider_professional_profile.sql', import.meta.url), 'utf8'),
       readFile(new URL('../src/supabase/repositories/providers.js', import.meta.url), 'utf8'),
     ]);
     assert.match(migration, /values\('provider-avatars','provider-avatars',true/);
     assert.match(migration, /bucket_id='provider-avatars'/);
     assert.match(migration, /\(storage\.foldername\(name\)\)\[1\]=\(select auth\.uid\(\)\)::text/);
-    assert.match(migration, /case when can_view_phone then p\.phone else null end/);
-    assert.match(migration, /m\.client_id=uid and m\.provider_id=target_provider_id/);
-    assert.match(migration, /create or replace function public\.get_profile_phone/);
-    assert.match(migration, /m\.status in \('accepted','travelling','arrived','quote_pending','in_progress'/);
+    assert.match(phoneHardening, /Phone access is disabled/);
+    assert.match(phoneHardening, /revoke all on function public\.get_profile_phone\(uuid\) from public, anon, authenticated/);
+    const hardenedPublicProfile = phoneHardening.match(/create or replace function public\.get_provider_professional_profile[\s\S]*?end;\n\$\$;/i)?.[0] ?? '';
+    assert.doesNotMatch(hardenedPublicProfile, /'phone'|p\.phone/);
     assert.doesNotMatch(migration, /identity_number.*jsonb_build_object\([\s\S]*get_provider_professional_profile/);
     const matchingProjection = providerRepository.match(/const providerColumns = `([\s\S]*?)`;/)?.[1] ?? '';
     assert.doesNotMatch(matchingProjection, /phone/);
     assert.match(sqlTest, /Phone exposed before an accepted mission/);
-    assert.match(sqlTest, /Legacy phone RPC exposed provider before acceptance/);
-    assert.match(sqlTest, /Other customer can see provider phone/);
+    assert.match(sqlTest, /Legacy phone RPC remained executable/);
+    assert.match(sqlTest, /Phone exposed after provider acceptance/);
     assert.match(sqlTest, /KYC bucket became public/);
   });
 });

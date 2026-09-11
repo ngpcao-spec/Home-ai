@@ -95,6 +95,10 @@ export function createSupabaseMissionsRepository(supabase) {
           event: 'INSERT', schema: 'public', table: 'mission_events',
           filter: `mission_id=eq.${missionId}`,
         }, onChange)
+        .on('postgres_changes', {
+          event: '*', schema: 'public', table: 'mission_calls',
+          filter: `mission_id=eq.${missionId}`,
+        }, onChange)
         .subscribe(onStatus);
       return () => client.removeChannel(channel);
     },

@@ -72,7 +72,7 @@ set local "request.jwt.claims"='{"sub":"54000000-0000-0000-0000-000000000003","r
 do $$ declare public_profile jsonb;
 begin
   public_profile:=public.get_provider_professional_profile('54000000-0000-0000-0000-000000000001',null);
-  if public_profile->'phone'<>'null'::jsonb then raise exception 'Phone exposed before an accepted mission'; end if;
+  if public_profile ? 'phone' then raise exception 'Phone exposed before an accepted mission'; end if;
   if public_profile ?| array['identity_number','date_of_birth','residence_address','nationality',
     'documentPath','document_path','ai_extraction'] then
     raise exception 'Private KYC fields exposed'; end if;
@@ -95,7 +95,7 @@ set local "request.jwt.claims"='{"sub":"54000000-0000-0000-0000-000000000003","r
 do $$ declare profile jsonb;
 begin
   profile:=public.get_provider_professional_profile('54000000-0000-0000-0000-000000000001','54000000-0000-0000-0000-000000000011');
-  if profile->'phone'<>'null'::jsonb then raise exception 'Phone exposed before provider acceptance'; end if;
+  if profile ? 'phone' then raise exception 'Phone exposed before provider acceptance'; end if;
   begin
     perform public.get_profile_phone('54000000-0000-0000-0000-000000000001');
     raise exception 'Legacy phone RPC exposed provider before acceptance';
@@ -116,9 +116,12 @@ set local "request.jwt.claims"='{"sub":"54000000-0000-0000-0000-000000000003","r
 do $$ declare profile jsonb;
 begin
   profile:=public.get_provider_professional_profile('54000000-0000-0000-0000-000000000001','54000000-0000-0000-0000-000000000010');
-  if profile->>'phone'<>'+84912345678' then raise exception 'Assigned customer cannot see provider phone'; end if;
-  if public.get_profile_phone('54000000-0000-0000-0000-000000000001')<>'+84912345678' then
-    raise exception 'Assigned customer cannot use existing secure phone RPC'; end if;
+  if profile ? 'phone' then raise exception 'Phone exposed after provider acceptance'; end if;
+  begin
+    perform public.get_profile_phone('54000000-0000-0000-0000-000000000001');
+    raise exception 'Legacy phone RPC remained executable';
+  exception when insufficient_privilege then null;
+  end;
   begin perform phone from public.profiles where user_id='54000000-0000-0000-0000-000000000001';
     raise exception 'Direct phone select was allowed'; exception when insufficient_privilege then null; end;
 end $$;
@@ -149,7 +152,7 @@ set local "request.jwt.claims"='{"sub":"54000000-0000-0000-0000-000000000004","r
 do $$ declare profile jsonb;
 begin
   profile:=public.get_provider_professional_profile('54000000-0000-0000-0000-000000000001','54000000-0000-0000-0000-000000000010');
-  if profile->'phone'<>'null'::jsonb then raise exception 'Other customer can see provider phone'; end if;
+  if profile ? 'phone' then raise exception 'Other customer can see provider phone'; end if;
   begin
     perform public.get_profile_phone('54000000-0000-0000-0000-000000000001');
     raise exception 'Other customer can use legacy phone RPC';
@@ -165,14 +168,14 @@ set local "request.jwt.claims"='{"sub":"54000000-0000-0000-0000-000000000003","r
 do $$ declare profile jsonb;
 begin
   profile:=public.get_provider_professional_profile('54000000-0000-0000-0000-000000000001','54000000-0000-0000-0000-000000000010');
-  if profile->>'phone'<>'+84912345678' then raise exception 'Existing completed-mission contact behavior changed'; end if;
+  if profile ? 'phone' then raise exception 'Phone exposed after mission completion'; end if;
 end $$;
 
 set local "request.jwt.claims"='{"sub":"54000000-0000-0000-0000-000000000004","role":"authenticated"}';
 do $$ declare profile jsonb;
 begin
   profile:=public.get_provider_professional_profile('54000000-0000-0000-0000-000000000001','54000000-0000-0000-0000-000000000010');
-  if profile->'phone'<>'null'::jsonb then raise exception 'Other customer can see phone after mission completion'; end if;
+  if profile ? 'phone' then raise exception 'Other customer can see phone after mission completion'; end if;
   begin
     perform public.get_profile_phone('54000000-0000-0000-0000-000000000001');
     raise exception 'Other customer can use legacy phone RPC after mission completion';

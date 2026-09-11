@@ -23,8 +23,8 @@ export function createSupabaseProfilesRepository(supabase) {
       const userId = await getCurrentUserId();
       return userId ? getById(userId) : null;
     },
-    async getPhone(userId) {
-      const result = await client.rpc('get_profile_phone', { target_user_id: userId });
+    async getPhone() {
+      const result = await client.rpc('get_current_profile_phone');
       return unwrap(result, 'profiles.getPhone');
     },
     async saveCurrent({ name, phone = null, avatarUrl = null }) {
