@@ -74,6 +74,12 @@ export function createMockProviderAppRepository(seed = mockProviderDashboard) {
     },
     async getHistory() { return clone(state.history ?? []); },
     async getServices() { return clone(services); },
+    async getServiceArea() { return { serviceRadiusKm: Number(state.provider?.serviceRadiusKm ?? 20) }; },
+    async setServiceArea(serviceRadiusKm) {
+      if(![5,10,20,30,50].includes(serviceRadiusKm))throw new Error('Invalid service radius');
+      state.provider={...state.provider,serviceRadiusKm};
+      return {serviceRadiusKm};
+    },
     async setServicePricing(serviceCategory, pricing) {
       const index = services.findIndex((service) => service.serviceCategory === serviceCategory);
       if (index < 0) throw new Error('Provider service not found');
@@ -150,6 +156,8 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
       return history.map((mission) => ({ ...mission, clientName: names.get(mission.clientId) ?? null }));
     },
     async getServices() { return repositories.offers.listCurrentProviderServices(initial.provider.id); },
+    async getServiceArea() { return repositories.offers.getCurrentProviderServiceArea(); },
+    async setServiceArea(serviceRadiusKm) { return repositories.offers.setCurrentProviderServiceArea(serviceRadiusKm); },
     async setServicePricing(serviceCategory, pricing) {
       return repositories.offers.setCurrentProviderServicePricing(serviceCategory, pricing);
     },
