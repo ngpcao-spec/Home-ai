@@ -93,6 +93,15 @@ export const serviceCategories = [
   { id: 'appliances', label: 'Điện gia dụng', technician: 'Thợ sửa điện gia dụng', icon: 'plug', prompt: 'Tôi cần sửa thiết bị điện gia dụng' },
 ];
 
+export function getCustomerMissionStatusLabel(status) {
+  if (['requested', 'searching', 'offered'].includes(status)) return 'Đang tìm thợ';
+  if (['accepted', 'travelling', 'arrived', 'quote_pending', 'supplement_pending', 'in_progress'].includes(status)) return 'Thợ đã nhận yêu cầu';
+  if (status === 'completed_pending_payment') return 'Đang chờ xác nhận thanh toán';
+  if (status === 'completed') return 'Đã hoàn thành';
+  if (status === 'cancelled') return 'Đã hủy';
+  return 'Đang cập nhật';
+}
+
 const icons = {
   bolt: '<path d="M13 2 5.8 13h5.7L11 22l7.2-11h-5.7L13 2Z"/>',
   drop: '<path d="M12 2.8S5.5 10 5.5 15a6.5 6.5 0 0 0 13 0C18.5 10 12 2.8 12 2.8Z"/><path d="M9 16.2c.5 1.3 1.4 2 2.8 2.2"/>',
@@ -334,7 +343,7 @@ export function createHomeAiMarkup() {
               <button class="submit-booking" type="submit">Gửi yêu cầu</button><p class="booking-status" data-booking-status role="status" aria-live="polite"></p>
             </form>
           </section>
-          <section class="booking-confirmation" data-booking-confirmation hidden aria-live="polite"><div class="confirmation-check">✓</div><p>YÊU CẦU ĐÃ ĐƯỢC XÁC NHẬN</p><h2 data-confirmation-title>Thợ đã nhận yêu cầu!</h2><div data-confirmation-provider-profile hidden></div><dl><div data-confirmation-mission-row hidden><dt>Mã nhiệm vụ</dt><dd data-confirmation-mission></dd></div><div data-confirmation-state-row hidden><dt>Trạng thái</dt><dd data-confirmation-state></dd></div><div><dt>Thợ</dt><dd data-confirmation-technician></dd></div><div><dt>Thời gian dự kiến đến</dt><dd data-confirmation-arrival></dd></div><div><dt>Địa chỉ</dt><dd data-confirmation-address></dd></div><div><dt>Vấn đề</dt><dd data-confirmation-problem></dd></div><div><dt>Giá tham khảo</dt><dd data-confirmation-estimate></dd></div></dl><div class="confirmation-actions"><button type="button" data-track-technician>Theo dõi thợ</button><button type="button" data-cancel-request>Hủy yêu cầu</button></div><p data-confirmation-status role="status"></p></section>
+          <section class="booking-confirmation" data-booking-confirmation hidden aria-live="polite"><div class="confirmation-check">✓</div><p>YÊU CẦU ĐÃ ĐƯỢC XÁC NHẬN</p><h2 data-confirmation-title>Thợ đã nhận yêu cầu!</h2><div data-confirmation-provider-profile hidden></div><dl><div data-confirmation-state-row hidden><dt>Trạng thái</dt><dd data-confirmation-state></dd></div><div><dt>Thợ</dt><dd data-confirmation-technician></dd></div><div><dt>Thời gian dự kiến đến</dt><dd data-confirmation-arrival></dd></div><div><dt>Địa chỉ</dt><dd data-confirmation-address></dd></div><div><dt>Vấn đề</dt><dd data-confirmation-problem></dd></div><div><dt>Giá tham khảo</dt><dd data-confirmation-estimate></dd></div></dl><div class="confirmation-actions"><button type="button" data-track-technician>Theo dõi thợ</button><button type="button" data-cancel-request>Hủy yêu cầu</button></div><p data-confirmation-status role="status"></p></section>
           </div>
           ${createMissionMarkup()}
         </section>
@@ -1109,10 +1118,8 @@ export function initialiseHomePage(
     confirmation.querySelector('[data-confirmation-address]').textContent = remoteMission?.address ?? bookingForm.elements.address.value;
     confirmation.querySelector('[data-confirmation-problem]').textContent = remoteMission?.problemDescription ?? currentDiagnosis.summary;
     confirmation.querySelector('[data-confirmation-estimate]').textContent = estimate;
-    confirmation.querySelector('[data-confirmation-mission-row]').hidden = !remoteMission;
     confirmation.querySelector('[data-confirmation-state-row]').hidden = !remoteMission;
-    confirmation.querySelector('[data-confirmation-mission]').textContent = remoteMission?.id ?? '';
-    confirmation.querySelector('[data-confirmation-state]').textContent = remoteSearching ? 'Đang tìm thợ' : remoteMission?.status ?? '';
+    confirmation.querySelector('[data-confirmation-state]').textContent = getCustomerMissionStatusLabel(remoteMission?.status);
     const providerProfile = confirmation.querySelector('[data-confirmation-provider-profile]');
     providerProfile.hidden = Boolean(remoteSearching || !selectedTechnician);
     providerProfile.innerHTML = providerProfile.hidden ? ''
@@ -1399,15 +1406,6 @@ export function initialiseHomePage(
       const container = mission.querySelector('[data-assigned-provider-profile]');
       container.hidden = true;
       container.innerHTML = '';
-      return;
-    }
-    if (event.target.closest('[data-tracking-call]')) {
-      const action = mission.querySelector('[data-tracking-action-status]');
-      if (!remoteMissionState) { action.textContent = 'Bản demo: cuộc gọi với thợ sẽ được mở tại đây.'; return; }
-      try {
-        const profile = await technicianRepository.getProfile({ providerId: selectedTechnician.id, missionId: remoteMissionState.mission.id });
-        action.innerHTML = profile.phone ? `<a href="tel:${profile.phone}">Gọi ${profile.phone}</a>` : 'Số điện thoại chưa khả dụng.';
-      } catch { action.textContent = 'Không thể tải số điện thoại.'; }
       return;
     }
     if (event.target.closest('[data-tracking-message]')) {

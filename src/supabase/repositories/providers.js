@@ -22,7 +22,6 @@ export function createSupabaseProvidersRepository(supabase) {
     reviewCount: Number(value.reviewCount) || 0,
     experienceYears: value.experienceYears == null ? null : Number(value.experienceYears),
     introduction: value.introduction ?? '',
-    phone: value.phone ?? null,
     activities: Object.freeze([...(value.activities ?? [])].map(activity => Object.freeze({ ...activity }))),
     reviews: Object.freeze([]),
     professional: true,
@@ -59,16 +58,12 @@ export function createSupabaseProvidersRepository(supabase) {
       });
       return Object.freeze((unwrap(result, 'providers.listMatchingCandidates') ?? []).map(adaptMatchingProviderRow));
     },
-    async getProfessionalProfile(providerId, missionId = null) {
+    async getProfessionalProfile(providerId) {
       const result = await client.rpc('get_provider_professional_profile', {
         target_provider_id: providerId,
-        target_mission_id: missionId,
+        target_mission_id: null,
       });
       return adaptProfessionalProfile(unwrap(result, 'providers.getProfessionalProfile'));
-    },
-    async getAssignedContact(providerId) {
-      const result = await client.rpc('get_profile_phone', { target_user_id: providerId });
-      return Object.freeze({ phone: unwrap(result, 'providers.getAssignedContact') ?? null });
     },
   });
 }

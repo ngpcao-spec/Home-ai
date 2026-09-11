@@ -27,7 +27,6 @@ export function createProviderProfileMarkup(profile, { assigned = false } = {}) 
     </dl>
     <section class="provider-profile-section"><h3>Kỹ năng</h3><ul class="provider-profile-skills">${skills}</ul></section>
     <section class="provider-profile-section"><h3>Giới thiệu</h3><p>${escapeHtml(profile.introduction)}</p></section>
-    ${profile.phone ? `<section class="provider-profile-section provider-profile-phone"><h3>Liên hệ</h3><a href="tel:${escapeHtml(profile.phone)}">Gọi ${escapeHtml(profile.phone)}</a></section>` : ''}
     ${profile.professional ? '' : `<section class="provider-profile-section"><h3>Đánh giá gần đây</h3><div class="provider-profile-reviews">${reviews}</div></section>`}
     <div class="provider-profile-actions">
       ${assigned ? '' : '<button type="button" data-choose-profile-technician>Chọn kỹ thuật viên này</button>'}

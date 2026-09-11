@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { createBookingTechnicianMarkup, createHomeAiMarkup, createMissionMarkup, createProductionConfigErrorMarkup, getEstimatedPriceRange, getProductionSupabaseConfigError, resetCustomerRequestView, serviceCategories, showRestoredCustomerMission } from '../src/app.js';
+import { createBookingTechnicianMarkup, createHomeAiMarkup, createMissionMarkup, createProductionConfigErrorMarkup, getCustomerMissionStatusLabel, getEstimatedPriceRange, getProductionSupabaseConfigError, resetCustomerRequestView, serviceCategories, showRestoredCustomerMission } from '../src/app.js';
 import { createCompletionSummaryMarkup } from '../src/mission/completion-summary.js';
 import { mockTechnicians } from '../src/technicians/mock-technicians.js';
 
@@ -40,9 +40,16 @@ describe('HOME AI C04 marketplace home page', () => {
     const markup = createHomeAiMarkup();
 
     ['Địa chỉ sửa chữa', 'Sử dụng vị trí hiện tại', 'Bạn muốn thợ đến khi nào?', 'Càng sớm càng tốt', 'Đặt lịch', 'Giá dự kiến', 'Gửi yêu cầu', 'Thợ đã nhận yêu cầu!', 'Theo dõi thợ', 'Hủy yêu cầu'].forEach((text) => assert.match(markup, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))));
-    assert.match(markup, /data-confirmation-mission/);
+    assert.doesNotMatch(markup, /Mã nhiệm vụ|data-confirmation-mission/);
     assert.match(markup, /data-confirmation-state/);
     assert.match(markup, /data-confirmation-provider-profile/);
+  });
+
+  it('présente les statuts mission en vietnamien sans exposer leur valeur backend', () => {
+    assert.equal(getCustomerMissionStatusLabel('accepted'), 'Thợ đã nhận yêu cầu');
+    assert.equal(getCustomerMissionStatusLabel('searching'), 'Đang tìm thợ');
+    assert.equal(getCustomerMissionStatusLabel('completed'), 'Đã hoàn thành');
+    assert.notEqual(getCustomerMissionStatusLabel('accepted'), 'accepted');
   });
 
   it('builds a local technician summary and deterministic VND estimate', () => {

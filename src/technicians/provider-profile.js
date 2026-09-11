@@ -55,7 +55,6 @@ export function createProviderProfile(technician) {
     languages: Object.freeze(override.languages ?? ['Tiếng Việt']),
     skills: Object.freeze(override.skills ?? technician.activities?.map(activity=>activity.name).filter(Boolean) ?? category.skills),
     introduction: override.introduction ?? technician.introduction ?? technician.shortDescription ?? '',
-    phone: technician.phone ?? null,
     professional: technician.professional === true,
     reviews: Object.freeze((override.reviews ?? technician.reviews ?? defaultReviews).map((review) => Object.freeze({ ...review }))),
   });

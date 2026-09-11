@@ -15,7 +15,15 @@ export function createAssignedProviderCompactMarkup(technician, { tracking = fal
   const avatar = technician.avatarUrl
     ? `<img src="${escapeHtml(technician.avatarUrl)}" alt="Ảnh đại diện của ${escapeHtml(name)}">`
     : escapeHtml(technician.initials ?? name.split(/\s+/).filter(Boolean).slice(-2).map(part => part[0]).join('').toUpperCase());
-  const activity = technician.activityName ?? technician.specialty ?? technician.shortDescription ?? technician.category;
+  const category = String(technician.category ?? '').trim();
+  const configuredActivity = String(technician.activityName ?? '').trim();
+  const activity = (configuredActivity && configuredActivity.toLowerCase() !== category.toLowerCase())
+    ? configuredActivity : ({
+    electricity: 'Thợ điện',
+    plumbing: 'Thợ sửa ống nước',
+    'air-conditioning': 'Thợ điều hòa',
+    appliances: 'Thợ sửa điện gia dụng',
+  })[category] || (technician.specialty && technician.specialty !== category ? technician.specialty : 'Dịch vụ HOME AI');
   const rating = Number(technician.rating) || 0;
   const reviewCount = Number(technician.reviewCount) || 0;
   return `<article class="assigned-provider-card" data-assigned-provider-summary>
@@ -30,12 +38,7 @@ export function createAssignedProviderCompactMarkup(technician, { tracking = fal
       ${technician.experienceYears == null ? '' : `<div><dt>Kinh nghiệm</dt><dd>${Number(technician.experienceYears)} năm</dd></div>`}
     </dl>
     ${technician.introduction ? `<p class="assigned-provider-introduction">${escapeHtml(technician.introduction)}</p>` : ''}
-    <div class="assigned-provider-contact">
-      ${showProfileAction ? '<button type="button" data-view-assigned-provider-profile>Xem hồ sơ</button>' : ''}
-      ${technician.phone
-        ? `<span><small>Số điện thoại</small><strong>${escapeHtml(technician.phone)}</strong></span><a href="tel:${escapeHtml(technician.phone)}">☎ Gọi điện</a>`
-        : '<span class="assigned-provider-contact-unavailable">Số điện thoại chưa khả dụng.</span>'}
-    </div>
+    ${showProfileAction ? '<div class="assigned-provider-contact"><button type="button" data-view-assigned-provider-profile>Xem hồ sơ</button></div>' : ''}
   </article>`;
 }
 

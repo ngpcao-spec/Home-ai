@@ -29,17 +29,25 @@ export function createAssignedCustomerTechnician(provider, mission) {
   if (!provider || !mission?.providerId || providerId !== mission.providerId
       || getCustomerDispatchState({ mission }).phase !== 'accepted') return null;
   const missionActivity = provider.activities?.find(({ serviceCategory }) => serviceCategory === mission.serviceCategory);
+  const configuredActivityName = String(missionActivity?.name ?? '').trim();
+  const activityName = (configuredActivityName && configuredActivityName.toLowerCase() !== mission.serviceCategory.toLowerCase())
+    ? configuredActivityName : ({
+    electricity: 'Thợ điện',
+    plumbing: 'Thợ sửa ống nước',
+    'air-conditioning': 'Thợ điều hòa',
+    appliances: 'Thợ sửa điện gia dụng',
+  })[mission.serviceCategory] || 'Dịch vụ HOME AI';
   const name = provider.name || 'Đối tác HOME AI';
   return Object.freeze({
     ...provider,
     id: providerId,
     initials: name.split(/\s+/).filter(Boolean).slice(-2).map((part) => part[0]).join('').toUpperCase(),
     category: mission.serviceCategory,
-    categoryLabel: missionActivity?.name ?? provider.specialty,
-    activityName: missionActivity?.name ?? provider.specialty,
+    categoryLabel: activityName,
+    activityName,
     activityDescription: missionActivity?.description ?? null,
-    specialty: missionActivity?.name ?? provider.specialty,
-    shortDescription: provider.introduction || missionActivity?.description || provider.description || provider.specialty,
+    specialty: activityName,
+    shortDescription: provider.introduction || missionActivity?.description || provider.description || activityName,
     verified: provider.verified === true,
     availability: 'Đã nhận nhiệm vụ',
     estimatedArrivalMinutes: null,
@@ -176,12 +184,7 @@ export function createCustomerMissionSynchronizer({
     const assigned = mission.providerId && getCustomerDispatchState({ mission }).phase === 'accepted';
     const loadAssignedProvider = () => {
       if (!assigned) return null;
-      if (typeof providerRepository.getProfessionalProfile === 'function') {
-        return Promise.all([
-          providerRepository.getProfessionalProfile(mission.providerId),
-          providerRepository.getAssignedContact?.(mission.providerId),
-        ]).then(([profile, contact]) => Object.freeze({ ...profile, phone: contact?.phone ?? null }));
-      }
+      if (typeof providerRepository.getProfessionalProfile === 'function') return providerRepository.getProfessionalProfile(mission.providerId);
       return providerRepository.getById(mission.providerId);
     };
     const [provider, quotes, offers, providerLocation, review, invoice] = await Promise.all([

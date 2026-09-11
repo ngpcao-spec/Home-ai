@@ -89,17 +89,24 @@ it('loads the mission-scoped professional profile only after server acceptance',
           rating: 5, reviewCount: 4, experienceYears: 7, introduction: 'Thợ điện dân dụng.',
           activities: [{ serviceCategory: 'electricity', name: 'Thợ điện' }] };
       },
-      getAssignedContact: async providerId => { calls.push(['contact', providerId]); return { phone: '+84901234567' }; },
     },
   });
   assert.equal((await sync.load('m1')).provider, null);
   assert.deepEqual(calls, []);
   mission = { ...mission, status: 'accepted', providerId: 'p1', serviceCategory: 'electricity', version: 2 };
   const snapshot = await sync.load('m1');
-  assert.deepEqual(calls, [['profile', 'p1'], ['contact', 'p1']]);
+  assert.deepEqual(calls, [['profile', 'p1']]);
   const technician = createAssignedCustomerTechnician(snapshot.provider, mission);
   assert.equal(technician.activityName, 'Thợ điện');
-  assert.equal(technician.phone, '+84901234567');
+  assert.equal(technician.phone, undefined);
   assert.equal(technician.experienceYears, 7);
   assert.equal(technician.introduction, 'Thợ điện dân dụng.');
+});
+
+it('replaces technical activity identifiers with customer-facing Vietnamese labels', () => {
+  const provider = { id: 'p1', name: 'Provider', activities: [{ serviceCategory: 'electricity', name: 'electricity' }] };
+  const mission = { id: 'm1', providerId: 'p1', status: 'accepted', serviceCategory: 'electricity' };
+  const technician = createAssignedCustomerTechnician(provider, mission);
+  assert.equal(technician.activityName, 'Thợ điện');
+  assert.notEqual(technician.activityName, mission.serviceCategory);
 });

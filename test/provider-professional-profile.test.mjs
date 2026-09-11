@@ -129,13 +129,12 @@ describe('Provider professional profile V1', () => {
     assert.deepEqual(calls, [['save', 'p1/avatar/new.jpg'], ['delete', 'p1/avatar/old.jpg']]);
   });
 
-  it('requests a safe client profile and only renders the phone when returned by the backend', async () => {
+  it('requests only the public client profile and never renders or requests the provider phone', async () => {
     const calls = [];
     const client = {
       from() { return {}; },
       rpc: async (name, args) => {
         calls.push([name, args]);
-        if (name === 'get_profile_phone') return { data: '+84912345678', error: null };
         return { data: {
           providerId: 'p1', name: 'Provider A', avatarPath: null, verified: true,
           ratingAverage: 4.8, reviewCount: 12, experienceYears: 7, introduction: 'Điện dân dụng',
@@ -151,12 +150,12 @@ describe('Provider professional profile V1', () => {
     assert.doesNotMatch(beforeMarkup, /tel:/);
     assert.doesNotMatch(beforeMarkup, /Khu vực phục vụ|Ngôn ngữ|Đánh giá gần đây/);
     const after = await repository.getProfessionalProfile('p1', 'm1');
-    const contact = await repository.getAssignedContact('p1');
     const afterMarkup = createProviderProfileMarkup(createProviderProfile({ id: 'p1', category: 'electricity', ...after }));
-    assert.match(afterMarkup, /tel:\+84912345678/);
-    assert.equal(contact.phone, '+84912345678');
+    assert.equal(after.phone, undefined);
+    assert.doesNotMatch(afterMarkup, /\+84912345678|Số điện thoại|href="tel:/);
     assert.deepEqual(calls[0], ['get_provider_professional_profile', { target_provider_id: 'p1', target_mission_id: null }]);
-    assert.deepEqual(calls.at(-1), ['get_profile_phone', { target_user_id: 'p1' }]);
+    assert.equal(calls.length, 2);
+    assert.equal(calls.some(([name]) => name === 'get_profile_phone'), false);
   });
 
   it('keeps profile photos separate from KYC and enforces server-side privacy in SQL', async () => {
