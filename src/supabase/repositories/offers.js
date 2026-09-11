@@ -11,6 +11,15 @@ const adaptProviderService = (row) => Object.freeze({
   minimumCharge: row.minimum_charge == null ? null : Number(row.minimum_charge), currency: row.currency, enabled: row.enabled,
 });
 
+const encodeFileBase64 = async (file) => {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = '';
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  }
+  return globalThis.btoa(binary);
+};
+
 export function createSupabaseOffersRepository(supabase) {
   const client = requireSupabaseClient(supabase);
   return Object.freeze({
@@ -56,6 +65,16 @@ export function createSupabaseOffersRepository(supabase) {
       unwrap(await client.storage.from('provider-kyc').upload(path, file, { cacheControl: '0', contentType: format.contentType, upsert: false }), 'offers.uploadProviderIdentity');
       unwrap(await client.functions.invoke('analyze-provider-identity', { body: { documentPath: path } }), 'offers.analyzeProviderIdentity');
       return Object.freeze({ ...(unwrap(await client.rpc('get_current_provider_kyc_state'), 'offers.getCurrentProviderKycState') ?? {}) });
+    },
+    async previewCurrentProviderIdentity(file) {
+      const format = getProviderKycFileFormat(file);
+      if (!format || !file.size || file.size > 8388608) throw new Error('Invalid KYC image');
+      const value = unwrap(await client.functions.invoke('analyze-provider-identity', { body: {
+        testPreview: true, contentType: format.contentType, imageBase64: await encodeFileBase64(file),
+      } }), 'offers.previewProviderIdentity');
+      return Object.freeze({ provider: null, submission: Object.freeze({
+        id: 'test-preview', status: 'draft', documentPath: null, extraction: value.extraction,
+      }) });
     },
     async createCurrentProviderKycSignedUrl(documentPath) {
       const value = unwrap(await client.storage.from('provider-kyc').createSignedUrl(documentPath, 300), 'offers.createProviderKycSignedUrl');

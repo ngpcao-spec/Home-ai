@@ -11,9 +11,15 @@ export const providerKycSchema = { type: 'object', additionalProperties: false,
 
 const object = (value: unknown): value is Record<string, unknown> => Boolean(value)&&typeof value==='object'&&!Array.isArray(value);
 export function validateProviderKycRequest(value: unknown, providerId: string) {
-  if(!object(value)||Object.keys(value).length!==1||typeof value.documentPath!=='string'
-    ||!new RegExp(`^provider/${providerId}/identity/front/[0-9a-f-]{36}\\.(jpg|jpeg|png|webp|heic|heif)$`).test(value.documentPath)) throw new Error('INVALID_INPUT');
-  return {documentPath:value.documentPath};
+  if(!object(value))throw new Error('INVALID_INPUT');
+  if(Object.keys(value).length===1&&typeof value.documentPath==='string'
+    &&new RegExp(`^provider/${providerId}/identity/front/[0-9a-f-]{36}\\.(jpg|jpeg|png|webp|heic|heif)$`).test(value.documentPath))return {kind:'stored' as const,documentPath:value.documentPath};
+  const allowedTypes=['image/jpeg','image/png','image/webp','image/heic','image/heif'];
+  if(Object.keys(value).sort().join(',')!=='contentType,imageBase64,testPreview'||value.testPreview!==true
+    ||typeof value.contentType!=='string'||!allowedTypes.includes(value.contentType)
+    ||typeof value.imageBase64!=='string'||value.imageBase64.length<4||value.imageBase64.length>11184812
+    ||!/^[A-Za-z0-9+/]+={0,2}$/.test(value.imageBase64))throw new Error('INVALID_INPUT');
+  return {kind:'test-preview' as const,contentType:value.contentType,imageBase64:value.imageBase64};
 }
 export function validateProviderKycExtraction(value: unknown) {
   if(!object(value)||typeof value.documentReadable!=='boolean'||!object(value.fields)

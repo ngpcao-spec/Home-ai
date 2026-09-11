@@ -4,6 +4,7 @@ import { mockProviderDashboard } from './mock-provider-data.js';
 const clone = (value) => structuredClone(value);
 export function createMockProviderAppRepository(seed = mockProviderDashboard) {
   let state = clone(seed);
+  let kycState = { provider: { ...clone(seed.provider), kycStatus: seed.provider?.kycStatus ?? 'verified' }, submission: null };
   let availabilityPreferences = clone(seed.availabilityPreferences ?? { mode: 'manual', available24h: false, weeklySchedule: [] });
   let services = clone(seed.services ?? [{
     id: 'provider-service-demo', providerId: seed.provider?.id ?? 'provider-demo',
@@ -13,6 +14,11 @@ export function createMockProviderAppRepository(seed = mockProviderDashboard) {
   }]);
   return Object.freeze({
     source: 'mock', async load() { return clone(state); },
+    async loadKyc() { return clone(kycState); },
+    async uploadIdentity() { throw new Error('KYC unavailable in demo mode'); },
+    async previewIdentity() { throw new Error('KYC preview unavailable in demo mode'); },
+    async getIdentityPreview() { return ''; },
+    async confirmKyc() { throw new Error('KYC unavailable in demo mode'); },
     async setAvailability(next) { state.status = { ...state.status, ...next }; return clone(state); },
     async updateLocation(position) { state.status = { ...state.status, ...position, lastLocationAt: new Date().toISOString() }; return clone(state); },
     async accept(offerId) {
@@ -148,6 +154,11 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
   };
   return Object.freeze({
     source: 'supabase', load: loadDashboard,
+    async loadKyc() { return repositories.offers.getCurrentProviderKycState(); },
+    async uploadIdentity(file) { return repositories.offers.uploadAndAnalyzeCurrentProviderIdentity(file); },
+    async previewIdentity(file) { return repositories.offers.previewCurrentProviderIdentity(file); },
+    async getIdentityPreview(documentPath) { return repositories.offers.createCurrentProviderKycSignedUrl(documentPath); },
+    async confirmKyc(submissionId, fields) { return repositories.offers.confirmCurrentProviderKycSubmission(submissionId, fields); },
     subscribeDispatch(onChange, onStatus) {
       return repositories.offers.subscribeProviderDispatch(initial.provider.id, onChange, onStatus);
     },

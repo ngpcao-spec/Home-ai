@@ -12,7 +12,7 @@ import { readProviderPricingForm, renderProviderPricing } from './provider-prici
 import { readProviderActivityEdit, readProviderActivityInput, readProviderActivityPricing, renderProviderActivities } from './provider-activities.js';
 import { readProviderServiceArea, renderProviderServiceArea, updateProviderServiceAreaPreview } from './provider-service-area.js';
 import { readProviderAvailabilitySchedule, renderProviderAvailabilitySchedule, syncProviderAvailabilityScheduleForm } from './provider-availability-schedule.js';
-import { readProviderKycForm, renderProviderKyc, validateProviderKycFile } from './provider-kyc.js';
+import { readProviderKycForm, renderProviderKyc, renderProviderKycProfileSection, validateProviderKycFile } from './provider-kyc.js';
 
 function ensureDispatchStyles(documentRef = globalThis.document) {
   if (!documentRef?.head || documentRef.querySelector?.('[data-provider-dispatch-styles]')) return;
@@ -36,6 +36,7 @@ export const isProviderTestArrivalEnabled=(runtimeConfig,provider)=>runtimeConfi
   && runtimeConfig?.PROVIDER_TEST_PROVIDER_ID===TEST_ARRIVAL_PROVIDER_ID
   && provider?.id===TEST_ARRIVAL_PROVIDER_ID
   && provider?.name===TEST_ARRIVAL_PROVIDER_NAME;
+export const isProviderTestKycPreviewEnabled=isProviderTestArrivalEnabled;
 function renderQuoteWorkflow(assignment, { diagnosing=false, busy=false, supplementParent=null, billing=false }={}) {
   if (assignment.status === 'completed_pending_payment') {
     const finalAmount = assignment.finalAuthorizedAmount ?? assignment.quote?.totalAmount;
@@ -110,28 +111,35 @@ export function renderProviderStartupError(safeStage = 'STARTUP') {
   return `<main class="provider-auth" data-provider-startup-error><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><h1>Không thể khởi động ứng dụng</h1><p>Vui lòng tải lại trang. Nếu lỗi vẫn còn, hãy cung cấp mã chẩn đoán bên dưới.</p><small data-provider-error-stage>Mã: ${esc(safeStage)}</small><button type="button" data-provider-reload>Tải lại</button></main>`;
 }
 
-export async function initialiseProviderKycFlow(root, repository) {
-  let state=await repository.loadKyc();let stage=state.submission?.status==='draft'?'confirm':'capture';let previewUrl='';let error='';let busy=false;
+export async function initialiseProviderKycFlow(root, repository, { testMode=false, showBack=false, onClose=null }={}) {
+  let state=await repository.loadKyc();let stage=state.submission?.status==='draft'?'confirm':'capture';let previewUrl='';let error='';let busy=false;let localPreviewUrl='';
+  if(testMode){state={provider:state.provider,submission:null};stage='capture';}
+  const releasePreview=()=>{if(localPreviewUrl){globalThis.URL?.revokeObjectURL?.(localPreviewUrl);localPreviewUrl='';}};
   const loadPreview=async()=>{if(state.submission?.documentPath)try{previewUrl=await repository.getIdentityPreview(state.submission.documentPath);}catch{previewUrl='';}};
   if(stage==='confirm')await loadPreview();
-  const draw=()=>{root.innerHTML=renderProviderKyc(state,{stage,previewUrl,error,busy});};draw();
-  root.addEventListener('change',async event=>{
+  const draw=()=>{root.innerHTML=renderProviderKyc(state,{stage,previewUrl,error,busy,testMode,showBack});};
+  const close=()=>{releasePreview();root.removeEventListener('change',handleChange);root.removeEventListener('click',handleClick);onClose?.();};
+  const handleChange=async event=>{
     const input=event.target.closest?.('[data-provider-kyc-file]');if(!input||busy)return;
     const file=input.files?.[0];if(!validateProviderKycFile(file)){error='Vui lòng chọn ảnh JPG, PNG, WebP, HEIC hoặc HEIF dưới 8 MB.';draw();return;}
     busy=true;stage='analyzing';error='';draw();
-    try{state=await repository.uploadIdentity(file);stage='confirm';await loadPreview();}
-    catch{stage='capture';error='Không thể đọc rõ CCCD. Vui lòng chụp lại toàn bộ thẻ, đủ sáng và không phản chiếu.';}
+    try{
+      state=testMode?await repository.previewIdentity(file):await repository.uploadIdentity(file);stage='confirm';
+      if(testMode){releasePreview();try{localPreviewUrl=globalThis.URL?.createObjectURL?.(file)??'';}catch{localPreviewUrl='';}previewUrl=localPreviewUrl;}else await loadPreview();
+    }catch{stage='capture';error='Không thể đọc rõ CCCD. Vui lòng chụp lại toàn bộ thẻ, đủ sáng và không phản chiếu.';}
     finally{busy=false;draw();}
-  });
-  root.addEventListener('click',async event=>{
+  };
+  const handleClick=async event=>{
+    if(event.target.closest?.('[data-close-provider-kyc]')){event.preventDefault?.();close();return;}
     if(!event.target.closest?.('[data-confirm-provider-kyc]')||busy)return;event.preventDefault?.();
     const draft=readProviderKycForm(root);if(!draft.valid){error='Vui lòng kiểm tra họ tên, số CCCD và ngày sinh.';draw();return;}
     busy=true;error='';draw();
-    try{state=await repository.confirmKyc(state.submission.id,draft.fields);stage='capture';}
+    try{if(testMode)stage='test_complete';else{state=await repository.confirmKyc(state.submission.id,draft.fields);stage='capture';}}
     catch(cause){error=cause?.message??'Không thể gửi hồ sơ xác minh.';stage='confirm';}
     finally{busy=false;draw();}
-  });
-  return {getState:()=>structuredClone(state)};
+  };
+  root.addEventListener('change',handleChange);root.addEventListener('click',handleClick);draw();
+  return {getState:()=>structuredClone(state),stop:close};
 }
 
 export async function initialiseProviderApp(root, repositoryLoader=createProgressiveProviderAppRepository, navigationLoader=prepareProviderNavigation, auth=createProviderGoogleAuth(), heartbeatFactory=createProviderLocationHeartbeat, locationAccess={classifyError:classifyGeolocationError,getState:getLocationPermissionState,mount:mountLocationPermissionGate,request:requestCurrentPosition,geolocation:globalThis.navigator?.geolocation},runtimeConfig=globalThis.__HOME_AI_CONFIG__) {
@@ -147,11 +155,12 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   const openDashboard=async()=>{
   let busy=false; let message=''; let navigation=null;let navigationLoading=false;let navigationError=''; let diagnosing=false; let editingMissionId=null; let supplementParent=null;let billingMissionId=null;let confirmingAcceptance=false;
   let currentView='home'; let history=[]; let historyLoading=false; let historyError=''; let selectedMissionId=null;
-  let pricingServices=[];let serviceArea=null;let availabilityPreferences=null;let pricingLoading=false;let pricingError='';let pricingMessage='';let serviceAreaMessage='';let availabilityMessage='';
+  let pricingServices=[];let serviceArea=null;let availabilityPreferences=null;let kycState=null;let pricingLoading=false;let pricingError='';let pricingMessage='';let serviceAreaMessage='';let availabilityMessage='';
   let activityFlow={step:'list',mode:null,input:'',proposal:null,reference:null,error:'',message:''};
   let priorityOfferId=repository.source==='supabase' ? state.offers?.[0]?.id ?? null : null;
   const page=root.ownerDocument??globalThis.document;
   const providerTestMode=isProviderTestArrivalEnabled(runtimeConfig,state.provider);
+  const providerTestKycMode=isProviderTestKycPreviewEnabled(runtimeConfig,state.provider);
   const offerAlert=createProviderOfferAlert();
   offerAlert.prepare();
   const offerLayer=createIncomingOfferLayer(root);
@@ -181,7 +190,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
       return;
     }
     if(currentView==='profile'){
-      root.innerHTML=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0]??'P')}</button></header>${renderProviderServiceArea(serviceArea,{loading:pricingLoading,error:pricingError,message:serviceAreaMessage,busy})}${renderProviderAvailabilitySchedule(availabilityPreferences,{loading:pricingLoading,error:pricingError,message:availabilityMessage,busy})}${renderProviderPricing(pricingServices,{loading:pricingLoading,error:pricingError,message:pricingMessage,busy})}${renderProviderNav('profile')}`;
+      root.innerHTML=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0]??'P')}</button></header>${renderProviderKycProfileSection(kycState,{loading:pricingLoading,error:pricingError,testMode:providerTestKycMode})}${renderProviderServiceArea(serviceArea,{loading:pricingLoading,error:pricingError,message:serviceAreaMessage,busy})}${renderProviderAvailabilitySchedule(availabilityPreferences,{loading:pricingLoading,error:pricingError,message:availabilityMessage,busy})}${renderProviderPricing(pricingServices,{loading:pricingLoading,error:pricingError,message:pricingMessage,busy})}${renderProviderNav('profile')}`;
       return;
     }
     if(currentView==='activities'){
@@ -192,6 +201,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   };
   const loadHistory=async()=>{historyLoading=true;historyError='';await renderDashboard();try{history=prepareProviderHistory(await repository.getHistory(),state.provider.id);}catch(error){history=[];historyError=error?.message??'Lỗi không xác định';}finally{historyLoading=false;await renderDashboard();}};
   const loadPricing=async()=>{pricingLoading=true;pricingError='';await renderDashboard();try{[pricingServices,serviceArea,availabilityPreferences]=await Promise.all([repository.getServices(),repository.getServiceArea(),repository.getAvailabilityPreferences()]);}catch(error){pricingServices=[];serviceArea=null;availabilityPreferences=null;pricingError=error?.message??'Lỗi không xác định';}finally{pricingLoading=false;await renderDashboard();}};
+  const loadProfile=async()=>{pricingLoading=true;pricingError='';await renderDashboard();try{[pricingServices,serviceArea,availabilityPreferences,kycState]=await Promise.all([repository.getServices(),repository.getServiceArea(),repository.getAvailabilityPreferences(),repository.loadKyc()]);}catch(error){pricingServices=[];serviceArea=null;availabilityPreferences=null;kycState=null;pricingError=error?.message??'Lỗi không xác định';}finally{pricingLoading=false;await renderDashboard();}};
   const canSendQuote=()=>state.assignment?.id===editingMissionId
     && state.assignment.status==='arrived'
     && state.assignment.pricing?.pricingModel!=='hourly'
@@ -253,13 +263,21 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
     if(!e.target.closest('[data-accept]')&&!e.target.closest('[data-decline]'))void offerAlert.unlock().then(updateAudioControl);
     if(e.target.closest('[data-retry-provider-navigation]')){if(navigationLoading)return;void loadNavigation().then(draw);await draw();return;}
     const view=e.target.closest('[data-provider-view]');
-    if(view){currentView=view.dataset.providerView;selectedMissionId=null;if(currentView==='missions'||currentView==='income')await loadHistory();else if(currentView==='profile'||currentView==='activities'){if(currentView==='activities')activityFlow={step:'list',mode:null,input:'',proposal:null,reference:null,error:'',message:''};await loadPricing();}else await draw();return;}
+    if(view){currentView=view.dataset.providerView;selectedMissionId=null;if(currentView==='missions'||currentView==='income')await loadHistory();else if(currentView==='profile')await loadProfile();else if(currentView==='activities'){activityFlow={step:'list',mode:null,input:'',proposal:null,reference:null,error:'',message:''};await loadPricing();}else await draw();return;}
     const mission=e.target.closest('[data-history-mission]');if(mission){selectedMissionId=mission.dataset.historyMission;await draw();return;}
     if(e.target.closest('[data-history-back]')){selectedMissionId=null;await draw();return;}
     if(e.target.closest('[data-history-retry]')){await loadHistory();return;}
     if(e.target.closest('[data-pricing-retry]')){await loadPricing();return;}
     if(e.target.closest('[data-service-area-retry]')){await loadPricing();return;}
     if(e.target.closest('[data-availability-retry]')){await loadPricing();return;}
+    const openKyc=e.target.closest('[data-open-provider-kyc]');
+    const openKycTest=e.target.closest('[data-open-provider-kyc-test]');
+    if(openKyc||openKycTest){
+      if(openKycTest&&!providerTestKycMode)return;
+      const testMode=Boolean(openKycTest);
+      await initialiseProviderKycFlow(root,repository,{testMode,showBack:true,onClose:async()=>{kycState=await repository.loadKyc();await draw();}});
+      return;
+    }
     if(e.target.closest('[data-save-availability]')){
       e.preventDefault?.();if(busy)return;
       const draft=readProviderAvailabilitySchedule(root);
