@@ -23,7 +23,9 @@ export async function deriveStringeeUserId(authUserId, identitySecret) {
     throw new Error('INVALID_AUTH_USER_ID');
   }
   const digest = await sign(`home-ai:stringee-user:v1:${authUserId.toLowerCase()}`, requireSecret(identitySecret, 'STRINGEE_IDENTITY_SECRET'));
-  return `ha_${Array.from(digest.slice(0, 20), byte => byte.toString(16).padStart(2, '0')).join('')}`;
+  // Keep the opaque identity within 32 characters: the live Stringee gateway
+  // rejects the previous 43-character identity with USER_ID_TOO_LONG.
+  return `ha_${Array.from(digest.slice(0, 14), byte => byte.toString(16).padStart(2, '0')).join('')}`;
 }
 
 export async function createStringeeAccessToken({
@@ -36,7 +38,7 @@ export async function createStringeeAccessToken({
 }) {
   const sid = requireSecret(apiSid, 'STRINGEE_API_SID_KEY');
   const secret = requireSecret(apiSecret, 'STRINGEE_API_SECRET_KEY');
-  if (!/^ha_[0-9a-f]{40}$/.test(stringeeUserId ?? '')) throw new Error('INVALID_STRINGEE_USER_ID');
+  if (!/^ha_[0-9a-f]{28}$/.test(stringeeUserId ?? '')) throw new Error('INVALID_STRINGEE_USER_ID');
   if (!Number.isInteger(nowSeconds) || !Number.isInteger(ttlSeconds) || ttlSeconds < 60 || ttlSeconds > 3600) {
     throw new Error('INVALID_TOKEN_LIFETIME');
   }

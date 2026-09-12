@@ -13,7 +13,7 @@ export function createMissionCallRepository(client) {
 }
 
 function validateTokenResponse(value, requiresPeer) {
-  const identity = /^ha_[0-9a-f]{40}$/;
+  const identity = /^ha_[0-9a-f]{28}$/;
   if (!value || typeof value.accessToken !== 'string' || value.accessToken.split('.').length !== 3
       || !identity.test(value.userId) || !Number.isInteger(value.expiresAt)) {
     throw new Error('Invalid Stringee token response');

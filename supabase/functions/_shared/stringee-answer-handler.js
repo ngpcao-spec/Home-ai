@@ -1,7 +1,7 @@
 import { deriveStringeeUserId } from './stringee-token.js';
 import { verifyStringeeRequestSignature } from './stringee-signature.js';
 
-const opaqueIdentityPattern = /^ha_[0-9a-f]{40}$/;
+const opaqueIdentityPattern = /^ha_[0-9a-f]{28}$/;
 const opaqueRoomPattern = /^call_[0-9a-f]{32}$/;
 const callableMissionStatuses = new Set([
   'accepted', 'travelling', 'arrived', 'quote_pending', 'in_progress',

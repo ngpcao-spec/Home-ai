@@ -133,14 +133,15 @@ class FakeCall extends Emitter {
 }
 
 const sdk = { StringeeClient: FakeClient, StringeeCall: FakeCall };
-const token = (role, userId = `ha_${'a'.repeat(40)}`, peerUserId = `ha_${'b'.repeat(40)}`) => ({
+const token = (role, userId = `ha_${'a'.repeat(28)}`, peerUserId = `ha_${'b'.repeat(28)}`) => ({
   accessToken: 'header.payload.signature', userId, peerUserId, participantRole: role, expiresAt: 2_000_000_000,
 });
 
 describe('Stringee App-to-App audio foundation', () => {
   it('creates stable opaque identities and a short Stringee HS256 client token', async () => {
     const userId = await deriveStringeeUserId(authUserA, identitySecret);
-    assert.match(userId, /^ha_[0-9a-f]{40}$/);
+    assert.match(userId, /^ha_[0-9a-f]{28}$/);
+    assert.equal(userId.length, 31, 'Stringee identities must stay below the gateway length limit');
     assert.equal(userId, await deriveStringeeUserId(authUserA, identitySecret));
     assert.notEqual(userId, await deriveStringeeUserId(authUserB, identitySecret));
     assert.doesNotMatch(userId, /59000000|@|\+84/);
@@ -157,6 +158,17 @@ describe('Stringee App-to-App audio foundation', () => {
     });
     assert.ok(signaturePart.length > 20);
     assert.equal(issued.expiresAt, 1_800_000_900);
+  });
+
+  it('rejects the legacy 43-character identity that the live Stringee gateway refused', async () => {
+    await assert.rejects(createStringeeAccessToken({
+      apiSid, apiSecret, stringeeUserId: `ha_${'a'.repeat(40)}`,
+    }), /INVALID_STRINGEE_USER_ID/);
+    const provider = createStringeeTokenProvider({ functions: { invoke: async () => ({
+      data: { accessToken: 'header.payload.signature', userId: `ha_${'a'.repeat(40)}`, expiresAt: 2_000_000_000 },
+      error: null,
+    }) } });
+    await assert.rejects(provider.issue(), /Invalid Stringee token response/);
   });
 
   it('requires Supabase auth, validates HOME AI membership and exposes no Stringee secret', async () => {
@@ -211,8 +223,8 @@ describe('Stringee App-to-App audio foundation', () => {
     const body = await response.json();
     assert.equal(response.status, 200);
     assert.match(body.accessToken, /^[^.]+\.[^.]+\.[^.]+$/);
-    assert.match(body.userId, /^ha_[0-9a-f]{40}$/);
-    assert.match(body.peerUserId, /^ha_[0-9a-f]{40}$/);
+    assert.match(body.userId, /^ha_[0-9a-f]{28}$/);
+    assert.match(body.peerUserId, /^ha_[0-9a-f]{28}$/);
     assert.notEqual(body.userId, body.peerUserId);
     assert.equal(body.participantRole, 'caller');
     assert.deepEqual(logs, [
@@ -313,8 +325,8 @@ describe('Stringee App-to-App audio foundation', () => {
       decline: async id => { operations.push(`decline:${id}`); return { ...missionCall, status: 'declined' }; },
       end: async id => { operations.push(`end:${id}`); return { ...missionCall, status: 'ended' }; },
     };
-    const self = `ha_${'b'.repeat(40)}`;
-    const peer = `ha_${'a'.repeat(40)}`;
+    const self = `ha_${'b'.repeat(28)}`;
+    const peer = `ha_${'a'.repeat(28)}`;
     const tokens = { issue: async id => id ? token('callee', self, peer) : token(undefined, self) };
     const audio = createStringeeAudioClient({ sdk, missionCalls: authority, tokens });
     await audio.connect();
