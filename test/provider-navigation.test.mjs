@@ -89,7 +89,8 @@ describe('navigation Provider App après acceptation', () => {
     const html=renderProviderDashboard(state,{source:'supabase',navigation});
     for(const text of ['Chi tiết nhiệm vụ','Vị trí của bạn','Mất điện trong nhà','Vĩnh Hải, Nha Trang','2.1 km','ETA 6 phút','Mở bản đồ','BẮT ĐẦU DI CHUYỂN'])assert.match(html,new RegExp(text));
     assert.match(html,/maps\.apple\.com\/\?daddr=12\.25,109\.19/);
-    assert.doesNotMatch(html,/Gọi khách hàng|Nhắn tin|Giá tham khảo/);
+    assert.match(html,/Gọi khách hàng/);
+    assert.doesNotMatch(html,/Nhắn tin|Giá tham khảo/);
   });
 
   it('affiche uniquement un prix réellement accepté et le statut travelling', () => {

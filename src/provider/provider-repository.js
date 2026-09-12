@@ -169,6 +169,17 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
   };
   return Object.freeze({
     source: 'supabase', load: loadDashboard,
+    callServices: repositories.missionCalls && repositories.stringeeTokens ? {
+      userId:data.user.id,missionCalls:repositories.missionCalls,tokens:repositories.stringeeTokens,
+    } : null,
+    async getCallSnapshot(assignment) {
+      if (!assignment?.id || !repositories.missionCalls) return {mission:assignment,currentCall:null};
+      const [mission,currentCall] = await Promise.all([
+        repositories.missions.getById(assignment.id),repositories.missionCalls.current(assignment.id),
+      ]);
+      const peer = mission?.clientId ? await repositories.profiles.getById(mission.clientId) : null;
+      return {mission,currentCall,peer,callLoaded:true};
+    },
     async getProfessionalProfile() { return repositories.offers.getCurrentProviderProfessionalProfile(); },
     async saveProfessionalProfile(profile) {
       const current = await repositories.offers.getCurrentProviderProfessionalProfile();

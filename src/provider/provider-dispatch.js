@@ -138,7 +138,7 @@ export function notifyIncomingOffer(environment = globalThis) {
 }
 
 export function createProviderDispatchController({
-  repository, getState, onState, onOffer = () => {}, onError = () => {},
+  repository, getState, onState, onRefresh = () => {}, onOffer = () => {}, onError = () => {},
   scheduleTask = globalThis.setTimeout, clearTask = globalThis.clearTimeout,
   intervalMs = 2500, isPageActive = () => true,
 }) {
@@ -150,7 +150,7 @@ export function createProviderDispatchController({
       const changed = JSON.stringify(next) !== JSON.stringify(getState());
       const incoming = (next.offers ?? []).find(({ id }) => !knownOfferIds.has(id));
       knownOfferIds = new Set((next.offers ?? []).map(({ id }) => id));
-      if (!stopped) { if (changed) onState(next); if (incoming) onOffer(incoming); }
+      if (!stopped) { onRefresh(next); if (changed) onState(next); if (incoming) onOffer(incoming); }
     } catch (error) { if (!stopped) onError(error); }
   };
   const refresh = () => {

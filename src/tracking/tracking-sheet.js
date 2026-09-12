@@ -1,3 +1,4 @@
+import { createMissionCallButton } from '../calls/call-manager.js';
 const formatDistance = (distanceKm) => distanceKm < 1
   ? `${Math.round(distanceKm * 1000)} m`
   : `${distanceKm.toFixed(1)} km`;
@@ -38,6 +39,7 @@ export function createAssignedProviderCompactMarkup(technician, { tracking = fal
       ${technician.experienceYears == null ? '' : `<div><dt>Kinh nghiệm</dt><dd>${Number(technician.experienceYears)} năm</dd></div>`}
     </dl>
     ${technician.introduction ? `<p class="assigned-provider-introduction">${escapeHtml(technician.introduction)}</p>` : ''}
+    ${createMissionCallButton(technician.callMission,'customer',Boolean(technician.callMission))}
     ${showProfileAction ? '<div class="assigned-provider-contact"><button type="button" data-view-assigned-provider-profile>Xem hồ sơ</button></div>' : ''}
   </article>`;
 }

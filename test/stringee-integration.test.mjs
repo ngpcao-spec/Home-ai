@@ -362,6 +362,22 @@ describe('Stringee App-to-App audio foundation', () => {
   });
 });
 
+describe('foreground incoming media protection', () => {
+  it('keeps early/late incoming audio, deduplicates SDK events and unmutes only after authorized answer', async () => {
+    const missionCall={id:'incoming-media',mission_id:'mission-media',status:'ringing',room_name:`call_${'8'.repeat(32)}`,expires_at:new Date(Date.now()+45000).toISOString()};
+    const streams=[];
+    const transport=createStringeeAudioClient({sdk,missionCalls:{current:async()=>missionCall,answer:async()=>({...missionCall,status:'active'}),end:async()=>({...missionCall,status:'ended'})},tokens:{issue:async()=>token('callee')},onRemoteStream:stream=>streams.push(stream)});
+    await transport.connect();const client=FakeClient.last;const call=new FakeCall(client,`ha_${'b'.repeat(28)}`,`ha_${'a'.repeat(28)}`,false);
+    client.emit('incomingcall',call);
+    const track={enabled:true};call.emit('addlocalstream',{getAudioTracks:()=>[track]});assert.equal(track.enabled,false);
+    const early={getAudioTracks:()=>[]};call.emit('addremotestream',early);assert.equal(streams.length,0);
+    await transport.authorizeIncoming('mission-media');assert.deepEqual(streams,[early]);
+    client.emit('incomingcall',call);await transport.answerIncoming('mission-media');assert.equal(track.enabled,true);
+    const lateTrack={enabled:false};call.emit('addlocalstream',{getAudioTracks:()=>[lateTrack]});assert.equal(lateTrack.enabled,true);
+    const late={getAudioTracks:()=>[]};call.emit('addremotestream',late);assert.deepEqual(streams,[early,late]);transport.disconnect();
+  });
+});
+
 describe('Stringee signed Answer URL', () => {
   it('verifies the public URI when Supabase forwards a rewritten worker path', async () => {
     const fixture = await ringingAnswerFixture();

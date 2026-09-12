@@ -1,0 +1,22 @@
+[data-mission-call-layer]:empty { display: none; }
+.mission-call-screen { position: fixed; inset: 0; z-index: 2147483647; min-height: 100dvh; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding: max(28px, env(safe-area-inset-top)) 24px max(28px, env(safe-area-inset-bottom)); background: radial-gradient(circle at 50% 25%, #126d58, #052c26 70%); color: #fff; font-family: inherit; text-align: center; overflow: auto; }
+.mission-call-screen h2 { color: #fff; font-size: 28px; margin: 0; }
+.mission-call-screen p { margin: 0; color: #d3ebe3; }
+.mission-call-avatar { width: 116px; height: 116px; border-radius: 50%; background: #dcf1e9; color: #006f55; display: grid; place-items: center; font-size: 42px; overflow: hidden; box-shadow: 0 0 0 12px #ffffff0b; }
+.mission-call-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.mission-call-actions { display: flex; gap: 16px; width: min(100%, 440px); margin-top: 36px; }
+.mission-call-screen button { font: inherit; font-weight: 700; min-height: 64px; padding: 16px 18px; border-radius: 22px; border: 0; cursor: pointer; touch-action: manipulation; }
+.mission-call-actions button { flex: 1; color: #fff; background: #00a676; }
+.mission-call-actions [data-call-action="decline"], .mission-call-actions [data-call-action="end"] { background: #eb3346; }
+.mission-call-screen [data-call-action="mute"] { background: #ffffff18; color: #fff; }
+.mission-call-screen [data-call-action="audio"] { min-height: 44px; background: transparent; color: #d3ebe3; font-size: 14px; }
+.mission-call-screen button:disabled { opacity: .5; cursor: wait; }
+.mission-call-screen [hidden] { display: none !important; }
+.mission-call-error { color: #ffe3b4 !important; max-width: 360px; }
+.mission-call-duration { font-variant-numeric: tabular-nums; font-size: 22px; }
+.mission-call-start { border-radius: 16px; padding: 12px 20px; background: #e0f3ec; color: #006f55; font: inherit; font-weight: 700; border: 1px solid #b7dfcf; min-height: 48px; }
+.mission-call-start:disabled { opacity: .55; }
+.mission-call-notice { position: fixed; bottom: max(90px, env(safe-area-inset-bottom)); left: 24px; right: 24px; z-index: 2147482999; padding: 14px; border-radius: 16px; background: #fff4df; color: #563d19; font: inherit; box-shadow: 0 8px 30px #0002; }
+.mission-call-screen[data-phase="incoming"] .mission-call-avatar { animation: mission-call-ring 1.8s ease-in-out infinite; }
+@keyframes mission-call-ring { 50% { box-shadow: 0 0 0 22px #ffffff08, 0 0 38px #1cd69a55; } }
+@media (prefers-reduced-motion: reduce) { .mission-call-screen[data-phase="incoming"] .mission-call-avatar { animation: none; } }

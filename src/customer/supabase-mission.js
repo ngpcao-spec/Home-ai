@@ -130,6 +130,7 @@ export async function connectSupabaseCustomerMissions({
       repository: repositories.missions,
       providerRepository: repositories.providers,
       activeMission,
+      callServices: repositories.missionCalls && repositories.stringeeTokens ? {userId, missionCalls:repositories.missionCalls,tokens:repositories.stringeeTokens} : null,
     });
   } catch (error) {
     return Object.freeze({ source: 'error', reason: 'repository-error', error });
@@ -146,6 +147,7 @@ export async function restoreActiveCustomerMission(connection, {
     missionRepository: connection.repository,
     providerRepository: connection.providerRepository,
     scheduleTask,
+    missionCalls:connection.callServices?.missionCalls,
   });
   return Object.freeze({
     synchronizer,
@@ -174,6 +176,7 @@ export function createCustomerMissionSynchronizer({
   scheduleTask = globalThis.setTimeout,
   clearTask = globalThis.clearTimeout,
   intervalMs = 3000,
+  missionCalls = null,
 }) {
   if (!missionRepository || !providerRepository) throw new TypeError('Supabase mission and provider repositories are required');
   let dispatchPromise;
@@ -196,7 +199,11 @@ export function createCustomerMissionSynchronizer({
       missionRepository.getInvoice?.(mission.id) ?? null,
     ]);
     if (assigned && !provider) throw new Error('Prestataire assigné introuvable');
-    return Object.freeze({ mission, provider, quotes, offers, providerLocation, review, invoice });
+    let currentCall = null; let callError = false;
+    if (missionCalls && assigned) {
+      try { currentCall = await missionCalls.current(mission.id); } catch { callError = true; }
+    }
+    return Object.freeze({ mission, provider, quotes, offers, providerLocation, review, invoice, currentCall, callError });
   };
 
   const create = (draft, { replaceMission = null } = {}) => {

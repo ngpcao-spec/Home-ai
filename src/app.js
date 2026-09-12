@@ -1,3 +1,4 @@
+import { getGlobalCallManager } from './calls/call-manager.js';
 import { createMockDiagnostic } from './diagnostic/mock-diagnostic.js';
 import { createSupabaseAiDiagnostic } from './diagnostic/supabase-ai-diagnostic.js';
 import { getSupabaseBrowserClient } from './supabase/client.js';
@@ -547,6 +548,8 @@ export function initialiseHomePage(
   let missionRepository;
   let providerRepository;
   let missionConnection;
+  let callManager;
+  let missionCallServices;
   let missionSynchronizer;
   let remoteMissionState;
   let supabaseMissionMode = false;
@@ -589,14 +592,17 @@ export function initialiseHomePage(
   const ensureSupabaseMissionBackend = async () => {
     missionConnection ??= customerMissionConnector({ verifiedUserId: verifiedCustomerUserId });
     const connection = await missionConnection;
+    if(connection.source==='supabase')missionCallServices=connection.callServices;
     if (connection.source !== 'supabase') {
       if (verifiedCustomerUserId) missionConnection = undefined;
       return connection;
     }
     supabaseMissionMode = true;
+    missionCallServices = connection.callServices;
+    if (missionCallServices) callManager ??= getGlobalCallManager({documentRef:root.ownerDocument,role:'customer',...missionCallServices});
     missionRepository = connection.repository;
     providerRepository = connection.providerRepository;
-    missionSynchronizer ??= createCustomerMissionSynchronizer({ missionRepository, providerRepository, scheduleTask });
+    missionSynchronizer ??= createCustomerMissionSynchronizer({ missionRepository, providerRepository, scheduleTask, missionCalls:connection.callServices?.missionCalls });
     return connection;
   };
   const renderCustomerProfile = () => {
@@ -827,6 +833,7 @@ export function initialiseHomePage(
     root.querySelector('[data-location-label]').textContent = clientLocation.source === 'browser' ? 'Vị trí hiện tại' : 'Đang dùng vị trí mặc định · Nha Trang';
     missionConnection ??= customerMissionConnector({ verifiedUserId: verifiedCustomerUserId });
     const connection = await missionConnection;
+    if(connection.source==='supabase')missionCallServices=connection.callServices;
     if (connection.source === 'error') {
       search.querySelector('[data-search-progress]').hidden = true;
       search.querySelector('#map-search-title').textContent = 'Không thể tạo nhiệm vụ';
@@ -844,6 +851,7 @@ export function initialiseHomePage(
         missionRepository = connection.repository;
         missionSynchronizer ??= createCustomerMissionSynchronizer({
           missionRepository,
+          missionCalls:connection.callServices?.missionCalls,
           providerRepository: connection.providerRepository,
           scheduleTask,
         });
@@ -1140,9 +1148,12 @@ export function initialiseHomePage(
     const wasAssigned = remoteMissionState && getCustomerDispatchState(remoteMissionState).phase === 'accepted';
     remoteMissionState = snapshot;
     persistedMission = snapshot.mission;
+    if (missionCallServices) callManager ??= getGlobalCallManager({documentRef:root.ownerDocument,role:'customer',...missionCallServices});
+    callManager?.observe({mission:snapshot.mission,peer:snapshot.provider,currentCall:snapshot.currentCall,callLoaded:!snapshot.callError,callEvent:snapshot.dispatchEvent?.new});
+    if(snapshot.callError)callManager?.reportError('Không thể đồng bộ cuộc gọi. Vui lòng thử lại.');
     const assignedTechnician = createAssignedCustomerTechnician(snapshot.provider, snapshot.mission);
     const dispatchState = getCustomerDispatchState(snapshot);
-    selectedTechnician = dispatchState.phase === 'accepted' ? assignedTechnician : null;
+    selectedTechnician = dispatchState.phase === 'accepted' ? (assignedTechnician && {...assignedTechnician, callMission:missionCallServices ? {id:snapshot.mission.id,status:snapshot.mission.status} : null}) : null;
     missionState = createCustomerMissionStateFromServer(snapshot);
     if (reviewDraft && missionState.reviewStage === 'rating' && !missionState.reviewSent) {
       missionState = { ...missionState, ...reviewDraft };
@@ -1180,18 +1191,21 @@ export function initialiseHomePage(
     root.querySelector('[data-booking-status]').textContent = 'Đang gửi yêu cầu đến thợ...';
     missionConnection ??= customerMissionConnector();
     const connection = await missionConnection;
+    if(connection.source==='supabase')missionCallServices=connection.callServices;
     if (connection.source === 'error') {
       submit.disabled = false;
       root.querySelector('[data-booking-status]').textContent = 'Không thể lưu nhiệm vụ. Vui lòng thử lại.';
       return;
     }
     if (connection.source === 'supabase') {
+      missionCallServices=connection.callServices;
       try {
         supabaseMissionMode = true;
         missionRepository = connection.repository;
         providerRepository = connection.providerRepository;
         missionSynchronizer = createCustomerMissionSynchronizer({
           missionRepository,
+          missionCalls:connection.callServices?.missionCalls,
           providerRepository,
           scheduleTask,
         });
@@ -1672,6 +1686,7 @@ export function initialiseHomePage(
       return;
     }
     if (event.target.closest('[data-profile-logout]')) {
+      callManager?.dispose();callManager=undefined;missionCallServices=undefined;
       stopMissionPolling?.();
       stopMissionRealtime?.();
       stopMissionPolling = undefined;
