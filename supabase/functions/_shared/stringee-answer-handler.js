@@ -14,7 +14,11 @@ const fail = (status, code) => json(status, { error: { code } });
 
 function requestUri(request) {
   const url = new URL(request.url);
-  return `${url.pathname}${url.search}`;
+  // Supabase's gateway strips /functions/v1 before forwarding to the worker.
+  // Stringee signs the public REQUEST_URI, not this internal runtime path.
+  const path = url.pathname === '/stringee-answer'
+    ? '/functions/v1/stringee-answer' : url.pathname;
+  return `${path}${url.search}`.replace(/ /g, '%20');
 }
 
 function parseAnswerRequest(request) {
@@ -33,6 +37,12 @@ function parseAnswerRequest(request) {
 
 export function createStringeeAnswerHandler({ createClient, getEnv, logger = console, now = () => Date.now() }) {
   return async request => {
+    const fail = (status, code) => {
+      logger.info(JSON.stringify({ component: 'stringee-answer', event: 'request_rejected', code,
+        signaturePresent: Boolean(request.headers.get('X-STRINGEE-SIGNATURE')),
+        gatewayPathRewritten: new URL(request.url).pathname === '/stringee-answer' }));
+      return json(status, { error: { code } });
+    };
     if (request.method !== 'GET') return fail(405, 'METHOD_NOT_ALLOWED');
 
     const signingSecret = getEnv('STRINGEE_SIGNING_SECRET_KEY') ?? '';
@@ -46,7 +56,9 @@ export function createStringeeAnswerHandler({ createClient, getEnv, logger = con
     } catch {
       return fail(503, 'STRINGEE_CONFIGURATION_ERROR');
     }
-    if (!signatureValid) return fail(403, 'INVALID_STRINGEE_SIGNATURE');
+    if (!signatureValid) {
+      return fail(403, 'INVALID_STRINGEE_SIGNATURE');
+    }
 
     let input;
     try { input = parseAnswerRequest(request); }
@@ -62,6 +74,8 @@ export function createStringeeAnswerHandler({ createClient, getEnv, logger = con
       .select('id,status,expires_at,caller_user_id,callee_user_id,mission:missions!inner(status)')
       .eq('room_name', input.custom).maybeSingle();
     const missionStatus = Array.isArray(missionCall?.mission) ? missionCall.mission[0]?.status : missionCall?.mission?.status;
+    if (error) logger.info(JSON.stringify({ component: 'stringee-answer', event: 'lookup_failed',
+      databaseCode: /^[A-Z0-9]{5,12}$/.test(error.code ?? '') ? error.code : 'UNKNOWN' }));
     if (error || !missionCall) return fail(403, 'CALL_NOT_AUTHORIZED');
     if (missionCall.status !== 'ringing' || new Date(missionCall.expires_at).getTime() <= now()
         || !callableMissionStatuses.has(missionStatus)) {

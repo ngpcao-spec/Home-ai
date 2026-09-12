@@ -363,6 +363,16 @@ describe('Stringee App-to-App audio foundation', () => {
 });
 
 describe('Stringee signed Answer URL', () => {
+  it('verifies the public URI when Supabase forwards a rewritten worker path', async () => {
+    const fixture = await ringingAnswerFixture();
+    const publicRequest = await signedAnswerRequest(fixture);
+    const workerUrl = publicRequest.url.replace('/functions/v1/stringee-answer', '/stringee-answer');
+    const response = await answerHandlerFor(fixture.missionCall)(new Request(workerUrl, { headers: publicRequest.headers }));
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('Content-Type'), 'application/json');
+    assert.equal((await response.json())[0].to.type, 'internal');
+  });
+
   it('accepts an official HMAC-SHA1 signature and returns only App-to-App SCCO', async () => {
     const fixture = await ringingAnswerFixture();
     const logs = [];
@@ -428,6 +438,7 @@ describe('Stringee signed Answer URL', () => {
     const logs = [];
     const response = await answerHandlerFor(fixture.missionCall, logs)(await signedAnswerRequest(fixture));
     assert.equal(response.status, 409);
-    assert.deepEqual(logs, []);
+    assert.deepEqual(logs, [{ component: 'stringee-answer', event: 'request_rejected',
+      code: 'CALL_NOT_RINGING', signaturePresent: true, gatewayPathRewritten: false }]);
   });
 });
