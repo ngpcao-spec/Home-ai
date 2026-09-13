@@ -41,10 +41,10 @@ describe('navigation Provider App après acceptation', () => {
     await assert.rejects(repository.updateMissionProgress(accepted.assignment.id, 'travelling', accepted.assignment.clientLocation), /Invalid/);
   });
 
-  it('n’active Tôi đã đến que dans le rayon d’arrivée', () => {
+  it('permet une arrivée même hors du rayon GPS', () => {
     const state = { provider:{name:'Minh'}, status:{online:true,available:false}, offers:[], assignment:{id:'m1',serviceCategory:'electricity',request:'Test',address:'Adresse assignée',status:'travelling'} };
     const base = { route:{distanceKm:1,durationMinutes:4}, providerLocation:{latitude:12.2,longitude:109.2} };
-    assert.match(renderProviderDashboard(state,{navigation:{...base,arrived:false}}), /data-mark-arrived disabled/);
+    assert.doesNotMatch(renderProviderDashboard(state,{navigation:{...base,arrived:false}}), /data-mark-arrived disabled/);
     assert.doesNotMatch(renderProviderDashboard(state,{navigation:{...base,arrived:true}}), /data-mark-arrived disabled/);
     assert.equal(ARRIVAL_RADIUS_KM, .15);
   });

@@ -225,7 +225,8 @@ export function createSupabaseOffersRepository(supabase) {
         new_latitude: latitude, new_longitude: longitude,
       }), 'offers.updateProviderLocation');
     },
-    async updateProviderMissionProgress(missionId, status, { latitude, longitude }) {
+    async updateProviderMissionProgress(missionId, status, location) {
+      const { latitude = null, longitude = null } = location ?? {};
       return unwrap(await client.rpc('update_current_provider_mission_progress', {
         target_mission_id: missionId, new_status: status,
         new_latitude: latitude, new_longitude: longitude,

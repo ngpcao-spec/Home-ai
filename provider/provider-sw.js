@@ -7,7 +7,7 @@ const OFFLINE_ASSETS = new Set([
   '../src/provider/provider-quote.css', '../src/provider/provider-dispatch.css', '../src/location/location-permission.css',
   '../src/provider/provider-activities.css',
   '../src/provider/provider-app.js', '../src/provider/provider-dispatch.js', '../src/provider/provider-repository.js',
-  '../src/provider/provider-navigation.js', '../src/provider/provider-auth.js', '../src/provider/provider-location-heartbeat.js',
+  '../src/provider/provider-navigation.js', '../src/provider/provider-arrival.js', '../src/provider/provider-auth.js', '../src/provider/provider-location-heartbeat.js',
   '../src/provider/provider-activities.js', '../src/provider/provider-activity-ai.js',
   '../src/provider/provider-rating.js',
   '../src/chat/mission-chat.js', '../src/chat/mission-chat-repository.js', '../src/chat/mission-chat.css', '../src/calls/call-manager.js', '../src/calls/stringee-client.js', '../src/calls/stringee-sdk.js',
