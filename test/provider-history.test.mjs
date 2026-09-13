@@ -13,6 +13,27 @@ const completed = {
 };
 
 describe('Provider history and income', () => {
+  it('uses persisted invoices before the mission projection, preserves legacy amounts and avoids duplicate missions on reload', () => {
+    const hourly = { ...completed, id: 'hourly', finalAuthorizedAmount: 300000,
+      invoice: { totalAmount: 625000, hourlyRate: 300000, minimumCharge: 400000, workedMinutes: 95, laborAmount: 475000, materialAmount: 150000 } };
+    const rows = [hourly, hourly, completed, { ...hourly, id: 'foreign', providerId: 'other-provider' }];
+    for (let reload = 0; reload < 2; reload += 1) {
+      const history = prepareProviderHistory(structuredClone(rows), completed.providerId);
+      assert.deepEqual(calculateProviderIncome(history), { missionCount: 2, total: 925000, currency: 'VND' });
+      assert.equal(history.find(({ id }) => id === 'hourly').finalAmount, 625000);
+      assert.match(renderProviderIncome(history), /625\.000đ/);
+    }
+  });
+
+  it('never falls back to mock when Supabase has no session or rejects authentication/history', async () => {
+    const factory = (authResult) => () => ({ enabled: true, client: { auth: { getUser: async () => authResult } } });
+    await assert.rejects(createProgressiveProviderAppRepository({}, undefined, factory({ data: { user: null }, error: null })), /Supabase authentication required/);
+    await assert.rejects(createProgressiveProviderAppRepository({}, undefined, factory({ data: {}, error: new Error('Auth unavailable') })), /Auth unavailable/);
+    const html = renderProviderIncome([], { error: 'History unavailable' });
+    assert.match(html, /Không thể tải thu nhập Supabase/);
+    assert.doesNotMatch(html, /income-total|income-row/);
+  });
+
   it('keeps only completed missions owned by the authenticated provider and sorts newest first', () => {
     const history = prepareProviderHistory([
       { ...completed, id: 'older', completedAt: '2026-09-01T00:00:00Z' },

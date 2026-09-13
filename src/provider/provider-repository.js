@@ -144,7 +144,7 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
   if (!repositories.enabled) return fallback;
   const { data, error } = await repositories.client.auth.getUser();
   if (error) throw error;
-  if (!data?.user) return fallback;
+  if (!data?.user) throw new Error('Supabase authentication required');
   const initialKyc = typeof repositories.offers.getCurrentProviderKycState === 'function'
     ? await repositories.offers.getCurrentProviderKycState() : null;
   if (initialKyc && !initialKyc.provider?.id) throw new Error('Authenticated provider is not provisioned');

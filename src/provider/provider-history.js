@@ -7,8 +7,13 @@ const money = (value, currency = 'VND') => `${new Intl.NumberFormat('vi-VN').for
 const date = (value) => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium' }).format(new Date(value)) : '—';
 
 export function prepareProviderHistory(rows = [], providerId) {
-  return rows.filter((mission) => mission?.providerId === providerId && mission.status === 'completed').map((mission) => Object.freeze({
-    ...mission, finalAmount: Number(mission.finalAuthorizedAmount) || 0,
+  const seen = new Set();
+  return rows.filter((mission) => {
+    if (mission?.providerId !== providerId || mission.status !== 'completed' || seen.has(mission.id)) return false;
+    seen.add(mission.id);
+    return true;
+  }).map((mission) => Object.freeze({
+    ...mission, finalAmount: Number(mission.invoice?.totalAmount ?? mission.finalAuthorizedAmount) || 0,
     completedAt: mission.completedAt ?? mission.requestedAt,
   })).sort((left, right) => new Date(right.completedAt).getTime() - new Date(left.completedAt).getTime());
 }
