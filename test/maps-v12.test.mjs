@@ -53,7 +53,7 @@ describe('architecture cartographique V1.2', () => {
       getSource(id) { return this.sources.get(id); }
       addLayer(layer) { this.layers.push(layer); }
       setPaintProperty() {}
-      fitBounds() {}
+      fitBounds() { this.fitCount=(this.fitCount??0)+1; }
       remove() { this.removed = true; }
     }
     class FakeMarker {
@@ -87,6 +87,10 @@ describe('architecture cartographique V1.2', () => {
       assert.deepEqual(provider.getProviderMarkerSnapshot('p1').position,{latitude:12.247,longitude:109.192});
       assert.equal(provider.getProviderMarkerSnapshot('p1').moves,1);
       assert.equal(provider.getProviderMarkerSnapshot('p1').markerCount,1);
+      const routeSource=maps[1].sources.get('route');const layerCount=maps[1].layers.length;const fitCount=maps[1].fitCount;
+      provider.setRoute([{latitude:12.247,longitude:109.192},clientLocation],{fit:false});
+      assert.equal(maps[1].sources.get('route'),routeSource);
+      assert.equal(maps[1].layers.length,layerCount);assert.equal(maps[1].fitCount,fitCount);
       assert.equal(maps.length, 2);
     } finally {
       globalThis.maplibregl = previousMapLibre;

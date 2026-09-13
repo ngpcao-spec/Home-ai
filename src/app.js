@@ -394,6 +394,7 @@ export function initialiseHomePage(
   customerProfileLoader = loadSupabaseCustomerProfile,
   customerMissionConnector = connectSupabaseCustomerMissions,
   customerAuth = createGoogleCustomerAuth(),
+  trackingOptions = {},
 ) {
   root.innerHTML = createHomeAiMarkup();
   const startupFlow = root.querySelector('[data-startup-flow]');
@@ -562,7 +563,9 @@ export function initialiseHomePage(
   let stopMissionPolling;
   let stopMissionRealtime;
   let trackingRoute;
-  let remoteTrackingGeneration = 0;
+  let remoteTrackingSession = null;
+  const remoteRouteRefreshMs = trackingOptions.routeRefreshMs ?? 15000;
+  const trackingNow = trackingOptions.now ?? Date.now;
   const trackingRoutes = createTrackingRouteSession(routingProvider);
   const getCurrentMissionRecord = () => createCompletedMissionRecord(missionState, {
     problem: persistedMission?.problemDescription ?? currentDiagnosis?.summary ?? '',
@@ -1021,7 +1024,7 @@ export function initialiseHomePage(
           matchedTechnicians = [];
           clientLocation = undefined;
           trackingRoute = undefined;
-          remoteTrackingGeneration += 1;
+          remoteTrackingSession = null;
           trackingRoutes.reset();
           missionBookedAt = undefined;
           missionState = createMissionState();
@@ -1147,9 +1150,8 @@ export function initialiseHomePage(
     if (remoteMissionState?.mission.id === snapshot.mission.id
         && remoteMissionState.mission.version > snapshot.mission.version) return;
     snapshot = preserveNewestProviderLocation(remoteMissionState, snapshot);
-    const businessSnapshot = value => JSON.stringify({...value,messages:undefined,messageError:undefined,dispatchEvent:undefined});
-    const chatOnlyUpdate = missionChatServices && remoteMissionState
-      && (!snapshot.dispatchEvent || snapshot.dispatchEvent.table === 'mission_messages')
+    const businessSnapshot = value => JSON.stringify({...value,providerLocation:undefined,messages:undefined,messageError:undefined,dispatchEvent:undefined});
+    const businessUnchanged = remoteMissionState
       && businessSnapshot(remoteMissionState) === businessSnapshot(snapshot);
     const reviewDraft = remoteMissionState?.mission.id === snapshot.mission.id && !missionState.reviewSent
       ? { rating: missionState.rating, reviewComment: mission.querySelector('[data-review-comment]')?.value ?? missionState.reviewComment }
@@ -1162,8 +1164,12 @@ export function initialiseHomePage(
     chatManager?.observe(snapshot);
     callManager?.observe({mission:snapshot.mission,peer:snapshot.provider,currentCall:snapshot.currentCall,callLoaded:!snapshot.callError,callEvent:snapshot.dispatchEvent?.new});
     if(snapshot.callError)callManager?.reportError('Không thể đồng bộ cuộc gọi. Vui lòng thử lại.');
-    // Message changes update only the document-owned chat, preserving mission DOM.
-    if(chatOnlyUpdate)return;
+    // Chat/call managers above own their DOM. GPS deltas and unchanged fallback
+    // polls keep the mission DOM and MapLibre instance mounted.
+    if(businessUnchanged){
+      if(snapshot.mission.status==='travelling'&&snapshot.providerLocation)void syncRemoteTrackingMap(snapshot);
+      return;
+    }
     const assignedTechnician = createAssignedCustomerTechnician(snapshot.provider, snapshot.mission);
     const dispatchState = getCustomerDispatchState(snapshot);
     selectedTechnician = dispatchState.phase === 'accepted' ? (assignedTechnician && {...assignedTechnician, chatMission:missionChatServices ? {id:snapshot.mission.id,status:snapshot.mission.status} : null, callMission:missionCallServices ? {id:snapshot.mission.id,status:snapshot.mission.status} : null}) : null;
@@ -1307,41 +1313,86 @@ export function initialiseHomePage(
         void startTrackingMap();
       }
       else {
-        remoteTrackingGeneration++;
+        remoteTrackingSession = null;
         stopLocationStream?.();
         stopLocationStream = undefined;
       }
     }
   };
+  const isCurrentRemoteTracking = (session) => session
+    && remoteTrackingSession===session
+    && remoteMissionState?.mission.id===session.missionId
+    && remoteMissionState.mission.status==='travelling'
+    && session.container?.isConnected
+    && !mission.hidden;
+  const refreshRemoteTrackingRoute = (session, snapshot) => {
+    if(session.routePromise)return session.routePromise;
+    session.routeRequestedAt=trackingNow();
+    const requestRecordedAt=snapshot.providerLocation?.recordedAt;
+    session.routePromise=(async()=>{
+      try{
+        const tracking=await prepareSupabaseTracking(snapshot,trackingRoutes);
+        if(!isCurrentRemoteTracking(session)||remoteTrackingSession.latestRecordedAt!==requestRecordedAt)return;
+        updateTrackingPresentation(session.stage,tracking.position);
+        mission.querySelector('[data-mission-arrival]').textContent=tracking.position.near?'< 1 phút':`${tracking.position.etaMinutes} phút`;
+        if(tracking.route?.points?.length)mapProvider.setRoute?.(tracking.route.points,{fit:false});
+      }catch{
+        if(isCurrentRemoteTracking(session)&&!session.initialized){
+          session.stage.querySelector('[data-tracking-status]').textContent='Chưa thể cập nhật GPS hoặc tuyến đường';
+          session.stage.querySelector('[data-tracking-eta]').textContent='Chưa có dữ liệu';
+          session.stage.querySelector('[data-tracking-distance]').textContent='Chưa có dữ liệu';
+        }
+      }finally{if(remoteTrackingSession===session)session.routePromise=null;}
+    })();
+    return session.routePromise;
+  };
+  const syncRemoteTrackingMap = async (snapshot) => {
+    if(snapshot?.mission.status!=='travelling'||!snapshot.providerLocation)return;
+    const stage=mission.querySelector('[data-mission-stage]');
+    const container=stage?.querySelector('[data-tracking-map]');
+    if(!container)return;
+    if(!remoteTrackingSession||remoteTrackingSession.missionId!==snapshot.mission.id||remoteTrackingSession.container!==container){
+      remoteTrackingSession={missionId:snapshot.mission.id,providerId:snapshot.mission.providerId,container,stage,initialized:false,initializing:null,routePromise:null,routeRequestedAt:0,latestRecordedAt:null};
+    }
+    const session=remoteTrackingSession;
+    session.latestRecordedAt=snapshot.providerLocation.recordedAt;
+    try{await mapProviderReady;}catch{
+      stage.querySelector('[data-tracking-status]').textContent='Chưa thể tải bản đồ';
+      return;
+    }
+    if(!isCurrentRemoteTracking(session))return;
+    if(session.initialized){
+      mapProvider.moveProvider(session.providerId,snapshot.providerLocation);
+      if(trackingNow()-session.routeRequestedAt>=remoteRouteRefreshMs)void refreshRemoteTrackingRoute(session,snapshot);
+      return;
+    }
+    if(session.initializing)return session.initializing;
+    const initialSnapshot=snapshot;
+    session.initializing=(async()=>{
+      try{
+        const tracking=await prepareSupabaseTracking(initialSnapshot,trackingRoutes);
+        if(!isCurrentRemoteTracking(session))return;
+        updateTrackingPresentation(stage,tracking.position);
+        stage.querySelector('[data-start-repair]').hidden=true;
+        mission.querySelector('[data-mission-arrival]').textContent=tracking.position.near?'< 1 phút':`${tracking.position.etaMinutes} phút`;
+        await mapProvider.render(container,{clientLocation:tracking.destination,technicians:[{...selectedTechnician,...tracking.origin}],selectedId:initialSnapshot.mission.providerId,searching:false,route:tracking.route?.points??[]});
+        if(!isCurrentRemoteTracking(session))return;
+        session.initialized=true;session.routeRequestedAt=trackingNow();
+        const latest=remoteMissionState?.providerLocation??tracking.origin;
+        mapProvider.moveProvider(session.providerId,latest);
+      }catch{
+        if(isCurrentRemoteTracking(session)){
+          stage.querySelector('[data-tracking-status]').textContent='Chưa thể cập nhật GPS hoặc tuyến đường';
+          stage.querySelector('[data-tracking-eta]').textContent='Chưa có dữ liệu';
+          stage.querySelector('[data-tracking-distance]').textContent='Chưa có dữ liệu';
+        }
+      }finally{if(remoteTrackingSession===session)session.initializing=null;}
+    })();
+    return session.initializing;
+  };
   const startTrackingMap = async () => {
     if (remoteMissionState) {
-      const snapshot = remoteMissionState;
-      const generation = ++remoteTrackingGeneration;
-      if (snapshot.mission.status !== 'travelling') return;
-      stopLocationStream?.();
-      stopLocationStream = undefined;
-      const stage = mission.querySelector('[data-mission-stage]');
-      try {
-        const tracking = await prepareSupabaseTracking(snapshot, trackingRoutes);
-        if (generation !== remoteTrackingGeneration || mission.hidden) return;
-        updateTrackingPresentation(stage, tracking.position);
-        stage.querySelector('[data-start-repair]').hidden = true;
-        mission.querySelector('[data-mission-arrival]').textContent = tracking.position.near ? '< 1 phút' : `${tracking.position.etaMinutes} phút`;
-        await mapProviderReady;
-        if (generation !== remoteTrackingGeneration || mission.hidden) return;
-        await mapProvider.render(stage.querySelector('[data-tracking-map]'), {
-          clientLocation: tracking.destination,
-          technicians: [{ ...selectedTechnician, ...tracking.origin }], selectedId: snapshot.mission.providerId,
-          searching: false, route: tracking.route?.points ?? [],
-        });
-        mapProvider.moveProvider(snapshot.mission.providerId, tracking.origin);
-      } catch {
-        if (generation !== remoteTrackingGeneration || mission.hidden) return;
-        stage.querySelector('[data-tracking-status]').textContent = 'Chưa thể cập nhật GPS hoặc tuyến đường';
-        stage.querySelector('[data-tracking-eta]').textContent = 'Chưa có dữ liệu';
-        stage.querySelector('[data-tracking-distance]').textContent = 'Chưa có dữ liệu';
-      }
-      return;
+      return syncRemoteTrackingMap(remoteMissionState);
     }
     if (missionStatuses[missionState.statusIndex].id !== 'travelling') return;
     const stage = mission.querySelector('[data-mission-stage]');
@@ -1522,7 +1573,7 @@ export function initialiseHomePage(
       persistedMission = null;
       if (missionConnection) missionConnection = Promise.resolve(missionConnection).then(connection => ({ ...connection, activeMission: null }));
       searchGeneration++;
-      remoteTrackingGeneration++;
+      remoteTrackingSession = null;
       selectedCategory = undefined;
       diagnosedCategory = undefined;
       selectedTechnician = undefined;

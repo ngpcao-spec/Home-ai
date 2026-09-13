@@ -118,11 +118,11 @@ export function createAmazonLocationMapProvider({ apiKey, region = 'ap-southeast
       if(!marker||!diagnostic)return null;
       return { ...diagnostic, position:{...diagnostic.position}, mapInstanceId:state.mapInstanceId, markerCount:state.markers.size, attached:marker.getElement?.().isConnected!==false };
     },
-    setRoute(points) {
+    setRoute(points, { fit = true } = {}) {
       if (!state.map) return;
       const data = featureCollection([{ type: 'Feature', geometry: { type: 'LineString', coordinates: points.map(point) }, properties: {} }]);
       if (!state.map.getSource('route')) { state.map.addSource('route', { type: 'geojson', data }); state.map.addLayer({ id: 'route', type: 'line', source: 'route', layout: { 'line-join': 'round', 'line-cap': 'round' }, paint: { 'line-color': '#087b61', 'line-width': 4, 'line-opacity': .9 } }); } else state.map.getSource('route').setData(data);
-      this.fitBounds(points);
+      if (fit) this.fitBounds(points);
     },
     center(location) { state.map?.flyTo({ center: point(location), zoom: 14 }); },
     fitBounds(points) { if (!points.length) return; const bounds = points.reduce((value, item) => value.extend(point(item)), new globalThis.maplibregl.LngLatBounds(point(points[0]), point(points[0]))); state.map?.fitBounds(bounds, { padding: 70, maxZoom: 16 }); },
