@@ -558,6 +558,7 @@ export function initialiseHomePage(
   let remoteMissionHistory = [];
   let supplementDecisionPending=false;
   let reviewSubmissionPending=false;
+  let reviewSubmissionError='';
   let stopMissionPolling;
   let stopMissionRealtime;
   let trackingRoute;
@@ -1272,7 +1273,7 @@ export function initialiseHomePage(
         ? 'Đang cập nhật' : `${new Intl.NumberFormat('vi-VN').format(finalPrice.amount)}đ`;
     }
     const completedMarkup = missionState.reviewStage === 'rating'
-      ? createProviderReviewMarkup(selectedTechnician, missionState)
+      ? createProviderReviewMarkup(selectedTechnician, {...missionState,reviewSubmissionPending,reviewError:reviewSubmissionError})
       : missionState.paymentStatus === 'paid_external'
         ? createPaidExternalMarkup(missionState.completion)
         : createCompletionSummaryMarkup(missionState.completion, missionState.quoteHistory, {
@@ -1286,7 +1287,7 @@ export function initialiseHomePage(
       in_progress: createTrackingStageMarkup(selectedTechnician),
       completed_pending_payment: completedMarkup,
     };
-    const trackingStageKey = `${remoteMissionState?.mission.id}:${status.id}:${missionState.paymentStatus}:${missionState.reviewStage}:${missionState.reviewSent}:${missionState.rating}:${missionState.completion?.invoice?.id ?? ''}:${missionState.completion?.finalAuthorizedAmount ?? ''}`;
+    const trackingStageKey = `${remoteMissionState?.mission.id}:${status.id}:${missionState.paymentStatus}:${missionState.reviewStage}:${missionState.reviewSent}:${missionState.rating}:${reviewSubmissionPending}:${reviewSubmissionError}:${missionState.completion?.invoice?.id ?? ''}:${missionState.completion?.finalAuthorizedAmount ?? ''}`;
     if (!remoteMissionState || stage.dataset.trackingStage !== trackingStageKey) {
       stage.innerHTML = stageMarkup[status.id];
       stage.dataset.trackingStage = trackingStageKey;
@@ -1497,26 +1498,38 @@ export function initialiseHomePage(
       }
       return;
     }
+    if(event.target.closest('[data-review-home]')){showAppView('home');return;}
+    if(event.target.closest('[data-review-history]')){showAppView('history');return;}
     const remoteRating = Number(event.target.closest('[data-rating]')?.dataset.rating);
-    if (remoteMissionState && remoteRating && !missionState.reviewSent) {
+    if (remoteMissionState && remoteRating && !missionState.reviewSent && !reviewSubmissionPending) {
+      reviewSubmissionError='';
       missionState = { ...missionState, rating: remoteRating, reviewComment: mission.querySelector('[data-review-comment]')?.value ?? missionState.reviewComment };
       renderMission();
       return;
     }
     if (remoteMissionState && event.target.closest('[data-send-review]')) {
       if (reviewSubmissionPending || missionState.reviewSent) return;
+      if(remoteMissionState.mission.status!=='completed'||remoteMissionState.mission.paymentStatus!=='paid_external')return;
+      const comment=mission.querySelector('[data-review-comment]')?.value ?? '';
+      missionState={...missionState,reviewComment:comment};
+      reviewSubmissionError='';
       reviewSubmissionPending = true;
+      renderMission();
       try {
         applyRemoteMissionState(await missionSynchronizer.createReview(
           remoteMissionState.mission.id,
           missionState.rating,
-          mission.querySelector('[data-review-comment]')?.value,
+          comment,
         ));
       } catch (error) {
         console.error('[HOME AI][Supabase review]', { operation: 'create', errorType: error?.name ?? 'Error' });
-        mission.querySelector('[data-mission-status-badge]').textContent = 'Không thể gửi đánh giá';
+        reviewSubmissionError='Không thể gửi đánh giá. Vui lòng thử lại.';
+        if(error?.code==='23505') {
+          try {applyRemoteMissionState(await missionSynchronizer.load(remoteMissionState.mission.id));reviewSubmissionError='';}catch{/* Retry existing mission polling without another submission. */}
+        }
       } finally {
         reviewSubmissionPending = false;
+        renderMission();
       }
       return;
     }

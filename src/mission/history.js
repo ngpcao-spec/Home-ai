@@ -126,7 +126,7 @@ export function createMissionHistoryMarkup(missions) {
   const cards = missions.map((mission) => `<button class="history-card" type="button" data-open-mission="${escapeHtml(mission.missionId)}">
     <span class="history-card-heading"><span><small>${escapeHtml(mission.service)}</small><strong>${escapeHtml(mission.problem)}</strong></span><em>${escapeHtml(mission.statusLabel)}</em></span>
     <span class="history-card-meta"><span>${formatDate(mission.completedAt)}</span><span>${escapeHtml(mission.technician.name)}</span></span>
-    <span class="history-card-footer"><strong>${formatAmount(mission.finalAuthorizedAmount, mission.currency)}</strong>${mission.review ? `<span aria-label="Đã đánh giá ${mission.review.rating} sao">★ ${mission.review.rating}/5</span>` : '<span>Chưa đánh giá</span>'}</span>
+    <span class="history-card-footer"><strong>${formatAmount(mission.finalAuthorizedAmount, mission.currency)}</strong>${mission.review ? `<span aria-label="Đã đánh giá ${mission.review.rating} sao">✓ Đã đánh giá</span>` : '<span>Chưa đánh giá</span>'}</span>
   </button>`).join('');
   return `<div class="history-heading"><p>LỊCH SỬ DỊCH VỤ</p><h1>Lịch sử</h1><span>${missions.length} chuyến đã hoàn thành</span></div><div class="history-list">${cards}</div>`;
 }

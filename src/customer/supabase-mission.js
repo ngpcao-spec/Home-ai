@@ -96,7 +96,7 @@ export function createCustomerMissionStateFromServer({ mission, quotes, review =
       warrantyDays: acceptedQuote?.warrantyDays ?? null,
       invoice,
     }) : null,
-    reviewStage: mission.status === 'completed' ? 'rating' : 'hidden',
+    reviewStage: mission.status === 'completed' && mission.paymentStatus === 'paid_external' ? 'rating' : 'hidden',
     rating: review?.rating ?? 0,
     reviewComment: review?.comment ?? '',
     reviewSent: Boolean(review),
@@ -258,7 +258,9 @@ export function createCustomerMissionSynchronizer({
 
   const createReview = async (missionId, rating, comment = '') => {
     if (!Number.isInteger(rating) || rating < 1 || rating > 5) throw new TypeError('Invalid review rating');
-    await missionRepository.createReview(missionId, rating, String(comment).trim() || null);
+    const content=String(comment).trim();
+    if([...content].length>500)throw new TypeError('Invalid review comment');
+    await missionRepository.createReview(missionId, rating, content || null);
     return load(missionId);
   };
 

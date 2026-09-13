@@ -1,3 +1,4 @@
+import { formatProviderRating } from '../provider/provider-rating.js';
 import { createMissionChatButton } from '../chat/mission-chat.js';
 import { createMissionCallButton } from '../calls/call-manager.js';
 const formatDistance = (distanceKm) => distanceKm < 1
@@ -26,7 +27,7 @@ export function createAssignedProviderCompactMarkup(technician, { tracking = fal
     'air-conditioning': 'Thợ điều hòa',
     appliances: 'Thợ sửa điện gia dụng',
   })[category] || (technician.specialty && technician.specialty !== category ? technician.specialty : 'Dịch vụ HOME AI');
-  const rating = Number(technician.rating) || 0;
+  const rating = formatProviderRating(technician.rating);
   const reviewCount = Number(technician.reviewCount) || 0;
   return `<article class="assigned-provider-card" data-assigned-provider-summary>
     <div class="assigned-provider-heading">

@@ -1,3 +1,4 @@
+import { formatProviderRating } from './provider-rating.js';
 import { getProviderActivityLabel } from './provider-activities.js';
 
 const esc = (value = '') => String(value).replace(/[&<>"']/g, character => ({
@@ -33,7 +34,7 @@ export function renderProviderProfessionalProfile(profile, {
           <label class="professional-photo-button">Chọn ảnh<input type="file" accept="image/jpeg,image/png,image/webp" data-professional-photo-input></label>
         </div>
       </div>
-      <p class="professional-rating" aria-label="${Number(profile.rating) || 0} trên 5 sao">★ ${Number(profile.rating) || 0} · ${Number(profile.reviewCount) || 0} đánh giá</p>
+      <p class="professional-rating" aria-label="${formatProviderRating(profile.rating)} trên 5 sao">★ ${formatProviderRating(profile.rating)} · ${Number(profile.reviewCount) || 0} đánh giá</p>
       <label>Họ và tên <input name="displayName" autocomplete="name" maxlength="120" required value="${esc(profile.name)}"></label>
       <label>Số điện thoại <input name="phone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="0912 345 678" value="${esc(profile.phone ?? '')}"></label>
       <label>Số năm kinh nghiệm <input name="experienceYears" type="number" inputmode="numeric" min="0" max="80" step="1" value="${profile.experienceYears == null ? '' : Number(profile.experienceYears)}" placeholder="Không bắt buộc"></label>

@@ -1,3 +1,4 @@
+import { formatProviderRating } from '../provider/provider-rating.js';
 const formatPrice = (price) => `${new Intl.NumberFormat('vi-VN').format(price)}đ`;
 const escapeHtml = (value) => String(value)
   .replaceAll('&', '&amp;')
@@ -81,21 +82,20 @@ export function createProviderAvatarMarkup() {
 }
 
 export function createProviderReviewMarkup(technician, missionState) {
-  const stars = [1, 2, 3, 4, 5].map((rating) => `<button type="button" data-rating="${rating}" aria-label="${rating} sao" class="${missionState.rating >= rating ? 'is-selected' : ''}" ${missionState.reviewSent ? 'disabled' : ''}>★</button>`).join('');
-  const reviewForm = missionState.reviewSent
-    ? `<p class="review-thanks" role="status">Cảm ơn bạn đã đánh giá!</p>
-      <button class="view-mission-detail" type="button" data-view-mission-detail>Xem chi tiết chuyến</button>
-      ${missionState.missionDetailTarget ? '<p class="mission-detail-status" role="status">Đã sẵn sàng mở chi tiết chuyến.</p>' : ''}`
-    : `<label>Nhận xét (không bắt buộc)<textarea data-review-comment rows="3" placeholder="Chia sẻ trải nghiệm của bạn...">${escapeHtml(missionState.reviewComment ?? '')}</textarea></label>
-      <button type="button" data-send-review ${missionState.rating ? '' : 'disabled'}>Gửi đánh giá</button>`;
+  if(missionState.reviewSent)return `<section class="provider-review"><p class="review-thanks" role="status">Cảm ơn bạn đã đánh giá</p><button type="button" data-review-home>Về trang chủ</button><button type="button" data-review-history>Lịch sử</button></section>`;
+  const busy=missionState.reviewSubmissionPending;
+  const stars = [1, 2, 3, 4, 5].map((rating) => `<button type="button" data-rating="${rating}" aria-label="${rating} sao" aria-pressed="${missionState.rating===rating}" class="${missionState.rating >= rating ? 'is-selected' : ''}" ${busy ? 'disabled' : ''}>★</button>`).join('');
+  const reviewForm = `<label>Nhận xét<textarea data-review-comment maxlength="500" rows="3" placeholder="Chia sẻ thêm nếu bạn muốn" ${busy?'disabled':''}>${escapeHtml(missionState.reviewComment ?? '')}</textarea></label>
+      <p data-review-error role="alert" ${missionState.reviewError?'':'hidden'}>${escapeHtml(missionState.reviewError??'')}</p>
+      <button type="button" data-send-review ${Number.isInteger(missionState.rating)&&missionState.rating>=1&&missionState.rating<=5&&!busy ? '' : 'disabled'}>Gửi đánh giá</button>`;
   return `<section class="provider-review" aria-labelledby="provider-review-title">
     <p class="paid-badge">✓ Đã thanh toán · ${formatPrice(missionState.completion.finalAuthorizedAmount)}</p>
     <div class="provider-review-profile">
-      ${createProviderAvatarMarkup()}
-      <div><strong>${escapeHtml(technician.name)}</strong><span>⭐ ${technician.rating} · ${technician.reviewCount ?? 0} đánh giá</span><small>${escapeHtml(technician.shortDescription ?? technician.category)}</small></div>
+      ${technician.avatarUrl?`<span class="provider-profile-avatar"><img src="${escapeHtml(technician.avatarUrl)}" alt="${escapeHtml(technician.name)}"></span>`:createProviderAvatarMarkup()}
+      <div><strong>${escapeHtml(technician.name)}</strong><span>⭐ ${formatProviderRating(technician.rating)} · ${technician.reviewCount ?? 0} đánh giá</span></div>
     </div>
-    <h3 id="provider-review-title">Đánh giá kỹ thuật viên</h3>
-    <p>Trải nghiệm của bạn với kỹ thuật viên như thế nào?</p>
+    <h3 id="provider-review-title">Đánh giá thợ</h3>
+    <p>Bạn đánh giá dịch vụ này thế nào?</p>
     <div class="stars" role="group" aria-label="Chọn số sao">${stars}</div>
     ${reviewForm}
   </section>`;

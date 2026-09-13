@@ -285,6 +285,7 @@ h1 em { color: var(--green); font-style: normal; }
 .provider-review-profile { display: flex; align-items: center; gap: 11px; margin: 13px 0; padding: 12px; border-radius: 14px; background: #f3faf7; text-align: left; }
 .provider-profile-avatar { display: grid; width: 52px; height: 52px; flex: 0 0 auto; place-items: center; overflow: hidden; border-radius: 50%; color: white; background: linear-gradient(145deg, #2f866f, #174d41); }
 .provider-profile-avatar svg { width: 43px; fill: #f3c9a8; stroke: #fff; stroke-linecap: round; stroke-width: 2; }
+.provider-profile-avatar img{width:100%;height:100%;object-fit:cover}.provider-review textarea{font:inherit;font-size:16px;box-sizing:border-box}.provider-review>button{margin:6px;min-height:44px}.provider-review [data-review-error]{color:#b33838}
 .provider-review-profile div { display: grid; gap: 3px; }
 .provider-review-profile strong { color: #173d34; font-size: 13px; }
 .provider-review-profile span, .provider-review-profile small { color: #607770; font-size: 9px; }

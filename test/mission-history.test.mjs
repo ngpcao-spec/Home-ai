@@ -69,7 +69,7 @@ describe('C19 historique des interventions', () => {
   it('rend les cartes C19 avec service, date, technicien, statut, montant et note', () => {
     const current = createCompletedMissionRecord(currentState, context);
     const markup = createMissionHistoryMarkup(getClientMissionHistory(current));
-    ['Lịch sử', 'Điều hòa không lạnh', 'Đặng Minh Khoa', 'Hoàn thành', '390.000đ', '★ 5/5', 'Vòi nước bếp bị rò rỉ'].forEach((text) => assert.match(markup, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))));
+    ['Lịch sử', 'Điều hòa không lạnh', 'Đặng Minh Khoa', 'Hoàn thành', '390.000đ', '✓ Đã đánh giá', 'Vòi nước bếp bị rò rỉ'].forEach((text) => assert.match(markup, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))));
     assert.equal((markup.match(/data-open-mission=/g) ?? []).length, 4);
   });
 

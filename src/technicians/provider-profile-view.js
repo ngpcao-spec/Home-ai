@@ -1,3 +1,4 @@
+import { formatProviderRating } from '../provider/provider-rating.js';
 const escapeHtml = (value = '') => String(value)
   .replaceAll('&', '&amp;')
   .replaceAll('<', '&lt;')
@@ -16,7 +17,7 @@ export function createProviderProfileMarkup(profile, { assigned = false } = {}) 
     <header class="provider-profile-header">
       <span class="provider-profile-photo" role="img" aria-label="${escapeHtml(profile.avatar.label)}">${profile.avatar.url ? `<img src="${escapeHtml(profile.avatar.url)}" alt="">` : escapeHtml(profile.avatar.initials)}</span>
       <div><p>HỒ SƠ KỸ THUẬT VIÊN</p><h2 id="provider-profile-name">${escapeHtml(profile.name)}</h2>
-      <span class="provider-profile-rating">★ ${profile.rating} · ${profile.reviewCount} đánh giá</span></div>
+      <span class="provider-profile-rating">★ ${formatProviderRating(profile.rating)} · ${profile.reviewCount} đánh giá</span></div>
       ${profile.verified ? '<strong class="verified-badge">✓ Đã xác minh</strong>' : ''}
     </header>
     <dl class="provider-profile-facts">

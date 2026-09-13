@@ -246,7 +246,7 @@ describe('suivi C13', () => {
       { initials: 'ĐK', name: 'Đặng Minh Khoa' },
       { completion, rating: 0, reviewSent: false },
     );
-    ['Đã thanh toán', 'Đánh giá kỹ thuật viên', 'Đặng Minh Khoa', 'Gửi đánh giá'].forEach((text) => assert.match(reviewMarkup, new RegExp(text)));
+    ['Đã thanh toán', 'Đánh giá thợ', 'Đặng Minh Khoa', 'Gửi đánh giá'].forEach((text) => assert.match(reviewMarkup, new RegExp(text)));
     assert.doesNotMatch(`${paidMarkup}${reviewMarkup}`, /stripe|paypal|wallet|card number|api key/i);
   });
 
@@ -265,10 +265,10 @@ describe('suivi C13', () => {
       reviewSent: true,
       missionDetailTarget: null,
     });
-    ['Đặng Minh Khoa', '⭐ 5 · 203 đánh giá', 'Bảo dưỡng và sửa điều hòa dân dụng mọi thương hiệu.', 'Cảm ơn bạn đã đánh giá!', 'Xem chi tiết chuyến'].forEach((text) => assert.match(submittedMarkup, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))));
+    ['Cảm ơn bạn đã đánh giá', 'Về trang chủ', 'Lịch sử'].forEach((text) => assert.match(submittedMarkup, new RegExp(text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))));
     assert.doesNotMatch(submittedMarkup, />ĐK</);
-    assert.equal((submittedMarkup.match(/data-rating=/g) ?? []).length, 5);
-    assert.equal((submittedMarkup.match(/disabled/g) ?? []).length, 5);
+    assert.equal((submittedMarkup.match(/data-rating=/g) ?? []).length, 0);
+    assert.equal((submittedMarkup.match(/disabled/g) ?? []).length, 0);
     assert.doesNotMatch(submittedMarkup, /data-send-review/);
   });
 
