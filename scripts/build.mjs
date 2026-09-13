@@ -5,6 +5,7 @@ await mkdir('dist/src', { recursive: true });
 await cp('index.html', 'dist/index.html');
 await cp('provider.html', 'dist/provider.html');
 await cp('provider', 'dist/provider', { recursive: true });
+await cp('admin', 'dist/admin', { recursive: true });
 await cp('provider-icon.svg', 'dist/provider-icon.svg');
 await cp('src', 'dist/src', { recursive: true });
 // Amazon Location browser API keys are public identifiers, but must be restricted
@@ -47,11 +48,11 @@ if (!providerTestMode) {
 await cp('provider-sw.js', 'dist/provider-sw.js');
 const serviceWorkerSource = await readFile('provider/provider-sw.js', 'utf8');
 await writeFile('dist/provider/provider-sw.js', serviceWorkerSource.replace('__HOME_AI_BUILD_ID__', buildId));
-for (const file of ['index.html', 'provider/index.html']) {
+for (const file of ['index.html', 'provider/index.html', 'admin/index.html']) {
   const path = `dist/${file}`;
   const html = await readFile(path, 'utf8');
   const isClient = file === 'index.html';
-  const entry = isClient ? './src/app.js' : '../src/provider/provider-app.js';
+  const entry = isClient ? './src/app.js' : file === 'admin/index.html' ? '../src/admin/admin-app.js' : '../src/provider/provider-app.js';
   const runtimeConfig = isClient ? './src/runtime-config.js' : '../src/runtime-config.js';
   await writeFile(path, html
     .replace('__HOME_AI_BUILD_ID__', buildId)

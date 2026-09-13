@@ -1,0 +1,13 @@
+:root { font-family: system-ui, -apple-system, sans-serif; color: #163c34; background: #f3faf7; }
+body { margin: 0; }
+#admin-root { padding: max(24px, env(safe-area-inset-top)) 20px 24px; }
+.admin-card { max-width: 400px; margin: 10vh auto; padding: 32px 24px; background: white; border: 1px solid #dfece6; border-radius: 24px; text-align: center; }
+.brand { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.brand img { width: 44px; height: 44px; }
+.brand strong { font-size: 24px; }
+.brand span { color: #ff805b; }
+h1 { font-size: 26px; }
+p { line-height: 1.5; }
+button { width: 100%; min-height: 52px; margin-top: 12px; border: 0; border-radius: 14px; background: #087b61; color: white; font: inherit; font-weight: 700; cursor: pointer; }
+button.secondary { background: #e7f4ee; color: #087b61; }
+button:focus-visible { outline: 3px solid #ff805b; outline-offset: 3px; }
