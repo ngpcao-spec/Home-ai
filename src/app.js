@@ -572,7 +572,7 @@ export function initialiseHomePage(
     technician: selectedTechnician ?? {},
   });
   const getMissionHistory = () => getClientMissionHistory(
-    getCurrentMissionRecord(),
+    getCurrentMissionRecord() ?? (!supabaseMissionMode ? remoteMissionHistory[0] : null),
     supabaseMissionMode ? remoteMissionHistory.filter(({ missionId }) => missionId !== getCurrentMissionRecord()?.missionId) : undefined,
   );
   const loadRemoteMissionHistory = async () => {
@@ -1505,7 +1505,34 @@ export function initialiseHomePage(
       }
       return;
     }
-    if(event.target.closest('[data-review-home]')){showAppView('home');return;}
+    if(event.target.closest('[data-review-home]')){
+      const completedRecord = getCurrentMissionRecord();
+      if (completedRecord) remoteMissionHistory = [completedRecord, ...remoteMissionHistory.filter(({ missionId }) => missionId !== completedRecord.missionId)];
+      stopMissionPolling?.();
+      stopMissionRealtime?.();
+      stopLocationStream?.();
+      stopMissionPolling = undefined;
+      stopMissionRealtime = undefined;
+      stopLocationStream = undefined;
+      remoteMissionState = null;
+      persistedMission = null;
+      if (missionConnection) missionConnection = Promise.resolve(missionConnection).then(connection => ({ ...connection, activeMission: null }));
+      searchGeneration++;
+      remoteTrackingGeneration++;
+      selectedCategory = undefined;
+      diagnosedCategory = undefined;
+      selectedTechnician = undefined;
+      currentDiagnosis = undefined;
+      matchedTechnicians = [];
+      trackingRoute = undefined;
+      trackingRoutes.reset();
+      missionBookedAt = undefined;
+      missionState = createMissionState();
+      mission.querySelector('[data-mission-stage]').innerHTML = '';
+      resetCustomerRequestView(root);
+      openHomeView();
+      return;
+    }
     if(event.target.closest('[data-review-history]')){showAppView('history');return;}
     const remoteRating = Number(event.target.closest('[data-rating]')?.dataset.rating);
     if (remoteMissionState && remoteRating && !missionState.reviewSent && !reviewSubmissionPending) {
