@@ -24,7 +24,7 @@ const point = ({ longitude, latitude }) => [longitude, latitude];
 const featureCollection = (features = []) => ({ type: 'FeatureCollection', features });
 
 export function createAmazonLocationMapProvider({ apiKey, region = 'ap-southeast-1', document: documentObject = document }) {
-  const state = { map: null, client: null, markers: new Map() };
+  const state = { map: null, mapInstanceId: 0, client: null, markers: new Map(), markerDiagnostics: new Map(), nextMarkerInstanceId: 1 };
   const style = `https://maps.geo.${region}.amazonaws.com/v2/styles/Standard/descriptor?key=${encodeURIComponent(apiKey)}`;
   const provider = {
     id: 'amazon-location', customer: null, style,
@@ -35,11 +35,13 @@ export function createAmazonLocationMapProvider({ apiKey, region = 'ap-southeast
           if (state.map) {
             state.markers.forEach((marker) => marker.remove());
             state.markers.clear();
+            state.markerDiagnostics.clear();
             state.client?.remove();
             state.client = null;
             state.map.remove();
           }
           state.map = new maplibregl.Map({ container, style, center: point(view.clientLocation ?? this.customer), zoom: 14 });
+          state.mapInstanceId += 1;
           state.map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
           await new Promise((resolve, reject) => { state.map.once('load', resolve); state.map.once('error', ({ error } = {}) => reject(error ?? new Error('MapLoadError'))); });
           logAmazonLocationDiagnostic('map', true, { status: 200 });
@@ -72,7 +74,7 @@ export function createAmazonLocationMapProvider({ apiKey, region = 'ap-southeast
     setProviders(technicians, { selectedId } = {}) {
       if (!state.map) return;
       const visible = new Set(technicians.map(({ id }) => id));
-      state.markers.forEach((marker, id) => { if (!visible.has(id)) { marker.remove(); state.markers.delete(id); } });
+      state.markers.forEach((marker, id) => { if (!visible.has(id)) { marker.remove(); state.markers.delete(id); state.markerDiagnostics.delete(id); } });
       technicians.forEach((technician) => {
         let marker = state.markers.get(technician.id);
         if (!marker) {
@@ -80,8 +82,11 @@ export function createAmazonLocationMapProvider({ apiKey, region = 'ap-southeast
           element.className = 'amazon-technician-marker'; element.type = 'button'; element.dataset.mapTechnician = technician.id; element.textContent = technician.initials;
           marker = new globalThis.maplibregl.Marker({ element, offset: [18, -18] }).setLngLat(point(technician)).setPopup(new globalThis.maplibregl.Popup({ offset: 18 }).setText(technician.name)).addTo(state.map);
           state.markers.set(technician.id, marker);
+          state.markerDiagnostics.set(technician.id, { instanceId: state.nextMarkerInstanceId++, position: { latitude: technician.latitude, longitude: technician.longitude }, updatedAt: Date.now(), moves: 0 });
         }
         marker.setLngLat(point(technician));
+        const diagnostic=state.markerDiagnostics.get(technician.id);
+        if(diagnostic){diagnostic.position={latitude:technician.latitude,longitude:technician.longitude};diagnostic.updatedAt=Date.now();}
         marker.getElement().classList.toggle('is-selected', technician.id === selectedId);
       });
     },
@@ -97,7 +102,22 @@ export function createAmazonLocationMapProvider({ apiKey, region = 'ap-southeast
       const bounds = circle.reduce((value, coordinate) => value.extend(coordinate), new globalThis.maplibregl.LngLatBounds(circle[0], circle[0]));
       state.map.fitBounds(bounds, { padding: 45, maxZoom: 14, duration: searching ? 500 : 0 });
     },
-    moveProvider(id, location) { state.markers.get(id)?.setLngLat(point(location)); },
+    moveProvider(id, location) {
+      const marker=state.markers.get(id);if(!marker||!location)return false;
+      marker.setLngLat(point(location));
+      const diagnostic=state.markerDiagnostics.get(id);
+      if(diagnostic){
+        const moved=diagnostic.position?.latitude!==location.latitude||diagnostic.position?.longitude!==location.longitude;
+        diagnostic.position={latitude:location.latitude,longitude:location.longitude};diagnostic.updatedAt=Date.now();
+        if(moved)diagnostic.moves+=1;
+      }
+      return true;
+    },
+    getProviderMarkerSnapshot(id) {
+      const marker=state.markers.get(id);const diagnostic=state.markerDiagnostics.get(id);
+      if(!marker||!diagnostic)return null;
+      return { ...diagnostic, position:{...diagnostic.position}, mapInstanceId:state.mapInstanceId, markerCount:state.markers.size, attached:marker.getElement?.().isConnected!==false };
+    },
     setRoute(points) {
       if (!state.map) return;
       const data = featureCollection([{ type: 'Feature', geometry: { type: 'LineString', coordinates: points.map(point) }, properties: {} }]);

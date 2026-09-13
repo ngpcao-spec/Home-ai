@@ -84,6 +84,9 @@ describe('architecture cartographique V1.2', () => {
       assert.equal(routeLayer.paint['line-width'], 4);
       provider.moveProvider('p1', { latitude: 12.247, longitude: 109.192 });
       assert.deepEqual(markerPositions.at(-1), [109.192, 12.247]);
+      assert.deepEqual(provider.getProviderMarkerSnapshot('p1').position,{latitude:12.247,longitude:109.192});
+      assert.equal(provider.getProviderMarkerSnapshot('p1').moves,1);
+      assert.equal(provider.getProviderMarkerSnapshot('p1').markerCount,1);
       assert.equal(maps.length, 2);
     } finally {
       globalThis.maplibregl = previousMapLibre;

@@ -1,5 +1,5 @@
 // TEMPORARY TEST ONLY: local, in-memory GPS inspection. Never log or persist it.
-export function createProviderGpsDiagnostics(documentRef, { enabled, isTravelling, getMapPosition }) {
+export function createProviderGpsDiagnostics(documentRef, { enabled, isTravelling, getMapPosition, getMarkerState = () => null }) {
   if (!enabled || !documentRef?.body) return { sync() {}, record() {}, stop() {} };
   const host = documentRef.createElement('aside');
   host.dataset.providerGpsDiagnostics = '';
@@ -15,6 +15,7 @@ export function createProviderGpsDiagnostics(documentRef, { enabled, isTravellin
   const sync = () => {
     host.hidden = !isTravelling();
     const position = data.position;
+    const marker = getMarkerState();
     content.textContent = [
       `GPS watch: ${data.watch ? 'ACTIF' : 'INACTIF'} (id: ${data.watchId ?? '—'})`,
       `Permission: ${data.permission}`,
@@ -29,7 +30,12 @@ export function createProviderGpsDiagnostics(documentRef, { enabled, isTravellin
       `Dernière position envoyée: ${coordinates(data.sentPosition)}`,
       `Heure dernier envoi réussi: ${time(data.sentAt)}`,
       `Publication: ${data.sendStatus ?? '—'}`,
-      `Position utilisée par la carte: ${coordinates(getMapPosition())}`,
+      `Position carte: ${coordinates(getMapPosition())}`,
+      `Position marker: ${coordinates(marker?.position)}`,
+      `Dernière mise à jour marker: ${time(marker?.updatedAt)}`,
+      `Déplacements marker: ${marker?.moves ?? 0}`,
+      `Markers Provider présents: ${marker?.markerCount ?? 0}`,
+      `Objet marker/carte: ${marker ? `#${marker.instanceId} / #${marker.mapInstanceId} · ${marker.attached ? 'attaché' : 'détaché'}` : '—'}`,
     ].join('\n');
   };
   const record = event => {

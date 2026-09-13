@@ -40,3 +40,8 @@ export function updateProviderNavigationLocation(navigation, provider, position)
   navigation.map.moveProvider?.(provider.id ?? 'current-provider', position);
   return true;
 }
+
+export function getProviderNavigationMarkerState(navigation, provider = {}) {
+  if (!navigation) return null;
+  return navigation.map.getProviderMarkerSnapshot?.(provider.id ?? 'current-provider') ?? null;
+}

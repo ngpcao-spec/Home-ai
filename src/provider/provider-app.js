@@ -3,7 +3,7 @@ import { createMissionChatButton, getGlobalMissionChat } from '../chat/mission-c
 import { createMissionCallButton, getGlobalCallManager } from '../calls/call-manager.js';
 import { renderSupplementForm, readSupplementForm, updateSupplementForm } from './supplement-form.js';
 import { createProgressiveProviderAppRepository } from './provider-repository.js';
-import { prepareProviderNavigation, renderProviderNavigation, updateProviderNavigationLocation } from './provider-navigation.js';
+import { getProviderNavigationMarkerState, prepareProviderNavigation, renderProviderNavigation, updateProviderNavigationLocation } from './provider-navigation.js';
 import { createProviderGpsDiagnostics } from './provider-gps-diagnostics.js';
 import { createProviderGoogleAuth } from './provider-auth.js';
 import { createProviderLocationHeartbeat } from './provider-location-heartbeat.js';
@@ -195,8 +195,8 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   };
   const providerTestMode=isProviderTestArrivalEnabled(runtimeConfig,state.provider);
   const providerTestKycMode=isProviderTestKycPreviewEnabled(runtimeConfig,state.provider);
-  let latestProviderPosition=null;
-  const gpsDiagnostics=createProviderGpsDiagnostics(page,{enabled:repository.source==='supabase'&&providerTestMode,isTravelling:()=>state.assignment?.status==='travelling',getMapPosition:()=>navigation?.providerLocation});
+  let latestProviderPosition=null;let renderedNavigation=null;let renderedMapElement=null;
+  const gpsDiagnostics=createProviderGpsDiagnostics(page,{enabled:repository.source==='supabase'&&providerTestMode,isTravelling:()=>state.assignment?.status==='travelling',getMapPosition:()=>navigation?.providerLocation,getMarkerState:()=>getProviderNavigationMarkerState(navigation,state.provider)});
   const offerAlert=createProviderOfferAlert();
   offerAlert.prepare();
   const offerLayer=createIncomingOfferLayer(root);
@@ -235,7 +235,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
       root.innerHTML=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0]??'P')}</button></header>${renderProviderActivities(pricingServices,{...activityFlow,busy})}${renderProviderNav('activities')}`;
       return;
     }
-    const priorityOffer=state.offers?.find(({id})=>id===priorityOfferId);root.innerHTML=renderProviderDashboard(state,{source:repository.source,busy,message,navigation,navigationLoading,navigationError,diagnosing,supplementParent,billing:state.assignment?.id===billingMissionId,testMode:providerTestMode})+(offerLayer?'':renderIncomingOffer(priorityOffer));const map=root.querySelector('[data-provider-map]');if(navigation&&map)await renderProviderNavigation(map,navigation,state.provider).catch(()=>{});
+    const priorityOffer=state.offers?.find(({id})=>id===priorityOfferId);root.innerHTML=renderProviderDashboard(state,{source:repository.source,busy,message,navigation,navigationLoading,navigationError,diagnosing,supplementParent,billing:state.assignment?.id===billingMissionId,testMode:providerTestMode})+(offerLayer?'':renderIncomingOffer(priorityOffer));const map=root.querySelector('[data-provider-map]');if(navigation&&map){await renderProviderNavigation(map,navigation,state.provider).catch(()=>{});renderedNavigation=navigation;renderedMapElement=map;}else{renderedNavigation=null;renderedMapElement=null;}
   };
   const loadHistory=async()=>{historyLoading=true;historyError='';await renderDashboard();try{history=prepareProviderHistory(await repository.getHistory(),state.provider.id);}catch(error){history=[];historyError=error?.message??'Lỗi không xác định';}finally{historyLoading=false;await renderDashboard();}};
   const loadPricing=async()=>{pricingLoading=true;pricingError='';await renderDashboard();try{[pricingServices,serviceArea,availabilityPreferences]=await Promise.all([repository.getServices(),repository.getServiceArea(),repository.getAvailabilityPreferences()]);}catch(error){pricingServices=[];serviceArea=null;availabilityPreferences=null;pricingError=error?.message??'Lỗi không xác định';}finally{pricingLoading=false;await renderDashboard();}};
@@ -270,6 +270,18 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
       updateHourlyInvoiceForm(root,state.assignment?.pricing,canSendInvoice(),busy);
       const notice=root.querySelector('.app-message');
       if(notice)notice.textContent=canSendInvoice()?message:'Nhiệm vụ đã thay đổi. Không thể gửi hóa đơn này.';
+      return;
+    }
+    // GPS/provider_status refreshes during travelling must not detach MapLibre.
+    // Keep the live map and its marker; a real view, mission or navigation change
+    // still falls through and renders the appropriate screen.
+    const liveMap=root.querySelector('[data-provider-map]');
+    if(currentView==='home'&&state.assignment?.status==='travelling'&&navigation&&navigation===renderedNavigation&&liveMap&&liveMap===renderedMapElement&&liveMap.isConnected){
+      if(latestProviderPosition)updateProviderNavigationLocation(navigation,state.provider,latestProviderPosition);
+      const displayedPosition=root.querySelector('.map-metrics strong');
+      if(displayedPosition)displayedPosition.textContent=`${navigation.providerLocation.latitude.toFixed(5)}, ${navigation.providerLocation.longitude.toFixed(5)}`;
+      const notice=root.querySelector('.app-message');if(notice)notice.textContent=message;
+      gpsDiagnostics.sync();
       return;
     }
     await renderDashboard();

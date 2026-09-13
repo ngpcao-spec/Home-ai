@@ -12,6 +12,39 @@ describe('navigation Provider App après acceptation', () => {
     assert.deepEqual(positions,[['p1',12.245,109.19],['p1',12.246,109.191],['p1',12.247,109.192]]);
     assert.equal(navigation.providerLocation.latitude,12.247);
   });
+
+  it('conserve le même marqueur visible après un refresh dashboard pendant travelling', async () => {
+    const p1={latitude:12.245,longitude:109.19};const p2={latitude:12.246,longitude:109.191};const p3={latitude:12.247,longitude:109.192};
+    const clientLocation={latitude:12.25,longitude:109.2};
+    let repositoryState={provider:{id:'p1',name:'Provider'},status:{online:true,available:false,lastLocationAt:'2026-09-13T01:00:00Z'},offers:[],assignment:{id:'m1',serviceCategory:'electricity',request:'Test',address:'Nha Trang',status:'travelling',clientLocation}};
+    let notifyDispatch;let heartbeatOptions;let marker=null;let markerCreations=0;let renderCount=0;let activeContainer=null;
+    const repository={source:'supabase',load:async()=>structuredClone(repositoryState),updateLocation:async()=>structuredClone(repositoryState),subscribeDispatch(handler){notifyDispatch=handler;return()=>{};}};
+    const map={
+      setClientLocation(){},
+      async render(container,view){
+        renderCount+=1;
+        if(activeContainer!==container){activeContainer=container;marker=container.ownerDocument.createElement('button');marker.dataset.testProviderMarker='';container.append(marker);markerCreations+=1;}
+        this.moveProvider('p1',view.technicians[0]);
+      },
+      moveProvider(_id,position){if(marker?.isConnected){marker.dataset.latitude=String(position.latitude);marker.dataset.longitude=String(position.longitude);}return Boolean(marker?.isConnected);},
+      getProviderMarkerSnapshot(){return marker?{position:{latitude:Number(marker.dataset.latitude),longitude:Number(marker.dataset.longitude)},updatedAt:Date.now(),moves:0,markerCount:1,instanceId:1,mapInstanceId:1,attached:marker.isConnected}:null;},
+    };
+    const navigation={map,route:{distanceKm:1,durationMinutes:4,points:[]},providerLocation:{...p1},destination:clientLocation,arrived:false};
+    const dom=new JSDOM('<div id="provider-root"></div>',{pretendToBeVisual:true});const root=dom.window.document.querySelector('#provider-root');
+    const app=await initialiseProviderApp(root,async()=>repository,async()=>navigation,{enabled:false,getSession:async()=>null},options=>{heartbeatOptions=options;return{sync(){},stop(){}};},{getState:async()=>'granted',request:async()=>p1,geolocation:{}});
+    try{
+      for(let index=0;index<4;index+=1)await new Promise(resolve=>setImmediate(resolve));
+      const originalMarker=root.querySelector('[data-test-provider-marker]');assert.ok(originalMarker);
+      heartbeatOptions.onPosition(p2);assert.equal(originalMarker.dataset.latitude,String(p2.latitude));
+      repositoryState={...repositoryState,status:{...repositoryState.status,lastLocationAt:'2026-09-13T01:00:01Z'}};
+      await notifyDispatch({table:'provider_status'});for(let index=0;index<2;index+=1)await new Promise(resolve=>setImmediate(resolve));
+      heartbeatOptions.onPosition(p3);
+      assert.equal(root.querySelector('[data-test-provider-marker]'),originalMarker);
+      assert.equal(root.querySelectorAll('[data-test-provider-marker]').length,1);
+      assert.equal(originalMarker.dataset.latitude,String(p3.latitude));assert.equal(originalMarker.dataset.longitude,String(p3.longitude));
+      assert.equal(markerCreations,1);assert.equal(renderCount,1);
+    }finally{app.stop();dom.window.close();}
+  });
   it('calcule un itinéraire, une distance, un ETA et la position GPS', async () => {
     const assignment = (await createMockProviderAppRepository().accept('offer-demo-1')).assignment;
     const navigation = await prepareProviderNavigation(assignment, { source: 'mock', geolocation: null });
