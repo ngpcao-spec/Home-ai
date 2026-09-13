@@ -76,11 +76,12 @@ it('refreshes assigned GPS via realtime and polling fallback', async () => {
 });
 
 it('streams P1, P2 and P3 during travelling, then stops at arrived', async () => {
-  const writes = []; let callback; let cleared; let state = { status: { online: true, available: false }, assignment: { id: 'm1', status: 'travelling' } };
+  const writes = []; const marker = []; const diagnostics = []; let callback; let cleared; let state = { status: { online: true, available: false }, assignment: { id: 'm1', status: 'travelling' } };
   const heartbeat = createProviderLocationHeartbeat({ repository: { source: 'supabase', updateLocation: async value => { writes.push(value); return {}; } },
     getState: () => state,
     geolocation: { watchPosition(success, _error, options) { callback = success; assert.deepEqual(options, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }); return 7; }, clearWatch(id) { cleared = id; } },
     scheduleTask: () => 1, clearTask() {},
+    onPosition: position => marker.push([position.latitude, position.longitude]), onDiagnostic: event => diagnostics.push(event),
   });
   heartbeat.sync();
   await callback({ coords: { latitude: 12.245, longitude: 109.19, accuracy: 8 }, timestamp: 1 });
@@ -91,8 +92,10 @@ it('streams P1, P2 and P3 during travelling, then stops at arrived', async () =>
     { latitude: 12.246, longitude: 109.191 },
     { latitude: 12.247, longitude: 109.192 },
   ]);
+  assert.deepEqual(marker, [[12.245,109.19],[12.246,109.191],[12.247,109.192]]);
   await callback({ coords: { latitude: 1, longitude: 1 }, timestamp: 2 });
   assert.equal(writes.length, 3);
+  assert.equal(diagnostics.find(event => event.outcome === 'rejected')?.reason, 'stale-or-equal-timestamp');
   state = { ...state, assignment: { id: 'm1', status: 'arrived' } };
   heartbeat.sync();
   assert.equal(cleared, 7);

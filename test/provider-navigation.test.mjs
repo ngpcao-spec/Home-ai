@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { ARRIVAL_RADIUS_KM, prepareProviderNavigation, renderProviderNavigation, usesDemoNavigationAdapters } from '../src/provider/provider-navigation.js';
+import { ARRIVAL_RADIUS_KM, prepareProviderNavigation, renderProviderNavigation, updateProviderNavigationLocation, usesDemoNavigationAdapters } from '../src/provider/provider-navigation.js';
 import { createMockProviderAppRepository } from '../src/provider/provider-repository.js';
 import { initialiseProviderApp, renderProviderDashboard } from '../src/provider/provider-app.js';
 import { JSDOM } from 'jsdom';
 
 describe('navigation Provider App après acceptation', () => {
+  it('déplace immédiatement le marqueur local P1, P2, P3 sans Supabase ni RouteMatrix', () => {
+    const positions=[];const navigation={providerLocation:null,map:{moveProvider(id,p){positions.push([id,p.latitude,p.longitude]);}}};
+    for(const p of [{latitude:12.245,longitude:109.19},{latitude:12.246,longitude:109.191},{latitude:12.247,longitude:109.192}])updateProviderNavigationLocation(navigation,{id:'p1'},p);
+    assert.deepEqual(positions,[['p1',12.245,109.19],['p1',12.246,109.191],['p1',12.247,109.192]]);
+    assert.equal(navigation.providerLocation.latitude,12.247);
+  });
   it('calcule un itinéraire, une distance, un ETA et la position GPS', async () => {
     const assignment = (await createMockProviderAppRepository().accept('offer-demo-1')).assignment;
     const navigation = await prepareProviderNavigation(assignment, { source: 'mock', geolocation: null });

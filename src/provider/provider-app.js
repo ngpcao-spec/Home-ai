@@ -3,7 +3,8 @@ import { createMissionChatButton, getGlobalMissionChat } from '../chat/mission-c
 import { createMissionCallButton, getGlobalCallManager } from '../calls/call-manager.js';
 import { renderSupplementForm, readSupplementForm, updateSupplementForm } from './supplement-form.js';
 import { createProgressiveProviderAppRepository } from './provider-repository.js';
-import { prepareProviderNavigation, renderProviderNavigation } from './provider-navigation.js';
+import { prepareProviderNavigation, renderProviderNavigation, updateProviderNavigationLocation } from './provider-navigation.js';
+import { createProviderGpsDiagnostics } from './provider-gps-diagnostics.js';
 import { createProviderGoogleAuth } from './provider-auth.js';
 import { createProviderLocationHeartbeat } from './provider-location-heartbeat.js';
 import { classifyGeolocationError, getLocationPermissionState, mountLocationPermissionGate, requestCurrentPosition } from '../location/location-permission.js';
@@ -194,6 +195,8 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   };
   const providerTestMode=isProviderTestArrivalEnabled(runtimeConfig,state.provider);
   const providerTestKycMode=isProviderTestKycPreviewEnabled(runtimeConfig,state.provider);
+  let latestProviderPosition=null;
+  const gpsDiagnostics=createProviderGpsDiagnostics(page,{enabled:repository.source==='supabase'&&providerTestMode,isTravelling:()=>state.assignment?.status==='travelling',getMapPosition:()=>navigation?.providerLocation});
   const offerAlert=createProviderOfferAlert();
   offerAlert.prepare();
   const offerLayer=createIncomingOfferLayer(root);
@@ -215,6 +218,8 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
     return offer;
   };
   const renderDashboard=async()=>{
+    if(navigation&&latestProviderPosition&&state.assignment?.status==='travelling')updateProviderNavigationLocation(navigation,state.provider,latestProviderPosition);
+    gpsDiagnostics.sync();
     syncOfferLayer();
     if(currentView==='missions'||currentView==='income'){
       const content=currentView==='missions'?renderProviderMissionHistory(history,{loading:historyLoading,error:historyError,selectedMissionId}):renderProviderIncome(history,{loading:historyLoading,error:historyError});
@@ -275,7 +280,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   syncCalls(state);
   await draw();if(['accepted','travelling'].includes(state.assignment?.status))void loadNavigation().then(draw);
   if(repository.source==='supabase'&&!page?.hidden)offerAlert.start(state.offers?.find(({id})=>id===priorityOfferId));
-  const heartbeat=heartbeatFactory({repository,getState:()=>state,isPageActive:()=>!page?.hidden,onState:next=>{state=next;syncOfferLayer();},onError:async()=>{message='Không thể cập nhật GPS. Hãy cho phép truy cập vị trí.';if(currentView==='home')await draw();}});
+  const heartbeat=heartbeatFactory({repository,getState:()=>state,geolocation:locationAccess.geolocation,isPageActive:()=>!page?.hidden,onDiagnostic:gpsDiagnostics.record,onPosition:position=>{latestProviderPosition=position;updateProviderNavigationLocation(navigation,state.provider,position);gpsDiagnostics.sync();},onState:next=>{state=next;syncOfferLayer();},onError:async()=>{message='Không thể cập nhật GPS. Hãy cho phép truy cập vị trí.';if(currentView==='home')await draw();}});
   const dispatch=createProviderDispatchController({repository,getState:()=>state,onRefresh:syncCalls,onMessageEvent:()=>{void chatManager?.refresh();},isPageActive:()=>!page?.hidden,onState:async next=>{
     const previousAssignment=`${state.assignment?.id??''}:${state.assignment?.status??''}`;
     state=next; heartbeat.sync(); priorityOfferId=next.offers?.find(({expiresAt})=>new Date(expiresAt).getTime()>Date.now())?.id??null;
@@ -288,7 +293,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   const countdownTimer=globalThis.setInterval?.(()=>{const remaining=updateDispatchCountdown(offerLayer?.host??root);if(remaining===0&&priorityOfferId){const expiredId=priorityOfferId;priorityOfferId=null;offerAlert.stop(expiredId);void draw();}},1000);
   const syncHeartbeat=()=>{heartbeat.sync();syncOfferLayer();};
   page?.addEventListener?.('visibilitychange',syncHeartbeat);
-  globalThis.addEventListener?.('pagehide',()=>{heartbeat.stop();dispatch.stop();globalThis.clearInterval?.(countdownTimer);chatManager?.dispose();callManager?.dispose();},{once:true});
+  globalThis.addEventListener?.('pagehide',()=>{gpsDiagnostics.stop();heartbeat.stop();dispatch.stop();globalThis.clearInterval?.(countdownTimer);chatManager?.dispose();callManager?.dispose();},{once:true});
   heartbeat.sync();
   root.addEventListener('input',event=>{if(event?.target?.matches?.('[data-professional-photo-input]')){const file=event.target.files?.[0]??null;professionalPhotoFile=file;if(professionalPhotoPreview)URL.revokeObjectURL?.(professionalPhotoPreview);professionalPhotoPreview=file?URL.createObjectURL(file):'';updateProviderProfessionalProfileDraft(root,professionalPhotoPreview);}else if(event?.target?.closest?.('[data-professional-profile-form]'))updateProviderProfessionalProfileDraft(root,professionalPhotoPreview);else if(event?.target?.closest?.('[data-availability-form]'))syncProviderAvailabilityScheduleForm(root);else if(root.querySelector('[data-service-area-form]'))updateProviderServiceAreaPreview(root);else if(supplementParent)updateSupplementForm(root,supplementParent,canSendSupplement(),busy);else if(diagnosing)updateInitialQuoteForm(root,canSendQuote(),busy);else if(billingMissionId)updateHourlyInvoiceForm(root,state.assignment?.pricing,canSendInvoice(),busy);});
   const wait=milliseconds=>new Promise(resolve=>globalThis.setTimeout(resolve,milliseconds));
@@ -430,7 +435,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
     const logout=e.target.closest('[data-provider-logout]');const online=e.target.closest('[data-toggle-online]');const accept=e.target.closest('[data-accept]');const decline=e.target.closest('[data-decline]');const start=e.target.closest('[data-start-travel]');const arrived=e.target.closest('[data-mark-arrived]');const testArrival=e.target.closest('[data-test-provider-arrival]');const diagnose=e.target.closest('[data-start-diagnosis]');const send=e.target.closest('[data-send-quote]');const begin=e.target.closest('[data-start-intervention]');const finish=e.target.closest('[data-finish-intervention]');const supplement=e.target.closest('[data-provider-supplement]');if(logout){chatManager?.dispose();callManager?.dispose();offerAlert.stop();heartbeat.stop();await auth.signOut();globalThis.location?.reload();return;}if(busy||(!online&&!accept&&!decline&&!start&&!arrived&&!testArrival&&!diagnose&&!send&&!begin&&!finish&&!supplement))return;if(diagnose){editingMissionId=state.assignment?.id;diagnosing=true;await draw();return;}if(finish){billingMissionId=state.assignment?.id;await draw();return;}let respondingOffer=null;if(accept||decline){respondingOffer=state.offers?.find(({id})=>id===(accept?.dataset.accept??decline?.dataset.decline));if(!respondingOffer||new Date(respondingOffer.expiresAt).getTime()<=Date.now()){priorityOfferId=null;offerAlert.stop();await draw();return;}offerAlert.stop(respondingOffer.id);}busy=true;await draw();try{if(online){const next=!state.status.online;state=await repository.setAvailability({online:next,available:next&&!state.assignment});}if(accept){state=await repository.accept(accept.dataset.accept);if(!state.assignment){state=await repository.load();if(!state.assignment)throw new Error('Mission acceptée introuvable.');}priorityOfferId=null;if(offerLayer){confirmingAcceptance=true;offerLayer.confirm();const navigationPromise=loadNavigation();await wait(1000);confirmingAcceptance=false;await draw();void navigationPromise.then(draw);}else void loadNavigation().then(draw);}if(decline){state=await repository.decline(decline.dataset.decline);priorityOfferId=null;}if(start){navigation=await navigationLoader(state.assignment,{source:repository.source});state=await repository.updateMissionProgress(state.assignment.id,'travelling',navigation.providerLocation);}if(arrived){const missionId=state.assignment.id;const assessment=arrivalAssessment(await readArrivalLocation(locationAccess.geolocation),state.assignment.clientLocation);if(await confirmProviderArrival(page,assessment)){state=await repository.updateMissionProgress(missionId,'arrived',assessment.location);}}if(testArrival){if(!isProviderTestArrivalEnabled(runtimeConfig,state.provider)||state.assignment?.status!=='travelling'||!state.assignment.clientLocation)throw new Error('Provider test mode unavailable');state=await repository.updateMissionProgress(state.assignment.id,'arrived',state.assignment.clientLocation);navigation=null;}if(send){if(!canSendQuote())throw new Error('Mission is no longer ready for this quote');const {draft,valid}=readInitialQuoteForm(root);if(!valid)throw new Error('Invalid quote');state=await repository.createQuote(editingMissionId,draft);diagnosing=false;}if(begin)state=await repository.startIntervention(state.assignment.id);message='Đã cập nhật thành công.';}catch{confirmingAcceptance=false;message='Không thể cập nhật. Vui lòng thử lại.';if(respondingOffer&&new Date(respondingOffer.expiresAt).getTime()>Date.now()){priorityOfferId=respondingOffer.id;offerAlert.start(respondingOffer);}}finally{busy=false;heartbeat.sync();syncCalls(state);await draw();}};
   root.addEventListener('click',handleProviderClick);
   offerLayer?.host.addEventListener('click',handleProviderClick);
-  return {getState:()=>structuredClone(state),stop:()=>{chatManager?.dispose();callManager?.dispose();offerLayer?.stop();offerAlert.stop();heartbeat.stop();dispatch.stop();globalThis.clearInterval?.(countdownTimer);}};
+  return {getState:()=>structuredClone(state),stop:()=>{gpsDiagnostics.stop();chatManager?.dispose();callManager?.dispose();offerLayer?.stop();offerAlert.stop();heartbeat.stop();dispatch.stop();globalThis.clearInterval?.(countdownTimer);}};
   };
   if(repository.source==='supabase'){
     const savePosition=async position=>{state=await repository.updateLocation(position);};

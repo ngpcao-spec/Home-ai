@@ -30,4 +30,13 @@ export async function renderProviderNavigation(container, navigation, provider =
     }],
     selectedId: provider.id ?? 'current-provider', route: navigation.route.points, radiusKm: 0, searching: false,
   });
+  // A GPS callback may arrive while the map is loading. Apply its latest value.
+  navigation.map.moveProvider?.(provider.id ?? 'current-provider', navigation.providerLocation);
+}
+
+export function updateProviderNavigationLocation(navigation, provider, position) {
+  if (!navigation) return false;
+  navigation.providerLocation = position;
+  navigation.map.moveProvider?.(provider.id ?? 'current-provider', position);
+  return true;
 }

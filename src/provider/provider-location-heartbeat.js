@@ -2,8 +2,8 @@ const liveOptions = Object.freeze({ enableHighAccuracy: true, timeout: 15000, ma
 const idleOptions = Object.freeze({ enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
 
 function normalizePosition(position) {
-  const latitude = Number(position?.coords?.latitude);
-  const longitude = Number(position?.coords?.longitude);
+  const latitude = position?.coords?.latitude;
+  const longitude = position?.coords?.longitude;
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)
       || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
     throw new Error('Invalid provider location');
@@ -32,6 +32,7 @@ export function createProviderLocationHeartbeat({
   onState = () => {},
   onError = () => {},
   onDiagnostic = () => {},
+  onPosition = () => {},
 }) {
   let timer;
   let watchId;
@@ -52,26 +53,40 @@ export function createProviderLocationHeartbeat({
     timer = undefined;
   };
   const clearWatch = () => {
-    if (watchId !== undefined) geolocation?.clearWatch?.(watchId);
+    if (watchId !== undefined) {
+      geolocation?.clearWatch?.(watchId);
+      onDiagnostic({ stage: 'provider', outcome: 'watch-stopped' });
+    }
     watchId = undefined;
     generation += 1;
   };
   const publish = (browserPosition, expectedGeneration = generation, expectedMode = stateMode()) => {
+    onDiagnostic({ stage: 'provider', outcome: 'callback', receivedAt: Date.now(), position: browserPosition });
     let position;
     try { position = normalizePosition(browserPosition); }
-    catch (error) { onError(error); return Promise.resolve(null); }
+    catch (error) { onDiagnostic({ stage: 'provider', outcome: 'rejected', reason: 'invalid-coordinates' }); onError(error); return Promise.resolve(null); }
+    if (stopped || expectedGeneration !== generation || stateMode() !== expectedMode) {
+      onDiagnostic({ stage: 'provider', outcome: 'rejected', reason: 'inactive-watch-or-mission' });
+      return Promise.resolve(null);
+    }
     if (position.observedAt <= lastObservedAt) {
-      onDiagnostic({ stage: 'provider', outcome: 'stale-ignored' });
+      onDiagnostic({ stage: 'provider', outcome: 'rejected', reason: 'stale-or-equal-timestamp' });
       return Promise.resolve(null);
     }
     lastObservedAt = position.observedAt;
+    onDiagnostic({ stage: 'provider', outcome: 'position-accepted', position });
+    if (expectedMode === 'tracking') onPosition(position);
     writeQueue = writeQueue.then(async () => {
-      if (stopped || expectedGeneration !== generation || stateMode() !== expectedMode) return null;
+      if (stopped || expectedGeneration !== generation || stateMode() !== expectedMode) {
+        onDiagnostic({ stage: 'backend', outcome: 'send-skipped', reason: 'inactive-watch-or-mission' });
+        return null;
+      }
+      onDiagnostic({ stage: 'backend', outcome: 'sending', position });
       const next = await repository.updateLocation({ latitude: position.latitude, longitude: position.longitude });
-      onDiagnostic({ stage: 'backend', outcome: 'accepted', observedAt: position.observedAt, accuracy: position.accuracy });
+      onDiagnostic({ stage: 'backend', outcome: 'accepted', position, sentAt: Date.now() });
       await onState(next);
       return next;
-    }).catch((error) => { onError(error); return null; });
+    }).catch((error) => { onDiagnostic({ stage: 'backend', outcome: 'send-error', reason: error?.code ?? 'location-send-failed' }); onError(error); return null; });
     return writeQueue;
   };
   const scheduleIdle = () => {
@@ -99,10 +114,10 @@ export function createProviderLocationHeartbeat({
     const expectedGeneration = generation;
     watchId = geolocation.watchPosition(
       position => publish(position, expectedGeneration, 'tracking'),
-      error => onError(error),
+      error => { onDiagnostic({ stage: 'provider', outcome: 'watch-error', reason: `geolocation-${error?.code ?? 'unknown'}` }); onError(error); },
       liveOptions,
     );
-    onDiagnostic({ stage: 'provider', outcome: 'watch-started' });
+    onDiagnostic({ stage: 'provider', outcome: 'watch-started', watchId, options: liveOptions });
   };
   const sync = () => {
     clearTimer();
