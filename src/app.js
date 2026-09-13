@@ -1283,8 +1283,8 @@ export function initialiseHomePage(
     const stageMarkup = {
       accepted: createAcceptedProviderStageMarkup(selectedTechnician),
       travelling: createTrackingStageMarkup(selectedTechnician),
-      arrived: createTrackingStageMarkup(selectedTechnician),
-      in_progress: createTrackingStageMarkup(selectedTechnician),
+      arrived: createTrackingStageMarkup(selectedTechnician, { missionStatus: 'arrived' }),
+      in_progress: createTrackingStageMarkup(selectedTechnician, { missionStatus: 'in_progress' }),
       completed_pending_payment: completedMarkup,
     };
     const trackingStageKey = `${remoteMissionState?.mission.id}:${status.id}:${missionState.paymentStatus}:${missionState.reviewStage}:${missionState.reviewSent}:${missionState.rating}:${reviewSubmissionPending}:${reviewSubmissionError}:${missionState.completion?.invoice?.id ?? ''}:${missionState.completion?.finalAuthorizedAmount ?? ''}`;
@@ -1297,16 +1297,23 @@ export function initialiseHomePage(
       stage.querySelectorAll('[data-supplement-quote-decision]').forEach(button => { button.disabled = supplementDecisionPending; });
     }
     mission.querySelector('[data-mission-next]').hidden = ['travelling', 'arrived', 'in_progress', 'completed_pending_payment'].includes(status.id);
+    const arrivalFact = mission.querySelector('[data-mission-arrival]');
+    arrivalFact.closest('div').hidden = !['accepted', 'travelling'].includes(status.id);
+    if (status.id === 'arrived') arrivalFact.textContent = 'Thợ đã đến';
     if (remoteMissionState) {
-      if (['travelling', 'arrived'].includes(status.id)) void startTrackingMap();
-      else remoteTrackingGeneration++;
+      if (status.id === 'travelling') void startTrackingMap();
+      else {
+        remoteTrackingGeneration++;
+        stopLocationStream?.();
+        stopLocationStream = undefined;
+      }
     }
   };
   const startTrackingMap = async () => {
     if (remoteMissionState) {
       const snapshot = remoteMissionState;
       const generation = ++remoteTrackingGeneration;
-      if (!['travelling', 'arrived'].includes(snapshot.mission.status)) return;
+      if (snapshot.mission.status !== 'travelling') return;
       stopLocationStream?.();
       stopLocationStream = undefined;
       const stage = mission.querySelector('[data-mission-stage]');

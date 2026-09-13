@@ -13,7 +13,7 @@ const escapeHtml = (value) => String(value)
   .replaceAll('"', '&quot;')
   .replaceAll("'", '&#039;');
 
-export function createAssignedProviderCompactMarkup(technician, { tracking = false, showProfileAction = true } = {}) {
+export function createAssignedProviderCompactMarkup(technician, { tracking = false, trackingStatus = 'Thợ đang đến', showProfileAction = true } = {}) {
   const name = technician.name || 'Đối tác HOME AI';
   const avatar = technician.avatarUrl
     ? `<img src="${escapeHtml(technician.avatarUrl)}" alt="Ảnh đại diện của ${escapeHtml(name)}">`
@@ -34,7 +34,7 @@ export function createAssignedProviderCompactMarkup(technician, { tracking = fal
       <span class="assigned-provider-photo">${avatar}</span>
       <div><h3>${escapeHtml(name)}</h3><p>★ ${rating} · ${reviewCount} đánh giá</p>
         ${technician.verified ? '<span class="verified-badge">✓ Đã xác minh</span>' : ''}</div>
-      ${tracking ? '<strong data-tracking-status>Thợ đang đến</strong>' : '<strong>Đã nhận nhiệm vụ</strong>'}
+      ${tracking ? `<strong data-tracking-status>${escapeHtml(trackingStatus)}</strong>` : '<strong>Đã nhận nhiệm vụ</strong>'}
     </div>
     <dl class="assigned-provider-facts">
       <div><dt>Hoạt động</dt><dd>${escapeHtml(activity || '')}</dd></div>
@@ -130,15 +130,20 @@ export function createInterventionProgressMarkup(state) {
   </section>`;
 }
 
-export function createTrackingStageMarkup(technician) {
-  return `<div class="tracking-shell">
-    <div class="tracking-map" data-tracking-map aria-label="Bản đồ theo dõi thợ"></div>
-    <article class="tracking-bottom-sheet" aria-label="Thông tin thợ đang đến">
-      ${createAssignedProviderCompactMarkup(technician, { tracking: true })}
-      <p class="tracking-status-message" data-tracking-message hidden></p>
-      <div class="tracking-metrics" data-tracking-metrics>
+export function createTrackingStageMarkup(technician, { missionStatus = 'travelling' } = {}) {
+  const moving = missionStatus === 'travelling';
+  const trackingStatus = missionStatus === 'arrived' ? 'Thợ đã đến' : moving ? 'Thợ đang đến' : 'Đang sửa chữa';
+  const message = missionStatus === 'arrived' ? 'Thợ đã đến địa điểm của bạn.' : moving ? '' : 'Thợ đang kiểm tra và sửa chữa thiết bị của bạn.';
+  return `<div class="tracking-shell" data-tracking-mission-status="${escapeHtml(missionStatus)}">
+    ${moving ? '<div class="tracking-map" data-tracking-map aria-label="Bản đồ theo dõi thợ"></div>' : ''}
+    <article class="tracking-bottom-sheet" aria-label="${trackingStatus}">
+      ${createAssignedProviderCompactMarkup(technician, { tracking: true, trackingStatus })}
+      <p class="tracking-status-message" data-tracking-message ${moving ? 'hidden' : ''}>${message}</p>
+      <div class="tracking-metrics" data-tracking-metrics ${moving ? '' : 'hidden'}>
+        ${moving ? `
         <div><span>Thời gian đến</span><strong data-tracking-eta>Đang tính...</strong></div>
         <div><span>Quãng đường còn lại</span><strong data-tracking-distance>Đang tính...</strong></div>
+        ` : ''}
       </div>
       <div class="tracking-contact-actions">
         <button type="button" data-tracking-message>💬 Nhắn tin</button>
@@ -152,6 +157,8 @@ export function createTrackingStageMarkup(technician) {
 }
 
 export function updateTrackingPresentation(container, position) {
+  const missionStatus = container.querySelector('[data-tracking-mission-status]')?.dataset?.trackingMissionStatus;
+  if (missionStatus && missionStatus !== 'travelling') return;
   container.querySelector('[data-tracking-status]').textContent = position.status;
   container.querySelector('[data-tracking-eta]').textContent = position.near ? '< 1 phút' : position.arrived ? '0 phút' : `${position.etaMinutes} phút`;
   container.querySelector('[data-tracking-distance]').textContent = position.near ? '< 0.1 km' : formatDistance(position.remainingDistanceKm);
