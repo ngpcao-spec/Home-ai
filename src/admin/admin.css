@@ -11,3 +11,21 @@ p { line-height: 1.5; }
 button { width: 100%; min-height: 52px; margin-top: 12px; border: 0; border-radius: 14px; background: #087b61; color: white; font: inherit; font-weight: 700; cursor: pointer; }
 button.secondary { background: #e7f4ee; color: #087b61; }
 button:focus-visible { outline: 3px solid #ff805b; outline-offset: 3px; }
+.admin-supervision { max-width: 980px; margin: 12px auto; }
+.admin-supervision header { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
+.admin-supervision h1 { font-size: 22px; }
+.admin-supervision nav, .admin-filters, .admin-pages { display: flex; gap: 8px; flex-wrap: wrap; }
+.admin-supervision button { width: auto; padding: 12px 18px; }
+.admin-filters { margin: 16px 0; }
+.admin-read-only, time { color: #60756f; font-size: 14px; }
+.admin-list { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); }
+.admin-list article, .admin-detail { padding: 20px; border: 1px solid #dfece6; border-radius: 18px; background: white; overflow-wrap: anywhere; }
+.admin-list h2 { margin: 0 0 8px; font-size: 20px; }
+.admin-list strong { display: block; margin: 12px 0; }
+.admin-status { color: #087b61; font-weight: 700; }
+.admin-detail dl div { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid #edf4f0; }
+.admin-detail dd { margin: 0; text-align: right; }
+.admin-timeline { padding-left: 22px; }
+.admin-timeline li { margin: 14px 0; }
+.admin-timeline time { display: block; margin-top: 4px; }
+.admin-avatar { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; }

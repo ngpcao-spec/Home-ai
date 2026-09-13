@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { readSupabaseConfig } from '../supabase/config.js';
+import { createAdminRepository } from './admin-repository.js';
 
 export const adminSessionStorageKey = 'home-ai-admin-auth-v1';
 export const adminOAuthRedirectTo = 'https://ngpcao-spec.github.io/Home-ai/admin/';
@@ -13,6 +14,7 @@ export function createAdminAuth(runtimeConfig = globalThis.__HOME_AI_CONFIG__, c
     global: { headers: { 'X-Client-Info': 'home-ai-admin-web' } },
   });
   return Object.freeze({
+    createRepository: () => createAdminRepository(client, config.url),
     async resume() {
       const { data, error } = await client.auth.getSession();
       if (error) throw new Error('Impossible de restaurer la session Admin.');
