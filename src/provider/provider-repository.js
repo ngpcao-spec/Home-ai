@@ -169,6 +169,7 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
   };
   return Object.freeze({
     source: 'supabase', load: loadDashboard,
+    chatServices: repositories.missionMessages ? {userId:data.user.id,messages:repositories.missionMessages} : null,
     callServices: repositories.missionCalls && repositories.stringeeTokens ? {
       userId:data.user.id,missionCalls:repositories.missionCalls,tokens:repositories.stringeeTokens,
     } : null,

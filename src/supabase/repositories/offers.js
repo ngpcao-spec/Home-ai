@@ -65,6 +65,7 @@ export function createSupabaseOffersRepository(supabase) {
         .on('postgres_changes', {
           event: '*', schema: 'public', table: 'mission_calls',
         }, onChange)
+        .on('postgres_changes', {event:'INSERT',schema:'public',table:'mission_messages'}, onChange)
         .subscribe(onStatus);
       return () => client.removeChannel(channel);
     },

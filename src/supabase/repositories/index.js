@@ -1,3 +1,4 @@
+import { createMissionChatRepository } from '../../chat/mission-chat-repository.js';
 import { getSupabaseBrowserClient } from '../client.js';
 import { createSupabaseMissionsRepository } from './missions.js';
 import { createSupabaseProfilesRepository } from './profiles.js';
@@ -9,7 +10,7 @@ import { createMissionCallRepository, createStringeeTokenProvider } from '../../
 export function createOptionalSupabaseRepositories(runtimeConfig = globalThis.__HOME_AI_CONFIG__) {
   const client = getSupabaseBrowserClient(runtimeConfig);
   if (!client) {
-    return Object.freeze({ enabled: false, client: null, profiles: null, addresses: null, missions: null, providers: null, offers: null, missionCalls: null, stringeeTokens: null });
+    return Object.freeze({ enabled: false, client: null, profiles: null, addresses: null, missions: null, providers: null, offers: null, missionMessages: null, missionCalls: null, stringeeTokens: null });
   }
 
   return Object.freeze({
@@ -20,6 +21,7 @@ export function createOptionalSupabaseRepositories(runtimeConfig = globalThis.__
     missions: createSupabaseMissionsRepository(client),
     providers: createSupabaseProvidersRepository(client),
     offers: createSupabaseOffersRepository(client),
+    missionMessages: createMissionChatRepository(client),
     missionCalls: createMissionCallRepository(client),
     stringeeTokens: createStringeeTokenProvider(client),
   });

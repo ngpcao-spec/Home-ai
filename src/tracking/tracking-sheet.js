@@ -1,3 +1,4 @@
+import { createMissionChatButton } from '../chat/mission-chat.js';
 import { createMissionCallButton } from '../calls/call-manager.js';
 const formatDistance = (distanceKm) => distanceKm < 1
   ? `${Math.round(distanceKm * 1000)} m`
@@ -39,7 +40,7 @@ export function createAssignedProviderCompactMarkup(technician, { tracking = fal
       ${technician.experienceYears == null ? '' : `<div><dt>Kinh nghiệm</dt><dd>${Number(technician.experienceYears)} năm</dd></div>`}
     </dl>
     ${technician.introduction ? `<p class="assigned-provider-introduction">${escapeHtml(technician.introduction)}</p>` : ''}
-    ${createMissionCallButton(technician.callMission,'customer',Boolean(technician.callMission))}
+    <div class="mission-contact-actions">${createMissionChatButton(technician.chatMission,Boolean(technician.chatMission))}${createMissionCallButton(technician.callMission,'customer',Boolean(technician.callMission))}</div>
     ${showProfileAction ? '<div class="assigned-provider-contact"><button type="button" data-view-assigned-provider-profile>Xem hồ sơ</button></div>' : ''}
   </article>`;
 }

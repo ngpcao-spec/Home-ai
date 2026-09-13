@@ -25,6 +25,7 @@ describe('configuration Supabase optionnelle', () => {
       missions: null,
       providers: null,
       offers: null,
+      missionMessages: null,
       missionCalls: null,
       stringeeTokens: null,
     });

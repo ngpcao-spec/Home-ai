@@ -1,3 +1,4 @@
+import { getGlobalMissionChat } from './chat/mission-chat.js';
 import { getGlobalCallManager } from './calls/call-manager.js';
 import { createMockDiagnostic } from './diagnostic/mock-diagnostic.js';
 import { createSupabaseAiDiagnostic } from './diagnostic/supabase-ai-diagnostic.js';
@@ -550,6 +551,7 @@ export function initialiseHomePage(
   let missionConnection;
   let callManager;
   let missionCallServices;
+  let missionChatServices;let chatManager;
   let missionSynchronizer;
   let remoteMissionState;
   let supabaseMissionMode = false;
@@ -592,17 +594,18 @@ export function initialiseHomePage(
   const ensureSupabaseMissionBackend = async () => {
     missionConnection ??= customerMissionConnector({ verifiedUserId: verifiedCustomerUserId });
     const connection = await missionConnection;
-    if(connection.source==='supabase')missionCallServices=connection.callServices;
+    if(connection.source==='supabase'){missionCallServices=connection.callServices;missionChatServices=connection.chatServices;}
     if (connection.source !== 'supabase') {
       if (verifiedCustomerUserId) missionConnection = undefined;
       return connection;
     }
     supabaseMissionMode = true;
     missionCallServices = connection.callServices;
+    missionChatServices = connection.chatServices;
     if (missionCallServices) callManager ??= getGlobalCallManager({documentRef:root.ownerDocument,role:'customer',...missionCallServices});
     missionRepository = connection.repository;
     providerRepository = connection.providerRepository;
-    missionSynchronizer ??= createCustomerMissionSynchronizer({ missionRepository, providerRepository, scheduleTask, missionCalls:connection.callServices?.missionCalls });
+    missionSynchronizer ??= createCustomerMissionSynchronizer({ missionRepository, providerRepository, scheduleTask, missionMessages:connection.chatServices?.messages,missionCalls:connection.callServices?.missionCalls });
     return connection;
   };
   const renderCustomerProfile = () => {
@@ -833,7 +836,7 @@ export function initialiseHomePage(
     root.querySelector('[data-location-label]').textContent = clientLocation.source === 'browser' ? 'Vị trí hiện tại' : 'Đang dùng vị trí mặc định · Nha Trang';
     missionConnection ??= customerMissionConnector({ verifiedUserId: verifiedCustomerUserId });
     const connection = await missionConnection;
-    if(connection.source==='supabase')missionCallServices=connection.callServices;
+    if(connection.source==='supabase'){missionCallServices=connection.callServices;missionChatServices=connection.chatServices;}
     if (connection.source === 'error') {
       search.querySelector('[data-search-progress]').hidden = true;
       search.querySelector('#map-search-title').textContent = 'Không thể tạo nhiệm vụ';
@@ -851,7 +854,7 @@ export function initialiseHomePage(
         missionRepository = connection.repository;
         missionSynchronizer ??= createCustomerMissionSynchronizer({
           missionRepository,
-          missionCalls:connection.callServices?.missionCalls,
+          missionMessages:connection.chatServices?.messages,missionCalls:connection.callServices?.missionCalls,
           providerRepository: connection.providerRepository,
           scheduleTask,
         });
@@ -1142,6 +1145,10 @@ export function initialiseHomePage(
   const applyRemoteMissionState = (snapshot) => {
     if (remoteMissionState?.mission.id === snapshot.mission.id
         && remoteMissionState.mission.version > snapshot.mission.version) return;
+    const businessSnapshot = value => JSON.stringify({...value,messages:undefined,messageError:undefined,dispatchEvent:undefined});
+    const chatOnlyUpdate = missionChatServices && remoteMissionState
+      && (!snapshot.dispatchEvent || snapshot.dispatchEvent.table === 'mission_messages')
+      && businessSnapshot(remoteMissionState) === businessSnapshot(snapshot);
     const reviewDraft = remoteMissionState?.mission.id === snapshot.mission.id && !missionState.reviewSent
       ? { rating: missionState.rating, reviewComment: mission.querySelector('[data-review-comment]')?.value ?? missionState.reviewComment }
       : null;
@@ -1149,11 +1156,15 @@ export function initialiseHomePage(
     remoteMissionState = snapshot;
     persistedMission = snapshot.mission;
     if (missionCallServices) callManager ??= getGlobalCallManager({documentRef:root.ownerDocument,role:'customer',...missionCallServices});
+    if(missionChatServices)chatManager ??= getGlobalMissionChat({documentRef:root.ownerDocument,role:'customer',...missionChatServices});
+    chatManager?.observe(snapshot);
     callManager?.observe({mission:snapshot.mission,peer:snapshot.provider,currentCall:snapshot.currentCall,callLoaded:!snapshot.callError,callEvent:snapshot.dispatchEvent?.new});
     if(snapshot.callError)callManager?.reportError('Không thể đồng bộ cuộc gọi. Vui lòng thử lại.');
+    // Message changes update only the document-owned chat, preserving mission DOM.
+    if(chatOnlyUpdate)return;
     const assignedTechnician = createAssignedCustomerTechnician(snapshot.provider, snapshot.mission);
     const dispatchState = getCustomerDispatchState(snapshot);
-    selectedTechnician = dispatchState.phase === 'accepted' ? (assignedTechnician && {...assignedTechnician, callMission:missionCallServices ? {id:snapshot.mission.id,status:snapshot.mission.status} : null}) : null;
+    selectedTechnician = dispatchState.phase === 'accepted' ? (assignedTechnician && {...assignedTechnician, chatMission:missionChatServices ? {id:snapshot.mission.id,status:snapshot.mission.status} : null, callMission:missionCallServices ? {id:snapshot.mission.id,status:snapshot.mission.status} : null}) : null;
     missionState = createCustomerMissionStateFromServer(snapshot);
     if (reviewDraft && missionState.reviewStage === 'rating' && !missionState.reviewSent) {
       missionState = { ...missionState, ...reviewDraft };
@@ -1182,7 +1193,9 @@ export function initialiseHomePage(
     stopMissionPolling?.();
     stopMissionRealtime?.();
     stopMissionPolling = missionSynchronizer.poll(missionId, applyRemoteMissionState, showRemoteMissionError);
-    stopMissionRealtime = missionSynchronizer.subscribe(missionId, applyRemoteMissionState, showRemoteMissionError);
+    stopMissionRealtime = missionSynchronizer.subscribe(missionId, applyRemoteMissionState, showRemoteMissionError, messages => {
+      if(persistedMission?.id===missionId)chatManager?.observe({mission:persistedMission,messages,messageError:messages===null});
+    });
   };
   bookingForm.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -1191,21 +1204,21 @@ export function initialiseHomePage(
     root.querySelector('[data-booking-status]').textContent = 'Đang gửi yêu cầu đến thợ...';
     missionConnection ??= customerMissionConnector();
     const connection = await missionConnection;
-    if(connection.source==='supabase')missionCallServices=connection.callServices;
+    if(connection.source==='supabase'){missionCallServices=connection.callServices;missionChatServices=connection.chatServices;}
     if (connection.source === 'error') {
       submit.disabled = false;
       root.querySelector('[data-booking-status]').textContent = 'Không thể lưu nhiệm vụ. Vui lòng thử lại.';
       return;
     }
     if (connection.source === 'supabase') {
-      missionCallServices=connection.callServices;
+      missionCallServices=connection.callServices;missionChatServices=connection.chatServices;
       try {
         supabaseMissionMode = true;
         missionRepository = connection.repository;
         providerRepository = connection.providerRepository;
         missionSynchronizer = createCustomerMissionSynchronizer({
           missionRepository,
-          missionCalls:connection.callServices?.missionCalls,
+          missionMessages:connection.chatServices?.messages,missionCalls:connection.callServices?.missionCalls,
           providerRepository,
           scheduleTask,
         });
@@ -1686,7 +1699,7 @@ export function initialiseHomePage(
       return;
     }
     if (event.target.closest('[data-profile-logout]')) {
-      callManager?.dispose();callManager=undefined;missionCallServices=undefined;
+      chatManager?.dispose();chatManager=undefined;missionChatServices=undefined;callManager?.dispose();callManager=undefined;missionCallServices=undefined;
       stopMissionPolling?.();
       stopMissionRealtime?.();
       stopMissionPolling = undefined;

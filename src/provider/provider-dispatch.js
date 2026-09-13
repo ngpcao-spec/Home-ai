@@ -138,7 +138,7 @@ export function notifyIncomingOffer(environment = globalThis) {
 }
 
 export function createProviderDispatchController({
-  repository, getState, onState, onRefresh = () => {}, onOffer = () => {}, onError = () => {},
+  repository, getState, onState, onRefresh = () => {}, onMessageEvent = null, onOffer = () => {}, onError = () => {},
   scheduleTask = globalThis.setTimeout, clearTask = globalThis.clearTimeout,
   intervalMs = 2500, isPageActive = () => true,
 }) {
@@ -172,7 +172,10 @@ export function createProviderDispatchController({
   };
   const start = () => {
     if (repository.source !== 'supabase' || typeof repository.subscribeDispatch !== 'function') return () => {};
-    unsubscribe = repository.subscribeDispatch(refresh, (status) => {
+    unsubscribe = repository.subscribeDispatch(event => {
+      if(event?.table==='mission_messages' && onMessageEvent){onMessageEvent(event);return;}
+      return refresh();
+    }, (status) => {
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') onError(new Error(`Provider Realtime: ${status}`));
     });
     schedulePoll();

@@ -130,6 +130,7 @@ export async function connectSupabaseCustomerMissions({
       repository: repositories.missions,
       providerRepository: repositories.providers,
       activeMission,
+      chatServices: repositories.missionMessages ? {userId,messages:repositories.missionMessages} : null,
       callServices: repositories.missionCalls && repositories.stringeeTokens ? {userId, missionCalls:repositories.missionCalls,tokens:repositories.stringeeTokens} : null,
     });
   } catch (error) {
@@ -148,6 +149,7 @@ export async function restoreActiveCustomerMission(connection, {
     providerRepository: connection.providerRepository,
     scheduleTask,
     missionCalls:connection.callServices?.missionCalls,
+    missionMessages:connection.chatServices?.messages,
   });
   return Object.freeze({
     synchronizer,
@@ -177,6 +179,7 @@ export function createCustomerMissionSynchronizer({
   clearTask = globalThis.clearTimeout,
   intervalMs = 3000,
   missionCalls = null,
+  missionMessages = null,
 }) {
   if (!missionRepository || !providerRepository) throw new TypeError('Supabase mission and provider repositories are required');
   let dispatchPromise;
@@ -203,7 +206,11 @@ export function createCustomerMissionSynchronizer({
     if (missionCalls && assigned) {
       try { currentCall = await missionCalls.current(mission.id); } catch { callError = true; }
     }
-    return Object.freeze({ mission, provider, quotes, offers, providerLocation, review, invoice, currentCall, callError });
+    let messages = null;let messageError = false;
+    if(missionMessages && assigned && !['completed','cancelled','expired'].includes(mission.status)) {
+      try {messages = await missionMessages.list(mission.id);}catch{messageError=true;}
+    }
+    return Object.freeze({ mission, provider, quotes, offers, providerLocation, review, invoice, currentCall, callError, messages, messageError });
   };
 
   const create = (draft, { replaceMission = null } = {}) => {
@@ -294,10 +301,15 @@ export function createCustomerMissionSynchronizer({
     };
   };
 
-  const subscribe = (missionId, onState, onError) => {
+  const subscribe = (missionId, onState, onError, onMessages = null) => {
     if (typeof missionRepository.subscribeMission !== 'function') return () => {};
     let active = true;
     const receive = async (event) => {
+      if(event?.table === 'mission_messages' && missionMessages && onMessages) {
+        try {const messages=await missionMessages.list(missionId);if(active)onMessages(messages);}
+        catch {if(active)onMessages(null);}
+        return;
+      }
       try {
         const state = await load(missionId);
         if (active) onState(Object.freeze({ ...state, dispatchEvent: event }));
