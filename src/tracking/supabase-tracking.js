@@ -3,6 +3,15 @@ import { straightLineDistanceKm } from '../routing/routing-provider.js';
 const valid = point => Number.isFinite(point?.latitude) && Number.isFinite(point?.longitude)
   && Math.abs(point.latitude) <= 90 && Math.abs(point.longitude) <= 180;
 
+export function preserveNewestProviderLocation(previous, next) {
+  if (!previous?.providerLocation || !next?.providerLocation
+      || previous.mission?.id !== next.mission?.id) return next;
+  const previousAt = Date.parse(previous.providerLocation.recordedAt);
+  const nextAt = Date.parse(next.providerLocation.recordedAt);
+  if (!Number.isFinite(previousAt) || !Number.isFinite(nextAt) || nextAt >= previousAt) return next;
+  return Object.freeze({ ...next, providerLocation: previous.providerLocation });
+}
+
 export async function prepareSupabaseTracking(snapshot, routes) {
   const { mission, providerLocation: origin } = snapshot;
   const destination = mission.clientLocation;

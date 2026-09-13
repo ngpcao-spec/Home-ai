@@ -43,7 +43,7 @@ describe('architecture cartographique V1.2', () => {
     assert.equal(values.at(-1).status, 'Thợ đã đến');
   });
   it('libère la carte C09 avant de créer la carte de suivi C13', async () => {
-    const maps = [];
+    const maps = []; const markerPositions = [];
     class FakeMap {
       constructor({ container }) { this.container = container; this.sources = new Map(); this.layers = []; this.removed = false; maps.push(this); }
       addControl() {}
@@ -57,7 +57,7 @@ describe('architecture cartographique V1.2', () => {
       remove() { this.removed = true; }
     }
     class FakeMarker {
-      setLngLat() { return this; }
+      setLngLat(value) { this.position = value; markerPositions.push(value); return this; }
       setPopup() { return this; }
       addTo() { return this; }
       getElement() { return { classList: { toggle() {} } }; }
@@ -82,6 +82,9 @@ describe('architecture cartographique V1.2', () => {
       const routeLayer = maps[1].layers.find(({ id }) => id === 'route');
       assert.deepEqual(routeLayer.layout, { 'line-join': 'round', 'line-cap': 'round' });
       assert.equal(routeLayer.paint['line-width'], 4);
+      provider.moveProvider('p1', { latitude: 12.247, longitude: 109.192 });
+      assert.deepEqual(markerPositions.at(-1), [109.192, 12.247]);
+      assert.equal(maps.length, 2);
     } finally {
       globalThis.maplibregl = previousMapLibre;
     }

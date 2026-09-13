@@ -12,7 +12,7 @@ import { createMapProvider } from './map/map-provider.js';
 import { getClientLocation } from './location/client-location.js';
 import { createRouteService } from './routing/routing-provider.js';
 import { createMockProviderLocationSource } from './tracking/location-stream.js';
-import { prepareSupabaseTracking } from './tracking/supabase-tracking.js';
+import { prepareSupabaseTracking, preserveNewestProviderLocation } from './tracking/supabase-tracking.js';
 import { createTrackingRouteSession } from './tracking/route-session.js';
 import { createInterventionQuote } from './mission/intervention-quote.js';
 import { createCompletionSummaryMarkup, createPaidExternalMarkup, createProviderReviewMarkup, getCompletedMissionPricePresentation } from './mission/completion-summary.js';
@@ -1146,6 +1146,7 @@ export function initialiseHomePage(
   const applyRemoteMissionState = (snapshot) => {
     if (remoteMissionState?.mission.id === snapshot.mission.id
         && remoteMissionState.mission.version > snapshot.mission.version) return;
+    snapshot = preserveNewestProviderLocation(remoteMissionState, snapshot);
     const businessSnapshot = value => JSON.stringify({...value,messages:undefined,messageError:undefined,dispatchEvent:undefined});
     const chatOnlyUpdate = missionChatServices && remoteMissionState
       && (!snapshot.dispatchEvent || snapshot.dispatchEvent.table === 'mission_messages')
@@ -1301,7 +1302,10 @@ export function initialiseHomePage(
     arrivalFact.closest('div').hidden = !['accepted', 'travelling'].includes(status.id);
     if (status.id === 'arrived') arrivalFact.textContent = 'Thợ đã đến';
     if (remoteMissionState) {
-      if (status.id === 'travelling') void startTrackingMap();
+      if (status.id === 'travelling') {
+        if (remoteMissionState.providerLocation) mapProvider.moveProvider(remoteMissionState.mission.providerId, remoteMissionState.providerLocation);
+        void startTrackingMap();
+      }
       else {
         remoteTrackingGeneration++;
         stopLocationStream?.();

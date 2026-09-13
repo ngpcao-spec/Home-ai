@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { it } from 'node:test';
-import { prepareSupabaseTracking } from '../src/tracking/supabase-tracking.js';
+import { prepareSupabaseTracking, preserveNewestProviderLocation } from '../src/tracking/supabase-tracking.js';
 import { updateTrackingPresentation } from '../src/tracking/tracking-sheet.js';
 import { createCustomerMissionSynchronizer } from '../src/customer/supabase-mission.js';
 import { createSupabaseMissionsRepository } from '../src/supabase/repositories/missions.js';
@@ -75,13 +75,51 @@ it('refreshes assigned GPS via realtime and polling fallback', async () => {
   stop(); stopPolling();
 });
 
-it('keeps sending actual device GPS during an assigned mission without making provider available', async () => {
-  const writes = [];
+it('streams P1, P2 and P3 during travelling, then stops at arrived', async () => {
+  const writes = []; let callback; let cleared; let state = { status: { online: true, available: false }, assignment: { id: 'm1', status: 'travelling' } };
   const heartbeat = createProviderLocationHeartbeat({ repository: { source: 'supabase', updateLocation: async value => { writes.push(value); return {}; } },
-    getState: () => ({ status: { online: true, available: false }, assignment: { id: 'm1' } }),
-    geolocation: { getCurrentPosition: success => success({ coords: { latitude: 12.2, longitude: 109.1 } }) },
+    getState: () => state,
+    geolocation: { watchPosition(success, _error, options) { callback = success; assert.deepEqual(options, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }); return 7; }, clearWatch(id) { cleared = id; } },
     scheduleTask: () => 1, clearTask() {},
   });
-  await heartbeat.refresh(); heartbeat.stop();
-  assert.deepEqual(writes, [{ latitude: 12.2, longitude: 109.1 }]);
+  heartbeat.sync();
+  await callback({ coords: { latitude: 12.245, longitude: 109.19, accuracy: 8 }, timestamp: 1 });
+  await callback({ coords: { latitude: 12.246, longitude: 109.191, accuracy: 7 }, timestamp: 2 });
+  await callback({ coords: { latitude: 12.247, longitude: 109.192, accuracy: 6 }, timestamp: 3 });
+  assert.deepEqual(writes, [
+    { latitude: 12.245, longitude: 109.19 },
+    { latitude: 12.246, longitude: 109.191 },
+    { latitude: 12.247, longitude: 109.192 },
+  ]);
+  await callback({ coords: { latitude: 1, longitude: 1 }, timestamp: 2 });
+  assert.equal(writes.length, 3);
+  state = { ...state, assignment: { id: 'm1', status: 'arrived' } };
+  heartbeat.sync();
+  assert.equal(cleared, 7);
+  await callback({ coords: { latitude: 12.248, longitude: 109.193 }, timestamp: 4 });
+  assert.equal(writes.length, 3);
+});
+
+it('preserves the newest backend GPS when realtime responses complete out of order', () => {
+  const latest = snapshot(); latest.providerLocation.recordedAt = '2026-09-07T09:30:00Z'; latest.providerLocation.latitude = 12.247;
+  const stale = snapshot(); stale.providerLocation.recordedAt = '2026-09-07T09:29:00Z'; stale.providerLocation.latitude = 12.245;
+  assert.equal(preserveNewestProviderLocation(latest, stale).providerLocation.latitude, 12.247);
+  const newer = snapshot(); newer.providerLocation.recordedAt = '2026-09-07T09:31:00Z'; newer.providerLocation.latitude = 12.248;
+  assert.equal(preserveNewestProviderLocation(latest, newer).providerLocation.latitude, 12.248);
+});
+
+it('restarts watchPosition when a travelling Provider returns to foreground', () => {
+  let visible = true; let starts = 0; const cleared = [];
+  const heartbeat = createProviderLocationHeartbeat({
+    repository: { source: 'supabase', updateLocation: async () => ({}) },
+    getState: () => ({ status: { online: true, available: false }, assignment: { id: 'm1', status: 'travelling' } }),
+    isPageActive: () => visible,
+    geolocation: { watchPosition() { starts += 1; return starts; }, clearWatch(id) { cleared.push(id); } },
+  });
+  heartbeat.sync();
+  visible = false; heartbeat.sync();
+  visible = true; heartbeat.sync();
+  assert.equal(starts, 2);
+  assert.deepEqual(cleared, [1]);
+  heartbeat.stop();
 });

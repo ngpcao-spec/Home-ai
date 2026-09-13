@@ -275,10 +275,10 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   syncCalls(state);
   await draw();if(['accepted','travelling'].includes(state.assignment?.status))void loadNavigation().then(draw);
   if(repository.source==='supabase'&&!page?.hidden)offerAlert.start(state.offers?.find(({id})=>id===priorityOfferId));
-  const heartbeat=heartbeatFactory({repository,getState:()=>state,isPageActive:()=>!page?.hidden,onState:async next=>{state=next;syncOfferLayer();message='Vị trí GPS đã được cập nhật.';if(currentView==='home')await draw();},onError:async()=>{message='Không thể cập nhật GPS. Hãy cho phép truy cập vị trí.';if(currentView==='home')await draw();}});
+  const heartbeat=heartbeatFactory({repository,getState:()=>state,isPageActive:()=>!page?.hidden,onState:next=>{state=next;syncOfferLayer();},onError:async()=>{message='Không thể cập nhật GPS. Hãy cho phép truy cập vị trí.';if(currentView==='home')await draw();}});
   const dispatch=createProviderDispatchController({repository,getState:()=>state,onRefresh:syncCalls,onMessageEvent:()=>{void chatManager?.refresh();},isPageActive:()=>!page?.hidden,onState:async next=>{
     const previousAssignment=`${state.assignment?.id??''}:${state.assignment?.status??''}`;
-    state=next; priorityOfferId=next.offers?.find(({expiresAt})=>new Date(expiresAt).getTime()>Date.now())?.id??null;
+    state=next; heartbeat.sync(); priorityOfferId=next.offers?.find(({expiresAt})=>new Date(expiresAt).getTime()>Date.now())?.id??null;
     const assignmentChanged=previousAssignment!==`${next.assignment?.id??''}:${next.assignment?.status??''}`;
     if(page?.hidden)return;
     if((currentView==='missions'||currentView==='income')&&assignmentChanged)await loadHistory();
