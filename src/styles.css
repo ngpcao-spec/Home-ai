@@ -89,6 +89,8 @@ h1 em { color: var(--green); font-style: normal; }
 .clarification-options button:active { border-color: #087b61; background: #dff2eb; }
 .clarification-options button[aria-pressed="true"] { border-color: #087b61; background: #dff2eb; color: #174b3e; }
 .clarification-options button[aria-pressed="true"]::before { content: '✓ '; font-weight: 900; }
+.start-button[aria-pressed="true"] { background: #dff2eb; color: #087b61; box-shadow: inset 0 0 0 1px #087b61; }
+.start-button[aria-pressed="true"] svg { display: none; }
 .clarification .clarification-feedback { margin: 10px 0 0; color: #087b61; font-size: 14px; font-weight: 750; }
 .clarification form:not([hidden]) { display: grid; gap: 8px; }
 .clarification form[hidden] { display: none; }

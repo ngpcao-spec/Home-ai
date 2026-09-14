@@ -79,6 +79,39 @@ it('submits a proposed answer and stops early when no question remains', async (
   } finally { state.dom.window.close(); }
 });
 
+it('confirms the initial AI request immediately and prevents duplicate submissions', async () => {
+  let resolveAnalysis;
+  const state = setup([new Promise(resolve => { resolveAnalysis = resolve; })]);
+  try {
+    const form = state.root.querySelector('[data-request-form]');
+    form.elements.request.value = 'Ổ cắm điện không hoạt động';
+    form.dispatchEvent(new state.dom.window.Event('submit', {bubbles:true,cancelable:true}));
+    const button = form.querySelector('[type="submit"]');
+    assert.equal(button.querySelector('span').textContent, '✓ Đã gửi');
+    assert.equal(button.disabled, true);
+    assert.equal(button.getAttribute('aria-pressed'), 'true');
+    assert.equal(state.root.querySelector('[data-form-status]').textContent, 'AI đang phân tích vấn đề của bạn...');
+    form.dispatchEvent(new state.dom.window.Event('submit', {bubbles:true,cancelable:true}));
+    assert.equal(state.calls.length, 1);
+    resolveAnalysis(diagnosis('Đã hiểu.', []));
+    await settle();
+    assert.equal(button.querySelector('span').textContent, 'Bắt đầu với AI');
+    assert.equal(button.disabled, false);
+  } finally { state.dom.window.close(); }
+});
+
+it('restores the initial AI button after an analysis error', async () => {
+  const state = setup([Promise.reject(new Error('network'))]);
+  try {
+    await submitInitial(state.root);
+    const button = state.root.querySelector('[data-request-form] [type="submit"]');
+    assert.equal(button.querySelector('span').textContent, 'Bắt đầu với AI');
+    assert.equal(button.disabled, false);
+    assert.equal(button.hasAttribute('aria-pressed'), false);
+    assert.match(state.root.querySelector('[data-form-status]').textContent, /Không thể phân tích/);
+  } finally { state.dom.window.close(); }
+});
+
 it('offers and submits Không biết only when the AI marks it relevant', async () => {
   const state = setup([
     diagnosis('Cần kiểm tra.', [question('Cầu dao có bị ngắt không?', ['Có', 'Không', 'Không chắc'], true)]),

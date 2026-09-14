@@ -764,6 +764,9 @@ export function initialiseHomePage(
   };
   const analyseCurrentConversation = async () => {
     const submitButton = form.querySelector('[type="submit"]');
+    const submitLabel = submitButton.querySelector('span');
+    submitLabel.textContent = '✓ Đã gửi';
+    submitButton.setAttribute('aria-pressed', 'true');
     submitButton.disabled = true;
     root.querySelectorAll('[data-clarification-options] button, [data-clarification-form] button').forEach(button => { button.disabled = true; });
     status.textContent = 'AI đang phân tích vấn đề của bạn...';
@@ -777,6 +780,8 @@ export function initialiseHomePage(
     } catch {
       status.textContent = 'Không thể phân tích lúc này. Vui lòng thử lại.';
     } finally {
+      submitLabel.textContent = 'Bắt đầu với AI';
+      submitButton.removeAttribute('aria-pressed');
       submitButton.disabled = false;
       diagnosticConversation.submitting = false;
       root.querySelectorAll('[data-clarification-options] button, [data-clarification-form] button').forEach(button => { button.disabled = false; });
@@ -784,9 +789,10 @@ export function initialiseHomePage(
   };
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (diagnosticConversation.submitting) return;
     const description = input.value.trim();
     if (!description) return;
-    diagnosticConversation = { initialDescription: description, clarifications: [], currentQuestion: null, pending: false, submitting: false };
+    diagnosticConversation = { initialDescription: description, clarifications: [], currentQuestion: null, pending: false, submitting: true };
     resultCard.hidden = true;
     await analyseCurrentConversation();
   });
