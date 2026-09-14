@@ -312,6 +312,7 @@ export function createHomeAiMarkup() {
                 <strong>Cần bổ sung</strong>
                 <p data-clarification-question></p>
                 <div class="clarification-options" data-clarification-options role="group" aria-label="Các câu trả lời đề xuất"></div>
+                <p class="clarification-feedback" data-clarification-feedback role="status" aria-live="polite" hidden></p>
                 <form data-clarification-form hidden>
                   <label for="clarification-answer">Nhập câu trả lời khác</label>
                   <input id="clarification-answer" name="answer" maxlength="500" autocomplete="off" required />
@@ -735,6 +736,9 @@ export function initialiseHomePage(
     questions.hidden = !canClarify;
     root.querySelector('[data-clarification-question]').textContent = diagnosticConversation.currentQuestion?.question ?? '';
     const optionContainer = root.querySelector('[data-clarification-options]');
+    const feedback = root.querySelector('[data-clarification-feedback]');
+    feedback.hidden = true;
+    feedback.textContent = '';
     const optionLabels = canClarify
       ? [...nextQuestion.suggestedAnswers, ...(nextQuestion.allowUnknown ? ['Không biết'] : []), 'Khác']
       : [];
@@ -793,10 +797,20 @@ export function initialiseHomePage(
     const cleanAnswer = String(answer ?? '').trim();
     if (!cleanAnswer) return;
     diagnosticConversation.submitting = true;
+    const conversation = diagnosticConversation;
+    root.querySelectorAll('[data-clarification-options] button, [data-clarification-form] button').forEach(button => {
+      button.disabled = true;
+      if (button.dataset.clarificationAnswer === cleanAnswer) button.setAttribute('aria-pressed', 'true');
+    });
+    const feedback = root.querySelector('[data-clarification-feedback]');
+    feedback.textContent = `✓ Đã chọn: ${cleanAnswer}`;
+    feedback.hidden = false;
     diagnosticConversation.clarifications.push({
       question: diagnosticConversation.currentQuestion.question,
       answer: cleanAnswer,
     });
+    await new Promise(resolve => root.ownerDocument.defaultView.setTimeout(resolve, 1000));
+    if (diagnosticConversation !== conversation) return;
     await analyseCurrentConversation();
   };
   root.querySelector('[data-result-questions]').addEventListener('click', event => {
@@ -806,6 +820,7 @@ export function initialiseHomePage(
       return;
     }
     if (event.target.closest?.('[data-clarification-other]')) {
+      if (diagnosticConversation.submitting) return;
       const clarificationForm = root.querySelector('[data-clarification-form]');
       clarificationForm.hidden = false;
       clarificationForm.elements.answer.focus();

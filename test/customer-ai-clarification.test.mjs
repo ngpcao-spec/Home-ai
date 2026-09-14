@@ -47,6 +47,7 @@ async function choose(root, label) {
   const button = [...root.querySelectorAll('[data-clarification-options] button')].find(item => item.textContent === label);
   assert.ok(button, `Option missing: ${label}`);
   button.click();
+  if (label !== 'Khác') await new Promise(resolve => setTimeout(resolve, 1050));
   await settle();
 }
 
@@ -54,6 +55,7 @@ async function submitOther(root, value) {
   const form = root.querySelector('[data-clarification-form]');
   form.elements.answer.value = value;
   form.dispatchEvent(new root.ownerDocument.defaultView.Event('submit', { bubbles: true, cancelable: true }));
+  await new Promise(resolve => setTimeout(resolve, 1050));
   await settle();
 }
 
@@ -103,8 +105,39 @@ it('reveals free text only after choosing Khác and submits the custom answer', 
     assert.equal(form.hidden, false);
     assert.equal(state.dom.window.getComputedStyle(form).display, 'grid');
     assert.equal(state.calls.length, 1);
+    assert.equal(state.root.querySelector('[data-clarification-feedback]').hidden, true);
     await submitOther(state.root, 'Ngoài ban công');
     assert.equal(state.calls[1].clarifications[0].answer, 'Ngoài ban công');
+  } finally { state.dom.window.close(); }
+});
+
+it('immediately confirms a choice, locks double clicks and advances once after one second', async () => {
+  const state = setup([
+    diagnosis('Cần số lượng.', [question('Bao nhiêu ổ cắm?', ['1 cái', '2 cái', '3–4 cái'])]),
+    diagnosis('Cần hành động.', [question('Bạn muốn làm gì?')]),
+  ]);
+  try {
+    await submitInitial(state.root);
+    const button = state.root.querySelector('[data-clarification-answer="2 cái"]');
+    button.click();
+    assert.equal(button.getAttribute('aria-pressed'), 'true');
+    assert.equal(button.disabled, true);
+    const feedback = state.root.querySelector('[data-clarification-feedback]');
+    assert.equal(feedback.hidden, false);
+    assert.equal(feedback.textContent, '✓ Đã chọn: 2 cái');
+    assert.match(customerStyles, /aria-pressed="true".*\{ border-color: #087b61; background: #dff2eb/);
+    assert.match(customerStyles, /content: '✓ '/);
+    button.click();
+    button.dispatchEvent(new state.dom.window.MouseEvent('click', { bubbles: true }));
+    await new Promise(resolve => setTimeout(resolve, 800));
+    assert.equal(state.calls.length, 1);
+    assert.equal(state.root.querySelector('[data-clarification-question]').textContent, 'Bao nhiêu ổ cắm?');
+    await new Promise(resolve => setTimeout(resolve, 250));
+    await settle();
+    assert.equal(state.calls.length, 2);
+    assert.deepEqual(state.calls[1].clarifications, [{question:'Bao nhiêu ổ cắm?',answer:'2 cái'}]);
+    assert.equal(state.root.querySelector('[data-clarification-question]').textContent, 'Bạn muốn làm gì?');
+    assert.equal(feedback.hidden, true);
   } finally { state.dom.window.close(); }
 });
 

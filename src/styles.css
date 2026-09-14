@@ -87,6 +87,9 @@ h1 em { color: var(--green); font-style: normal; }
 .clarification-options { display: grid; gap: 8px; }
 .clarification-options button { min-height: 44px; padding: 10px 12px; border: 1px solid #b7d7cd; border-radius: 11px; background: #fff; color: #174b3e; font-weight: 750; text-align: left; }
 .clarification-options button:active { border-color: #087b61; background: #dff2eb; }
+.clarification-options button[aria-pressed="true"] { border-color: #087b61; background: #dff2eb; color: #174b3e; }
+.clarification-options button[aria-pressed="true"]::before { content: '✓ '; font-weight: 900; }
+.clarification .clarification-feedback { margin: 10px 0 0; color: #087b61; font-size: 14px; font-weight: 750; }
 .clarification form:not([hidden]) { display: grid; gap: 8px; }
 .clarification form[hidden] { display: none; }
 .clarification form:not([hidden]) { margin-top: 10px; }
