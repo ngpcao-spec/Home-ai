@@ -33,6 +33,7 @@ values('59800000-0000-0000-0000-000000000001','manual',false,'[]');
 set local role authenticated;
 select set_config('request.jwt.claim.role','authenticated',true);
 select set_config('request.jwt.claim.sub','59800000-0000-0000-0000-000000000001',true);
+select public.mark_current_provider_onboarding_step('identity_assist');
 select public.mark_current_provider_onboarding_step('service_area');
 select public.mark_current_provider_onboarding_step('availability');
 do $$ declare s jsonb:=public.get_current_provider_onboarding_state(); begin

@@ -29,7 +29,7 @@ test('V1 garde KYC installé mais le retire de tous les contrôles opérationnel
   assert.match(sql,/Provider onboarding is incomplete/);
 });
 
-test('le frontend V1 ne filtre plus le matching et ne montre pas le parcours CCCD',async()=>{
+test('le frontend V1 ne filtre plus le matching et présente CCCD uniquement comme aide de saisie',async()=>{
   const [matching,providers,onboarding,app,kyc]=await Promise.all([
     readFile(new URL('../src/technicians/matching.js',import.meta.url),'utf8'),
     readFile(new URL('../src/supabase/repositories/providers.js',import.meta.url),'utf8'),
@@ -41,6 +41,7 @@ test('le frontend V1 ne filtre plus le matching et ne montre pas le parcours CCC
   assert.doesNotMatch(providers,/\.eq\(['"]kyc_status['"],\s*['"]verified['"]\)/);
   assert.doesNotMatch(onboarding,/kyc-review|data-open-provider-kyc/);
   assert.doesNotMatch(app,/kycRequired|data-open-provider-kyc/);
+  assert.match(onboarding,/identity-assist/);assert.match(onboarding,/assistMode:true/);
   assert.match(kyc,/data-provider-kyc/);
 });
 

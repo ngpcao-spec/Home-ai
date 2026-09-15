@@ -157,6 +157,7 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
     async uploadIdentity(file){return repositories.offers.uploadAndAnalyzeCurrentProviderIdentity(file);},
     async getIdentityPreview(path){return repositories.offers.createCurrentProviderKycSignedUrl(path);},
     async confirmKyc(id,fields){return repositories.offers.confirmCurrentProviderKycSubmission(id,fields);},
+    async completeIdentityAssist(id,fields){return repositories.offers.completeCurrentProviderIdentityAssist(id,fields);},
     async getProfessionalProfile(){return repositories.offers.getCurrentProviderProfessionalProfile();},
     async saveProfessionalProfile(profile){
       const current=await repositories.offers.getCurrentProviderProfessionalProfile();let uploaded=null;

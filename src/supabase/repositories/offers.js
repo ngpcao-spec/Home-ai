@@ -158,6 +158,11 @@ export function createSupabaseOffersRepository(supabase) {
         target_submission_id: submissionId, new_fields: fields,
       }), 'offers.confirmProviderKycSubmission') ?? {}) });
     },
+    async completeCurrentProviderIdentityAssist(submissionId, fields) {
+      return Object.freeze({ ...(unwrap(await client.rpc('complete_current_provider_identity_assist', {
+        target_submission_id: submissionId, new_fields: fields,
+      }), 'offers.completeCurrentProviderIdentityAssist') ?? {}) });
+    },
     async getCurrentProviderBillingState(missionId) {
       return Object.freeze({ ...(unwrap(await client.rpc('get_current_provider_billing_state', {
         target_mission_id: missionId,

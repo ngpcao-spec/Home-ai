@@ -7,11 +7,12 @@ import { createProgressiveProviderAppRepository } from '../src/provider/provider
 import { renderProviderLogin } from '../src/provider/provider-app.js';
 
 const base={providerExists:true,providerId:'p1',kycStatus:'pending',kycSubmissionStatus:null,
-  professionalProfileComplete:false,hasActivity:false,serviceAreaComplete:false,
+  identityAssistComplete:true,professionalProfileComplete:false,hasActivity:false,serviceAreaComplete:false,
   availabilityComplete:false,onboardingComplete:false,readyForMissions:false};
 
 test('déduit toujours la prochaine étape depuis les données persistées',()=>{
   assert.equal(getProviderOnboardingStep({providerExists:false}),'welcome');
+  assert.equal(getProviderOnboardingStep({...base,identityAssistComplete:false}),'identity-assist');
   assert.equal(getProviderOnboardingStep(base),'profile');
   assert.equal(getProviderOnboardingStep({...base,kycSubmissionStatus:'pending_review'}),'profile');
   assert.equal(getProviderOnboardingStep({...base,professionalProfileComplete:true}),'activities');
@@ -35,14 +36,14 @@ test('un compte Supabase sans profil reçoit le repository onboarding sans fallb
   await repo.provision();assert.equal(fallbackLoads,0);
 });
 
-test('l’accueil déclenche une seule création auth.uid puis reprend sur le profil sans KYC',async()=>{
+test('l’accueil déclenche une seule création auth.uid puis reprend sur la saisie CCCD assistée',async()=>{
   const dom=new JSDOM('<div id="root"></div>');const root=dom.window.document.querySelector('#root');let created=0;
   let state={providerExists:false};
-  const repo={getOnboardingState:async()=>state,provision:async()=>{created++;state={...base,providerExists:true};return state;},getProfessionalProfile:async()=>({name:'',phone:'',experienceYears:null,introduction:''})};
+  const repo={getOnboardingState:async()=>state,provision:async()=>{created++;state={...base,providerExists:true,identityAssistComplete:false};return state;},loadKyc:async()=>({submission:null})};
   const app=await initialiseProviderOnboarding(root,repo);
   root.querySelector('[data-start-provider-onboarding]').click();root.querySelector('[data-start-provider-onboarding]')?.click();
   await new Promise(resolve=>setTimeout(resolve,5));
-  assert.equal(created,1);assert.equal(root.dataset.providerOnboarding??root.firstElementChild.dataset.providerOnboarding,'profile');
+  assert.equal(created,1);assert.match(root.textContent,/Chụp CCCD để điền thông tin nhanh hơn/);
   app.stop();dom.window.close();
 });
 
