@@ -9,7 +9,6 @@ export function isLocationFresh(technician, now = Date.now(), maxAgeMs = DEFAULT
 
 export function isRouteMatrixCandidate(technician, categoryId, { now = Date.now(), maxLocationAgeMs = DEFAULT_LOCATION_MAX_AGE_MS } = {}) {
   return technician.category === categoryId
-    && (technician.kycVerified ?? technician.verified) === true
     && technician.online === true
     && technician.available === true
     && isLocationFresh(technician, now, maxLocationAgeMs);

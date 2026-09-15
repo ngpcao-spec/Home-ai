@@ -145,15 +145,35 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
   const { data, error } = await repositories.client.auth.getUser();
   if (error) throw error;
   if (!data?.user) throw new Error('Supabase authentication required');
-  const initialKyc = typeof repositories.offers.getCurrentProviderKycState === 'function'
-    ? await repositories.offers.getCurrentProviderKycState() : null;
-  if (initialKyc && !initialKyc.provider?.id) throw new Error('Authenticated provider is not provisioned');
-  if (initialKyc && initialKyc.provider.kycStatus !== 'verified') return Object.freeze({
-    source: 'supabase', kycRequired: true,
-    async loadKyc() { return repositories.offers.getCurrentProviderKycState(); },
-    async uploadIdentity(file) { return repositories.offers.uploadAndAnalyzeCurrentProviderIdentity(file); },
-    async getIdentityPreview(documentPath) { return repositories.offers.createCurrentProviderKycSignedUrl(documentPath); },
-    async confirmKyc(submissionId, fields) { return repositories.offers.confirmCurrentProviderKycSubmission(submissionId, fields); },
+  const readOnboarding=()=>repositories.offers.getCurrentProviderOnboardingState();
+  const onboarding=typeof repositories.offers.getCurrentProviderOnboardingState==='function'
+    ? await readOnboarding() : null;
+  if(onboarding&&(!onboarding.providerExists||(!onboarding.onboardingComplete&&!onboarding.readyForMissions)))return Object.freeze({
+    source:'supabase',onboardingRequired:true,
+    async getOnboardingState(){return readOnboarding();},
+    async provision(){return repositories.offers.provisionCurrentProvider();},
+    async markStep(step){return repositories.offers.markCurrentProviderOnboardingStep(step);},
+    async loadKyc(){return repositories.offers.getCurrentProviderKycState();},
+    async uploadIdentity(file){return repositories.offers.uploadAndAnalyzeCurrentProviderIdentity(file);},
+    async getIdentityPreview(path){return repositories.offers.createCurrentProviderKycSignedUrl(path);},
+    async confirmKyc(id,fields){return repositories.offers.confirmCurrentProviderKycSubmission(id,fields);},
+    async getProfessionalProfile(){return repositories.offers.getCurrentProviderProfessionalProfile();},
+    async saveProfessionalProfile(profile){
+      const current=await repositories.offers.getCurrentProviderProfessionalProfile();let uploaded=null;
+      try{if(profile.photoFile)uploaded=await repositories.offers.uploadCurrentProviderAvatar(profile.photoFile);
+        const saved=await repositories.offers.updateCurrentProviderProfessionalProfile({...profile,avatarPath:uploaded?.path??current.avatarPath});
+        if(uploaded&&current.avatarPath&&current.avatarPath!==uploaded.path)await repositories.offers.deleteCurrentProviderAvatar(current.avatarPath).catch(()=>{});
+        return saved;
+      }catch(error){if(uploaded?.path)await repositories.offers.deleteCurrentProviderAvatar(uploaded.path).catch(()=>{});throw error;}
+    },
+    async getServices(){return onboarding.providerExists?repositories.offers.listCurrentProviderServices(data.user.id):[];},
+    async analyzeActivity(input){return repositories.offers.analyzeCurrentProviderActivity(input);},
+    async getHourlyRateReference(category){return repositories.offers.getCurrentProviderHourlyRateReference(category);},
+    async createActivity(proposal,pricing){return repositories.offers.createCurrentProviderActivity(proposal,pricing);},
+    async getServiceArea(){return repositories.offers.getCurrentProviderServiceArea();},
+    async setServiceArea(radius){return repositories.offers.setCurrentProviderServiceArea(radius);},
+    async getAvailabilityPreferences(){return repositories.offers.getCurrentProviderAvailabilityPreferences();},
+    async setAvailabilityPreferences(value){return repositories.offers.setCurrentProviderAvailabilityPreferences(value);},
   });
   const initial = await repositories.offers.getProviderDashboard();
   if (!initial?.provider?.id) throw new Error('Authenticated provider is not provisioned');

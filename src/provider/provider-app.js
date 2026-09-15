@@ -16,8 +16,9 @@ import { readProviderPricingForm, renderProviderPricing } from './provider-prici
 import { readProviderActivityEdit, readProviderActivityInput, readProviderActivityPricing, renderProviderActivities } from './provider-activities.js';
 import { readProviderServiceArea, renderProviderServiceArea, updateProviderServiceAreaPreview } from './provider-service-area.js';
 import { readProviderAvailabilitySchedule, renderProviderAvailabilitySchedule, syncProviderAvailabilityScheduleForm } from './provider-availability-schedule.js';
-import { readProviderKycForm, renderProviderKyc, renderProviderKycProfileSection, validateProviderKycFile } from './provider-kyc.js';
+import { readProviderKycForm, renderProviderKyc, validateProviderKycFile } from './provider-kyc.js';
 import { readProviderProfessionalProfile, renderProviderActivitiesSummary, renderProviderProfessionalProfile, updateProviderProfessionalProfileDraft } from './provider-professional-profile.js';
+import { initialiseProviderOnboarding } from './provider-onboarding.js';
 
 function ensureDispatchStyles(documentRef = globalThis.document) {
   if (!documentRef?.head || documentRef.querySelector?.('[data-provider-dispatch-styles]')) return;
@@ -98,7 +99,7 @@ export function renderProviderDashboard(state, { source='mock', busy=false, mess
   const header=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0] ?? 'P')}</button></header>`;
   if(assignment)return `${header}${renderActiveProviderMission(assignment,{busy,message,navigation,navigationLoading,navigationError,diagnosing,supplementParent,billing,testMode,callsEnabled:source==='supabase'})}${renderProviderNav('home')}`;
   return `${header}
-  <main><section class="welcome"><div><p>Xin chào,</p><h1>${esc(state.provider?.name ?? 'Kỹ thuật viên')}</h1><span class="verified">✓ Đã xác minh</span></div><span class="source">${source==='supabase'?'Đã kết nối':'Chế độ demo'}</span></section>
+  <main><section class="welcome"><div><p>Xin chào,</p><h1>${esc(state.provider?.name ?? 'Kỹ thuật viên')}</h1>${state.provider?.kycStatus==='verified'?'<span class="verified">✓ Đã xác minh</span>':''}</div><span class="source">${source==='supabase'?'Đã kết nối':'Chế độ demo'}</span></section>
   <section class="status-card"><div><p>Trạng thái hoạt động</p><strong>${state.status?.online?'Đang trực tuyến':'Đang ngoại tuyến'}</strong></div><button class="switch ${state.status?.online?'on':''}" data-toggle-online aria-label="Đang trực tuyến" aria-pressed="${Boolean(state.status?.online)}" ${busy?'disabled':''}><span></span></button></section>
   <section class="offers"><div class="section-title"><div><p>CƠ HỘI GẦN BẠN</p><h2>Đề nghị nhiệm vụ</h2></div><span>${offers.length}</span></div>${offers.length?offers.map(o=>`<article class="offer-card"><div class="offer-top"><span class="service-icon">${o.serviceCategory==='electricity'?'⚡':'🛠'}</span><div><h3>${esc(labels[o.serviceCategory]??o.serviceCategory)}</h3><p>${esc(o.approximateAddress)}</p></div><strong>${Number(o.distanceKm).toFixed(1)} km</strong></div><p class="request">${esc(o.request)}</p><div class="facts"><span>◷ ${o.etaMinutes} phút</span><span>⌖ Địa chỉ gần đúng</span></div><div class="actions"><button data-decline="${esc(o.id)}" ${busy?'disabled':''}>Từ chối</button><button data-accept="${esc(o.id)}" ${busy||assignment?'disabled':''}>Chấp nhận</button></div></article>`).join(''):`<div class="empty">Không có đề nghị mới.<small>Hãy duy trì trạng thái trực tuyến để nhận việc.</small></div>`}</section><p class="app-message" role="status">${esc(message)}</p></main>
   ${renderProviderNav('home')}`;
@@ -109,7 +110,7 @@ function renderProviderNav(activeView) {
 }
 
 export function renderProviderLogin({ error = '', provisioning = false } = {}) {
-  return `<main class="provider-auth"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><h1>${provisioning ? 'Tài khoản chưa được kích hoạt' : 'Đăng nhập đối tác'}</h1><p>${provisioning ? 'Tài khoản Google đã được xác thực. Quản trị viên HOME AI phải cấp vai trò provider, KYC và dịch vụ trước khi tiếp tục.' : 'Sử dụng tài khoản Google dành riêng cho kỹ thuật viên thử nghiệm.'}</p>${provisioning ? '<button data-provider-logout>Đăng xuất</button>' : '<button data-provider-google-login><strong>G</strong> Tiếp tục với Google</button>'}<p class="app-message" role="status">${esc(error)}</p></main>`;
+  return `<main class="provider-auth"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><h1>${provisioning ? 'Chào mừng bạn đến với HOME AI' : 'Đăng nhập đối tác'}</h1><p>${provisioning ? 'Hãy hoàn tất hồ sơ để bắt đầu nhận nhiệm vụ.' : 'Sử dụng tài khoản Google của bạn để tiếp tục.'}</p>${provisioning ? '<button data-start-provider-onboarding>Bắt đầu</button>' : '<button data-provider-google-login><strong>G</strong> Tiếp tục với Google</button>'}<p class="app-message" role="status">${esc(error)}</p></main>`;
 }
 
 export function renderProviderStartupError(safeStage = 'STARTUP') {
@@ -147,32 +148,23 @@ export async function initialiseProviderKycFlow(root, repository, { testMode=fal
   return {getState:()=>structuredClone(state),stop:close};
 }
 
-async function initialiseProviderKycProfileGate(root,repository,auth){
-  let kycState=await repository.loadKyc();let activeFlow=null;
-  const draw=()=>{root.innerHTML=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(kycState.provider?.name?.split(' ').at(-1)?.[0]??'P')}</button></header><main class="provider-profile-gate"><h1>Hồ sơ</h1>${renderProviderKycProfileSection(kycState)}</main>${renderProviderNav('profile')}`;};
-  const handleClick=async event=>{
-    if(event.target.closest?.('[data-provider-logout]')){await auth.signOut();globalThis.location?.reload();return;}
-    if(!event.target.closest?.('[data-open-provider-kyc]'))return;
-    activeFlow=await initialiseProviderKycFlow(root,repository,{showBack:true,onClose:async()=>{kycState=await repository.loadKyc();activeFlow=null;draw();}});
-  };
-  root.addEventListener('click',handleClick);draw();
-  return {getState:()=>structuredClone(kycState),stop:()=>{activeFlow?.stop();root.removeEventListener('click',handleClick);}};
-}
-
 export async function initialiseProviderApp(root, repositoryLoader=createProgressiveProviderAppRepository, navigationLoader=prepareProviderNavigation, auth=createProviderGoogleAuth(), heartbeatFactory=createProviderLocationHeartbeat, locationAccess={classifyError:classifyGeolocationError,getState:getLocationPermissionState,mount:mountLocationPermissionGate,request:requestCurrentPosition,geolocation:globalThis.navigator?.geolocation},runtimeConfig=globalThis.__HOME_AI_CONFIG__) {
   ensureDispatchStyles(root?.ownerDocument);
   let session;
   try{session=await auth.getSession();}catch(error){if(!error.safeStage)error.safeStage='AUTH_SESSION';throw error;}
   if(auth.enabled&&!session?.user){root.innerHTML=renderProviderLogin();root.addEventListener('click',async e=>{if(!e.target.closest('[data-provider-google-login]'))return;try{await auth.signIn();}catch{root.innerHTML=renderProviderLogin({error:'Không thể đăng nhập bằng Google. Vui lòng thử lại.'});}});return{getState:()=>null};}
   let repository;
-  try{repository=await repositoryLoader();}catch{root.innerHTML=renderProviderLogin({provisioning:true});root.addEventListener('click',async e=>{if(e.target.closest('[data-provider-logout]')){await auth.signOut();globalThis.location?.reload();}});return{getState:()=>null};}
-  if(repository.kycRequired)return initialiseProviderKycProfileGate(root,repository,auth);
+  try{repository=await repositoryLoader();}catch(error){root.innerHTML=renderProviderStartupError(error?.safeStage??'PROVIDER_ACCESS');return{getState:()=>null};}
+  if(repository.onboardingRequired)return initialiseProviderOnboarding(root,repository,{
+    onComplete:async()=>{const next=await repositoryLoader();await initialiseProviderApp(root,async()=>next,navigationLoader,auth,heartbeatFactory,locationAccess,runtimeConfig);},
+    onLogout:async()=>{await auth.signOut();globalThis.location?.reload();},
+  });
   let state;
   try{state=await repository.load();}catch(error){error.safeStage='DASHBOARD_LOAD';throw error;}
   const openDashboard=async()=>{
   let busy=false; let message=''; let navigation=null;let navigationLoading=false;let navigationError=''; let diagnosing=false; let editingMissionId=null; let supplementParent=null;let billingMissionId=null;let confirmingAcceptance=false;
   let currentView='home'; let history=[]; let historyLoading=false; let historyError=''; let selectedMissionId=null;
-  let pricingServices=[];let serviceArea=null;let availabilityPreferences=null;let kycState=null;let professionalProfile=null;let pricingLoading=false;let pricingError='';let pricingMessage='';let serviceAreaMessage='';let availabilityMessage='';let professionalMessage='';let professionalPhotoFile=null;let professionalPhotoPreview='';
+  let pricingServices=[];let serviceArea=null;let availabilityPreferences=null;let professionalProfile=null;let pricingLoading=false;let pricingError='';let pricingMessage='';let serviceAreaMessage='';let availabilityMessage='';let professionalMessage='';let professionalPhotoFile=null;let professionalPhotoPreview='';
   let activityFlow={step:'list',mode:null,input:'',proposal:null,reference:null,error:'',message:''};
   let priorityOfferId=repository.source==='supabase' ? state.offers?.[0]?.id ?? null : null;
   const page=root.ownerDocument??globalThis.document;
@@ -194,7 +186,6 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
     }).catch(()=>callManager.reportError('Không thể đồng bộ cuộc gọi. Vui lòng thử lại.')).finally(()=>{callRefresh=null;});
   };
   const providerTestMode=isProviderTestArrivalEnabled(runtimeConfig,state.provider);
-  const providerTestKycMode=isProviderTestKycPreviewEnabled(runtimeConfig,state.provider);
   let latestProviderPosition=null;let renderedNavigation=null;let renderedMapElement=null;
   const gpsDiagnostics=createProviderGpsDiagnostics(page,{enabled:repository.source==='supabase'&&providerTestMode,isTravelling:()=>state.assignment?.status==='travelling',getMapPosition:()=>navigation?.providerLocation,getMarkerState:()=>getProviderNavigationMarkerState(navigation,state.provider)});
   const offerAlert=createProviderOfferAlert();
@@ -228,7 +219,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
       return;
     }
     if(currentView==='profile'){
-      root.innerHTML=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0]??'P')}</button></header>${renderProviderProfessionalProfile(professionalProfile,{loading:pricingLoading,error:pricingError,message:professionalMessage,busy,previewUrl:professionalPhotoPreview})}${renderProviderActivitiesSummary(pricingServices)}${renderProviderServiceArea(serviceArea,{loading:pricingLoading,error:pricingError,message:serviceAreaMessage,busy})}${renderProviderAvailabilitySchedule(availabilityPreferences,{loading:pricingLoading,error:pricingError,message:availabilityMessage,busy})}${renderProviderKycProfileSection(kycState,{loading:pricingLoading,error:pricingError,testMode:providerTestKycMode})}${renderProviderPricing(pricingServices,{loading:pricingLoading,error:pricingError,message:pricingMessage,busy})}${renderProviderNav('profile')}`;
+      root.innerHTML=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0]??'P')}</button></header>${renderProviderProfessionalProfile(professionalProfile,{loading:pricingLoading,error:pricingError,message:professionalMessage,busy,previewUrl:professionalPhotoPreview})}${renderProviderActivitiesSummary(pricingServices)}${renderProviderServiceArea(serviceArea,{loading:pricingLoading,error:pricingError,message:serviceAreaMessage,busy})}${renderProviderAvailabilitySchedule(availabilityPreferences,{loading:pricingLoading,error:pricingError,message:availabilityMessage,busy})}${renderProviderPricing(pricingServices,{loading:pricingLoading,error:pricingError,message:pricingMessage,busy})}${renderProviderNav('profile')}`;
       return;
     }
     if(currentView==='activities'){
@@ -239,7 +230,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   };
   const loadHistory=async()=>{historyLoading=true;historyError='';await renderDashboard();try{history=prepareProviderHistory(await repository.getHistory(),state.provider.id);}catch(error){history=[];historyError=error?.message??'Lỗi không xác định';}finally{historyLoading=false;await renderDashboard();}};
   const loadPricing=async()=>{pricingLoading=true;pricingError='';await renderDashboard();try{[pricingServices,serviceArea,availabilityPreferences]=await Promise.all([repository.getServices(),repository.getServiceArea(),repository.getAvailabilityPreferences()]);}catch(error){pricingServices=[];serviceArea=null;availabilityPreferences=null;pricingError=error?.message??'Lỗi không xác định';}finally{pricingLoading=false;await renderDashboard();}};
-  const loadProfile=async()=>{pricingLoading=true;pricingError='';await renderDashboard();try{[pricingServices,serviceArea,availabilityPreferences,kycState,professionalProfile]=await Promise.all([repository.getServices(),repository.getServiceArea(),repository.getAvailabilityPreferences(),repository.loadKyc(),repository.getProfessionalProfile()]);}catch(error){pricingServices=[];serviceArea=null;availabilityPreferences=null;kycState=null;professionalProfile=null;pricingError=error?.message??'Lỗi không xác định';}finally{pricingLoading=false;await renderDashboard();}};
+  const loadProfile=async()=>{pricingLoading=true;pricingError='';await renderDashboard();try{[pricingServices,serviceArea,availabilityPreferences,professionalProfile]=await Promise.all([repository.getServices(),repository.getServiceArea(),repository.getAvailabilityPreferences(),repository.getProfessionalProfile()]);}catch(error){pricingServices=[];serviceArea=null;availabilityPreferences=null;professionalProfile=null;pricingError=error?.message??'Lỗi không xác định';}finally{pricingLoading=false;await renderDashboard();}};
   const canSendQuote=()=>state.assignment?.id===editingMissionId
     && state.assignment.status==='arrived'
     && state.assignment.pricing?.pricingModel!=='hourly'
@@ -332,14 +323,6 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
       try{professionalProfile=await repository.saveProfessionalProfile(draft);state={...state,provider:{...state.provider,name:professionalProfile.name}};professionalMessage='Đã lưu hồ sơ nghề nghiệp.';professionalPhotoFile=null;if(professionalPhotoPreview)URL.revokeObjectURL?.(professionalPhotoPreview);professionalPhotoPreview='';}
       catch(error){professionalMessage=error?.message??'Không thể lưu hồ sơ nghề nghiệp.';}
       finally{busy=false;await draw();}
-      return;
-    }
-    const openKyc=e.target.closest('[data-open-provider-kyc]');
-    const openKycTest=e.target.closest('[data-open-provider-kyc-test]');
-    if(openKyc||openKycTest){
-      if(openKycTest&&!providerTestKycMode)return;
-      const testMode=Boolean(openKycTest);
-      await initialiseProviderKycFlow(root,repository,{testMode,showBack:true,onClose:async()=>{kycState=await repository.loadKyc();await draw();}});
       return;
     }
     if(e.target.closest('[data-save-availability]')){

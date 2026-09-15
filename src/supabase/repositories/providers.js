@@ -38,7 +38,6 @@ export function createSupabaseProvidersRepository(supabase) {
       const result = await client.from('provider_profiles')
         .select(providerColumns)
         .eq('active', true)
-        .eq('kyc_status', 'verified')
         .order('rating_average', { ascending: false });
       return Object.freeze((unwrap(result, 'providers.listVerified') ?? []).map(adaptProviderRow));
     },

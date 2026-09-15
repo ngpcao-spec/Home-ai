@@ -50,7 +50,7 @@ describe('C08/C09 — tìm thợ trên bản đồ', () => {
   it('chọn người đứng đầu ranking và chuyển tuần tự sang thợ kế tiếp', () => {
     const plan = createSearchPlan(mockTechnicians, 'air-conditioning');
     assert.equal(plan.selected.id, 'lanh-khoa');
-    assert.equal(getNextTechnician(plan.compatible, plan.selected.id).id, 'lanh-nam');
+    assert.equal(getNextTechnician(plan.compatible, plan.selected.id).id, 'lanh-vinh');
     assert.equal(getNextTechnician(plan.compatible, plan.compatible.at(-1).id).id, 'lanh-khoa');
   });
 

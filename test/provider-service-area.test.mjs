@@ -37,8 +37,7 @@ describe('Provider service area',()=>{
     const app=await initialiseProviderApp(root,async()=>repository,async()=>null,{enabled:false,getSession:async()=>null},()=>({sync(){},stop(){}}));
     try{
       root.querySelector('[data-provider-view="profile"]').click();await tick();await tick();
-      assert.match(root.textContent,/Xác minh danh tính/);
-      assert.match(root.textContent,/Đã xác minh/);
+      assert.doesNotMatch(root.textContent,/Xác minh danh tính/);
       root.querySelector('[data-service-area-radius][value="50"]').click();
       root.querySelector('[data-save-service-area]').click();await tick();await tick();await tick();
       assert.match(root.textContent,/Bán kính tối đa: 50 km/);

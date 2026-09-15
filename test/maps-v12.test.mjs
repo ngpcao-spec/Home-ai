@@ -29,7 +29,7 @@ describe('architecture cartographique V1.2', () => {
   it('n’envoie à RouteMatrix que les prestataires compatibles et actifs', () => {
     const base = mockTechnicians[0];
     const candidates = [base, { ...base, id: 'wrong-service', category: 'plumbing' }, { ...base, id: 'unverified', verified: false }, { ...base, id: 'offline', online: false }, { ...base, id: 'busy', available: false }];
-    assert.deepEqual(getRouteMatrixCandidates(candidates, 'electricity').map(({ id }) => id), [base.id]);
+    assert.deepEqual(getRouteMatrixCandidates(candidates, 'electricity').map(({ id }) => id), [base.id, 'unverified']);
   });
   it('simule une route fluide avec ETA et distance décroissantes', async () => {
     const route = await createMockRoutingProvider().route(mockTechnicians[0], nhaTrangFallbackLocation);

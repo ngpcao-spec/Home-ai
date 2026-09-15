@@ -9,12 +9,12 @@ import { createProgressiveTechnicianRepository } from '../src/technicians/reposi
 describe('ghép thợ cục bộ', () => {
   it('lọc theo danh mục và loại trừ danh mục không tương thích', () => {
     const result = rankTechnicians(mockTechnicians, 'plumbing');
-    assert.equal(result.length, 2);
+    assert.equal(result.length, 3);
     assert.ok(result.every(({ category }) => category === 'plumbing'));
   });
 
   it('chỉ trả về tối đa top 3 sau bộ lọc bắt buộc', () => {
-    assert.equal(findBestTechnicians(mockTechnicians, 'electricity').length, 2);
+    assert.equal(findBestTechnicians(mockTechnicians, 'electricity').length, 3);
   });
 
   it('có thứ tự hoàn toàn xác định', () => {
@@ -23,7 +23,7 @@ describe('ghép thợ cục bộ', () => {
     assert.deepEqual(first, second);
   });
 
-  it('loại thợ chưa xác minh rồi ưu tiên ETA/khoảng cách và đánh giá', () => {
+  it('ne bloque plus un thợ sans KYC et priorise toujours ETA/distance et note', () => {
     const base = { category: 'electricity', online: true, available: true, reviewCount: 1, estimatedArrivalMinutes: 1, completedJobs: 1, priceFrom: 1, location: '', shortDescription: '', initials: 'T' };
     const data = [
       { ...base, id: 'unverified', verified: false, availability: 'Đang sẵn sàng', distanceKm: 0.1, rating: 5 },
@@ -32,7 +32,7 @@ describe('ghép thợ cục bộ', () => {
       { ...base, id: 'near-low-rating', verified: true, availability: 'Đang sẵn sàng', distanceKm: 1, rating: 4.7 },
       { ...base, id: 'near-high-rating', verified: true, availability: 'Đang sẵn sàng', distanceKm: 1, rating: 4.9 },
     ];
-    assert.deepEqual(rankTechnicians(data, 'electricity').map(({ id }) => id), ['later', 'near-high-rating', 'near-low-rating', 'far']);
+    assert.deepEqual(rankTechnicians(data, 'electricity').map(({ id }) => id), ['unverified', 'later', 'near-high-rating', 'near-low-rating', 'far']);
   });
 
   it('rend les informations et les actions du prestataire en vietnamien', () => {

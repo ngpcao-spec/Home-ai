@@ -40,6 +40,15 @@ const adaptProfessionalProfile = (client, value = {}) => Object.freeze({
 export function createSupabaseOffersRepository(supabase) {
   const client = requireSupabaseClient(supabase);
   return Object.freeze({
+    async getCurrentProviderOnboardingState() {
+      return Object.freeze({ ...(unwrap(await client.rpc('get_current_provider_onboarding_state'), 'offers.getCurrentProviderOnboardingState') ?? {}) });
+    },
+    async provisionCurrentProvider() {
+      return Object.freeze({ ...(unwrap(await client.rpc('provision_current_provider'), 'offers.provisionCurrentProvider') ?? {}) });
+    },
+    async markCurrentProviderOnboardingStep(step) {
+      return Object.freeze({ ...(unwrap(await client.rpc('mark_current_provider_onboarding_step', { target_step: step }), 'offers.markCurrentProviderOnboardingStep') ?? {}) });
+    },
     async getProviderDashboard() {
       return Object.freeze({ ...(unwrap(await client.rpc('get_current_provider_dashboard'), 'offers.getProviderDashboard') ?? {}) });
     },
