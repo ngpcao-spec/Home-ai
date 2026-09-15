@@ -43,3 +43,10 @@ test('SQL migrations remove recursive missions RLS and preserve the six required
     +readFileSync('supabase/migrations/20260913090000_mission_messages.sql','utf8');
   for(const table of ['missions','mission_offers','mission_events','mission_calls','mission_messages'])assert.match(publication,new RegExp(table));
 });
+
+test('stale payment conflicts never use Postgres serialization failure SQLSTATE',()=>{
+  const sql=readFileSync('supabase/migrations/20260915055800_stop_payment_retry_storm.sql','utf8');
+  assert.match(sql,/complete_current_customer_external_payment[\s\S]*errcode='P0001'/i);
+  assert.match(sql,/PostgREST 14\.5[\s\S]*retries it automatically/i);
+  assert.doesNotMatch(sql,/errcode='40001'/i);
+});

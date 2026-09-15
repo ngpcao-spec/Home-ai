@@ -36,6 +36,11 @@ begin
     and indexname='quote_items_quote_id_position_key') then
     raise exception 'quote_items unique constraint index is missing';
   end if;
+  if pg_get_functiondef(
+    'public.complete_current_customer_external_payment(uuid,integer)'::regprocedure
+  ) ~* 'errcode\s*=\s*''40001''' then
+    raise exception 'External payment still exposes retryable SQLSTATE 40001';
+  end if;
 end $$;
 
 insert into auth.users(instance_id,id,aud,role,email,encrypted_password,email_confirmed_at,
