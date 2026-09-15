@@ -74,8 +74,8 @@ describe('mission call server foundation', () => {
     createSupabaseMissionsRepository(customer.client).subscribeMission('m1', () => {});
     assert.ok(customer.subscriptions.some(item => item.table === 'mission_calls' && item.filter === 'mission_id=eq.m1'));
     const provider = realtimeClient();
-    createSupabaseOffersRepository(provider.client).subscribeProviderDispatch('p1', () => {});
-    assert.ok(provider.subscriptions.some(item => item.table === 'mission_calls'));
+    createSupabaseOffersRepository(provider.client).subscribeProviderDispatch('p1', 'm1', () => {});
+    assert.ok(provider.subscriptions.some(item => item.table === 'mission_calls' && item.filter === 'mission_id=eq.m1'));
     const sources = await Promise.all([
       readFile(new URL('../src/supabase/repositories/missions.js', import.meta.url), 'utf8'),
       readFile(new URL('../src/supabase/repositories/offers.js', import.meta.url), 'utf8'),

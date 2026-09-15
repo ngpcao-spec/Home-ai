@@ -5,6 +5,7 @@ import { initialiseHomePage } from '../src/app.js';
 
 it('C08 cancellation restores the actual C04 DOM and allows a new Supabase request', async () => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.com/' });
+  Object.defineProperty(dom.window.document, 'hidden', { configurable: true, value: false });
   const root = dom.window.document.querySelector('#root');
   const tasks = [];
   const initial = { id: 'old', status: 'offered', version: 1, providerId: null, serviceCategory: 'electricity', problemDescription: 'Old request' };

@@ -14,6 +14,7 @@ function backend(){
 }
 async function application(backend){
   const dom=new JSDOM('<div id="root"></div>',{url:'https://example.test'});const root=dom.window.document.querySelector('#root');const tasks=[];
+  Object.defineProperty(dom.window.document,'hidden',{configurable:true,value:false});
   initialiseHomePage(root,undefined,undefined,undefined,fn=>{tasks.push(fn);return tasks.length;},undefined,()=>({setClientLocation(){},async render(){}}),undefined,undefined,undefined,backend.connector,{resume:async()=>({authenticated:true,session:{user:{id:'customer'}}})});
   await tasks[0]();await settle();return{root,dom,tasks};
 }
@@ -37,7 +38,7 @@ test('review -> home restores complete intake, preserves review/history, ignores
     app.root.querySelector('[data-review-home]').click();await settle();assertHome(app.root);
     assert.equal(data.unsubscribed,1);assert.equal(data.writes,1);assert.deepEqual(data.review,savedReview);
     assert.equal(app.root.querySelector('[name="address"]').value,'Preserved address');
-    await app.tasks.at(-1)();await settle();assertHome(app.root);
+    assert.equal(app.tasks.length,1,'Healthy Realtime must not schedule a recurring mission poll');assertHome(app.root);
     app.root.querySelector('[data-navigation="history"]').click();await settle();
     const history=app.root.querySelector('[data-app-view="history"]');assert.equal(history.hidden,false);assert.match(history.textContent,/✓ Đã đánh giá/);assert.match(history.textContent,/Synthetic Provider/);
     assert.equal(data.writes,1);assert.deepEqual(data.review,savedReview);

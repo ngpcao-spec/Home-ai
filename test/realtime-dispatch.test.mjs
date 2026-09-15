@@ -32,16 +32,13 @@ describe('dispatch Provider Realtime', () => {
     controller.stop();
   });
 
-  it('utilise un polling court lorsque la page Provider est active', async () => {
-    let state={offers:[]}; const received=[]; const tasks=[];
+  it('ne poll pas le dashboard tant que Realtime est sain', async () => {
+    let state={offers:[]}; const tasks=[];
     const repository={source:'supabase',subscribeDispatch(){return()=>{};},async load(){return state;}};
     const controller=createProviderDispatchController({repository,getState:()=>state,onState:next=>{state=next;},
-      onOffer:offer=>received.push(offer),scheduleTask:(task,delay)=>{tasks.push({task,delay});return tasks.length;},clearTask(){},intervalMs:2500,isPageActive:()=>true});
+      scheduleTask:(task,delay)=>{tasks.push({task,delay});return tasks.length;},clearTask(){},isPageActive:()=>true});
     controller.start();
-    assert.equal(tasks[0].delay,2500);
-    state={offers:[{id:'poll-offer'}]};
-    await tasks.shift().task();
-    assert.equal(received[0].id,'poll-offer');
+    assert.equal(tasks.length,0);
     controller.stop();
   });
 
@@ -124,14 +121,15 @@ describe('dispatch Provider Realtime', () => {
     controller.stop();
   });
 
-  it('ne charge pas le dashboard en polling quand la page est inactive', async () => {
+  it('ne charge ni ne souscrit le dashboard quand la page est inactive', async () => {
     let loads=0; const tasks=[];
-    const repository={source:'supabase',subscribeDispatch(){return()=>{};},async load(){loads+=1;return{offers:[]};}};
+    let subscriptions=0;const repository={source:'supabase',subscribeDispatch(){subscriptions+=1;return()=>{};},async load(){loads+=1;return{offers:[]};}};
     const controller=createProviderDispatchController({repository,getState:()=>({offers:[]}),onState(){},
       scheduleTask:(task)=>{tasks.push(task);return tasks.length;},clearTask(){},isPageActive:()=>false});
     controller.start();
-    await tasks.shift()();
     assert.equal(loads,0);
+    assert.equal(subscriptions,0);
+    assert.equal(tasks.length,0);
     controller.stop();
   });
 
@@ -139,9 +137,12 @@ describe('dispatch Provider Realtime', () => {
     const channels=[]; const client={rpc(){},from(){return{};},channel(name){const registrations=[];const channel={name,on(...args){registrations.push(args);return channel;},subscribe(){return channel;},registrations};channels.push(channel);return channel;},removeChannel(){}};
     const offers=createSupabaseOffersRepository(client);
     const missions=createSupabaseMissionsRepository(client);
-    offers.subscribeProviderDispatch('p1',()=>{});
+    offers.subscribeProviderDispatch('p1','m1',()=>{});
     missions.subscribeMission('m1',()=>{});
     assert.match(channels[0].registrations[0][1].filter,/provider_id=eq.p1/);
+    assert.ok(channels[0].registrations.some(([, spec]) => spec.table === 'missions' && spec.filter === 'id=eq.m1'));
+    assert.ok(channels[0].registrations.some(([, spec]) => spec.table === 'mission_calls' && spec.filter === 'mission_id=eq.m1'));
+    assert.ok(channels[0].registrations.some(([, spec]) => spec.table === 'mission_messages' && spec.filter === 'mission_id=eq.m1'));
     assert.ok(channels[1].registrations.some(([, spec]) => spec.table === 'missions' && spec.filter === 'id=eq.m1'));
     assert.ok(channels[1].registrations.some(([, spec]) => spec.table === 'provider_status' && spec.filter === 'current_mission_id=eq.m1'));
   });

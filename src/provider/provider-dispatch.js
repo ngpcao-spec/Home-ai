@@ -140,46 +140,89 @@ export function notifyIncomingOffer(environment = globalThis) {
 export function createProviderDispatchController({
   repository, getState, onState, onRefresh = () => {}, onMessageEvent = null, onOffer = () => {}, onError = () => {},
   scheduleTask = globalThis.setTimeout, clearTask = globalThis.clearTimeout,
-  intervalMs = 2500, isPageActive = () => true,
+  fallbackIntervalMs = 30000, isPageActive = () => true,
 }) {
-  let stopped = false; let unsubscribe = () => {}; let pollTimer; let refreshPromise;
+  let stopped = false; let active = false; let unsubscribe = () => {}; let fallbackTimer; let refreshPromise;
+  let subscribedMissionId;
   let knownOfferIds = new Set((getState()?.offers ?? []).map(({ id }) => id));
+  const clearFallback = () => {
+    if (fallbackTimer !== undefined) clearTask(fallbackTimer);
+    fallbackTimer = undefined;
+  };
+  const scheduleFallback = () => {
+    clearFallback();
+    if (!active || stopped || !isPageActive()) return;
+    fallbackTimer = scheduleTask(async () => {
+      fallbackTimer = undefined;
+      await refresh();
+      scheduleFallback();
+    }, fallbackIntervalMs);
+  };
+  const subscribeCurrent = () => {
+    if (!active || stopped || !isPageActive()) return;
+    const missionId = getState()?.assignment?.id ?? null;
+    if (subscribedMissionId === missionId) return;
+    unsubscribe();
+    subscribedMissionId = missionId;
+    const receive = event => {
+      if(event?.table==='mission_messages' && onMessageEvent){onMessageEvent(event);return;}
+      return refresh();
+    };
+    const status = statusValue => {
+      if (statusValue === 'SUBSCRIBED') clearFallback();
+      if (statusValue === 'CHANNEL_ERROR' || statusValue === 'TIMED_OUT') {
+        onError(new Error(`Provider Realtime: ${statusValue}`));
+        scheduleFallback();
+      }
+    };
+    unsubscribe = repository.subscribeDispatch.length >= 2
+      ? repository.subscribeDispatch(missionId, receive, status)
+      : repository.subscribeDispatch(receive, status);
+  };
   const performRefresh = async () => {
     try {
       const next = await repository.load();
       const changed = JSON.stringify(next) !== JSON.stringify(getState());
       const incoming = (next.offers ?? []).find(({ id }) => !knownOfferIds.has(id));
       knownOfferIds = new Set((next.offers ?? []).map(({ id }) => id));
-      if (!stopped) { onRefresh(next); if (changed) onState(next); if (incoming) onOffer(incoming); }
+      if (!stopped) {
+        onRefresh(next);
+        if (changed) await onState(next);
+        if (incoming) await onOffer(incoming);
+        subscribeCurrent();
+      }
     } catch (error) { if (!stopped) onError(error); }
   };
   const refresh = () => {
     if (!refreshPromise) refreshPromise = performRefresh().finally(() => { refreshPromise = undefined; });
     return refreshPromise;
   };
-  const poll = async () => {
-    if (!isPageActive()) return;
-    await refresh();
-  };
-  const schedulePoll = () => {
-    if (stopped) return;
-    pollTimer = scheduleTask(async () => { await poll(); schedulePoll(); }, intervalMs);
-  };
   const stop = () => {
     stopped = true;
+    active = false;
     unsubscribe();
-    if (pollTimer !== undefined) clearTask(pollTimer);
+    unsubscribe = () => {};
+    subscribedMissionId = undefined;
+    clearFallback();
+  };
+  const setActive = enabled => {
+    if (stopped) return;
+    active = Boolean(enabled);
+    if (!active) {
+      unsubscribe();
+      unsubscribe = () => {};
+      subscribedMissionId = undefined;
+      clearFallback();
+      return;
+    }
+    subscribeCurrent();
+    void refresh();
   };
   const start = () => {
     if (repository.source !== 'supabase' || typeof repository.subscribeDispatch !== 'function') return () => {};
-    unsubscribe = repository.subscribeDispatch(event => {
-      if(event?.table==='mission_messages' && onMessageEvent){onMessageEvent(event);return;}
-      return refresh();
-    }, (status) => {
-      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') onError(new Error(`Provider Realtime: ${status}`));
-    });
-    schedulePoll();
+    active = isPageActive();
+    subscribeCurrent();
     return stop;
   };
-  return Object.freeze({ start, stop, refresh });
+  return Object.freeze({ start, stop, refresh, setActive });
 }

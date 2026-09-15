@@ -1221,10 +1221,52 @@ export function initialiseHomePage(
   const startRemoteMissionPolling = (missionId) => {
     stopMissionPolling?.();
     stopMissionRealtime?.();
-    stopMissionPolling = missionSynchronizer.poll(missionId, applyRemoteMissionState, showRemoteMissionError);
-    stopMissionRealtime = missionSynchronizer.subscribe(missionId, applyRemoteMissionState, showRemoteMissionError, messages => {
-      if(persistedMission?.id===missionId)chatManager?.observe({mission:persistedMission,messages,messageError:messages===null});
-    });
+    stopMissionPolling = undefined;
+    const documentRef = root.ownerDocument;
+    let stopped = false;
+    let stopChannel;
+    let fallbackTimer;
+    let realtimeHealthy = false;
+    const clearFallback = () => {
+      if (fallbackTimer !== undefined) globalThis.clearTimeout?.(fallbackTimer);
+      fallbackTimer = undefined;
+    };
+    const fallback = () => {
+      clearFallback();
+      if (stopped || realtimeHealthy || documentRef?.hidden) return;
+      fallbackTimer = globalThis.setTimeout?.(async () => {
+        fallbackTimer = undefined;
+        try { applyRemoteMissionState(await missionSynchronizer.load(missionId)); }
+        catch { showRemoteMissionError(); }
+        fallback();
+      }, 30000);
+    };
+    const connect = () => {
+      if (stopped || documentRef?.hidden || stopChannel) return;
+      stopChannel = missionSynchronizer.subscribe(missionId, applyRemoteMissionState, showRemoteMissionError, messages => {
+        if(persistedMission?.id===missionId)chatManager?.observe({mission:persistedMission,messages,messageError:messages===null});
+      }, status => {
+        realtimeHealthy = status === 'SUBSCRIBED';
+        if (realtimeHealthy) clearFallback();
+        else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') fallback();
+      });
+    };
+    const visibility = () => {
+      if (documentRef?.hidden) {
+        stopChannel?.(); stopChannel = undefined; realtimeHealthy = false; clearFallback();
+        return;
+      }
+      void missionSynchronizer.load(missionId).then(applyRemoteMissionState, showRemoteMissionError);
+      connect();
+    };
+    documentRef?.addEventListener?.('visibilitychange', visibility);
+    connect();
+    stopMissionRealtime = () => {
+      stopped = true;
+      stopChannel?.(); stopChannel = undefined;
+      clearFallback();
+      documentRef?.removeEventListener?.('visibilitychange', visibility);
+    };
   };
   bookingForm.addEventListener('submit', async (event) => {
     event.preventDefault();

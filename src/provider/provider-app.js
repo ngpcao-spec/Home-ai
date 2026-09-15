@@ -303,7 +303,7 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   },onOffer:async offer=>{priorityOfferId=offer.id;if(page?.hidden)return;offerAlert.start(offer);if(!root.querySelector?.(`[data-dispatch-offer-id="${offer.id}"]`))await draw();},onError:async()=>{message='Kết nối thời gian thực bị gián đoạn. HOME AI đang thử lại.';if(currentView==='home'&&!page?.hidden)await draw();}});
   dispatch.start();
   const countdownTimer=globalThis.setInterval?.(()=>{const remaining=updateDispatchCountdown(offerLayer?.host??root);if(remaining===0&&priorityOfferId){const expiredId=priorityOfferId;priorityOfferId=null;offerAlert.stop(expiredId);void draw();}},1000);
-  const syncHeartbeat=()=>{heartbeat.sync();syncOfferLayer();};
+  const syncHeartbeat=()=>{heartbeat.sync();dispatch.setActive(!page?.hidden);syncOfferLayer();};
   page?.addEventListener?.('visibilitychange',syncHeartbeat);
   globalThis.addEventListener?.('pagehide',()=>{gpsDiagnostics.stop();heartbeat.stop();dispatch.stop();globalThis.clearInterval?.(countdownTimer);chatManager?.dispose();callManager?.dispose();},{once:true});
   heartbeat.sync();

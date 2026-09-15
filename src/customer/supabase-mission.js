@@ -183,6 +183,7 @@ export function createCustomerMissionSynchronizer({
 }) {
   if (!missionRepository || !providerRepository) throw new TypeError('Supabase mission and provider repositories are required');
   let dispatchPromise;
+  let latestSnapshot = null;
 
   const load = async (missionId) => {
     const mission = await missionRepository.getById(missionId);
@@ -210,7 +211,8 @@ export function createCustomerMissionSynchronizer({
     if(missionMessages && assigned && !['completed','cancelled','expired'].includes(mission.status)) {
       try {messages = await missionMessages.list(mission.id);}catch{messageError=true;}
     }
-    return Object.freeze({ mission, provider, quotes, offers, providerLocation, review, invoice, currentCall, callError, messages, messageError });
+    latestSnapshot = Object.freeze({ mission, provider, quotes, offers, providerLocation, review, invoice, currentCall, callError, messages, messageError });
+    return latestSnapshot;
   };
 
   const create = (draft, { replaceMission = null } = {}) => {
@@ -303,7 +305,7 @@ export function createCustomerMissionSynchronizer({
     };
   };
 
-  const subscribe = (missionId, onState, onError, onMessages = null) => {
+  const subscribe = (missionId, onState, onError, onMessages = null, onStatus = () => {}) => {
     if (typeof missionRepository.subscribeMission !== 'function') return () => {};
     let active = true;
     const receive = async (event) => {
@@ -313,6 +315,30 @@ export function createCustomerMissionSynchronizer({
         return;
       }
       try {
+        if(event?.table === 'mission_events' && latestSnapshot?.mission?.id === missionId) {
+          latestSnapshot = Object.freeze({ ...latestSnapshot, dispatchEvent: event });
+          if(active) onState(latestSnapshot);
+          return;
+        }
+        if(event?.table === 'provider_status' && latestSnapshot?.mission?.id === missionId) {
+          const providerLocation = await missionRepository.getAssignedProviderLocation?.(latestSnapshot.mission) ?? null;
+          latestSnapshot = Object.freeze({ ...latestSnapshot, providerLocation, dispatchEvent: event });
+          if(active) onState(latestSnapshot);
+          return;
+        }
+        if(event?.table === 'mission_offers' && latestSnapshot?.mission?.id === missionId) {
+          const offers = await missionRepository.getOffers?.(missionId) ?? [];
+          latestSnapshot = Object.freeze({ ...latestSnapshot, offers, dispatchEvent: event });
+          if(active) onState(latestSnapshot);
+          return;
+        }
+        if(event?.table === 'mission_calls' && latestSnapshot?.mission?.id === missionId && missionCalls) {
+          let currentCall = null; let callError = false;
+          try { currentCall = await missionCalls.current(missionId); } catch { callError = true; }
+          latestSnapshot = Object.freeze({ ...latestSnapshot, currentCall, callError, dispatchEvent: event });
+          if(active) onState(latestSnapshot);
+          return;
+        }
         const state = await load(missionId);
         if (active) onState(Object.freeze({ ...state, dispatchEvent: event }));
       } catch (error) {
@@ -320,6 +346,7 @@ export function createCustomerMissionSynchronizer({
       }
     };
     const unsubscribe = missionRepository.subscribeMission(missionId, receive, (status) => {
+      onStatus(status);
       if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') onError(new Error(`Mission Realtime: ${status}`));
     });
     return () => { active = false; unsubscribe?.(); };

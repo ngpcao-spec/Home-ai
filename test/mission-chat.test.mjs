@@ -79,9 +79,9 @@ test('existing Client and Provider Realtime channels include mission_messages wi
     const client={from(){},rpc(){},channel(){channelCount++;return channel;},removeChannel(){}};
     let notified=0;
     if(role==='customer')createSupabaseMissionsRepository(client).subscribeMission(mission.id,()=>{notified++;});
-    else createSupabaseOffersRepository(client).subscribeProviderDispatch(user,()=>{notified++;});
+    else createSupabaseOffersRepository(client).subscribeProviderDispatch(user,mission.id,()=>{notified++;});
     const hook=hooks.find(x=>x.filter.table==='mission_messages');assert.ok(hook);assert.equal(hook.filter.event,'INSERT');
-    if(role==='customer')assert.equal(hook.filter.filter,`mission_id=eq.${mission.id}`);
+    assert.equal(hook.filter.filter,`mission_id=eq.${mission.id}`);
     hook.handler({new:row(1)});assert.equal(notified,1);assert.equal(channelCount,1);
   }
 });

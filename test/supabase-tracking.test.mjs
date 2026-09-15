@@ -84,23 +84,59 @@ it('streams P1, P2 and P3 during travelling, then stops at arrived', async () =>
     onPosition: position => marker.push([position.latitude, position.longitude]), onDiagnostic: event => diagnostics.push(event),
   });
   heartbeat.sync();
-  await callback({ coords: { latitude: 12.245, longitude: 109.19, accuracy: 8 }, timestamp: 1 });
-  await callback({ coords: { latitude: 12.246, longitude: 109.191, accuracy: 7 }, timestamp: 2 });
-  await callback({ coords: { latitude: 12.247, longitude: 109.192, accuracy: 6 }, timestamp: 3 });
+  await callback({ coords: { latitude: 12.245, longitude: 109.19, accuracy: 8 }, timestamp: 1000 });
+  await callback({ coords: { latitude: 12.246, longitude: 109.191, accuracy: 7 }, timestamp: 4000 });
+  await callback({ coords: { latitude: 12.247, longitude: 109.192, accuracy: 6 }, timestamp: 7000 });
   assert.deepEqual(writes, [
     { latitude: 12.245, longitude: 109.19 },
     { latitude: 12.246, longitude: 109.191 },
     { latitude: 12.247, longitude: 109.192 },
   ]);
   assert.deepEqual(marker, [[12.245,109.19],[12.246,109.191],[12.247,109.192]]);
-  await callback({ coords: { latitude: 1, longitude: 1 }, timestamp: 2 });
+  await callback({ coords: { latitude: 1, longitude: 1 }, timestamp: 6000 });
   assert.equal(writes.length, 3);
   assert.equal(diagnostics.find(event => event.outcome === 'rejected')?.reason, 'stale-or-equal-timestamp');
   state = { ...state, assignment: { id: 'm1', status: 'arrived' } };
   heartbeat.sync();
   assert.equal(cleared, 7);
-  await callback({ coords: { latitude: 12.248, longitude: 109.193 }, timestamp: 4 });
+  await callback({ coords: { latitude: 12.248, longitude: 109.193 }, timestamp: 10000 });
   assert.equal(writes.length, 3);
+});
+
+it('moves the local marker for every GPS callback but throttles insignificant backend writes', async () => {
+  const writes=[];const marker=[];const diagnostics=[];let callback;
+  const heartbeat=createProviderLocationHeartbeat({
+    repository:{source:'supabase',updateLocation:async value=>{writes.push(value);return{};}},
+    getState:()=>({status:{online:true,available:false},assignment:{id:'m1',status:'travelling'}}),
+    geolocation:{watchPosition(success){callback=success;return 1;},clearWatch(){}},
+    minPublishIntervalMs:5000,minPublishDistanceMeters:20,
+    onPosition:position=>marker.push(position),onDiagnostic:event=>diagnostics.push(event),
+  });
+  heartbeat.sync();
+  await callback({coords:{latitude:12.245,longitude:109.19},timestamp:10000});
+  await callback({coords:{latitude:12.245001,longitude:109.190001},timestamp:11000});
+  await callback({coords:{latitude:12.245002,longitude:109.190002},timestamp:12000});
+  assert.equal(marker.length,3);
+  assert.equal(writes.length,1);
+  assert.equal(diagnostics.filter(event=>event.reason==='throttled').length,2);
+  heartbeat.stop();
+});
+
+it('never publishes multiple significant GPS moves inside the two-second write floor', async () => {
+  const writes=[];const marker=[];let callback;
+  const heartbeat=createProviderLocationHeartbeat({
+    repository:{source:'supabase',updateLocation:async value=>{writes.push(value);return{};}},
+    getState:()=>({status:{online:true,available:false},assignment:{id:'m1',status:'travelling'}}),
+    geolocation:{watchPosition(success){callback=success;return 1;},clearWatch(){}},
+    onPosition:position=>marker.push(position),
+  });
+  heartbeat.sync();
+  await callback({coords:{latitude:12.245,longitude:109.19},timestamp:10000});
+  await callback({coords:{latitude:12.246,longitude:109.191},timestamp:10500});
+  await callback({coords:{latitude:12.247,longitude:109.192},timestamp:11000});
+  assert.equal(marker.length,3);
+  assert.equal(writes.length,1);
+  heartbeat.stop();
 });
 
 it('preserves the newest backend GPS when realtime responses complete out of order', () => {

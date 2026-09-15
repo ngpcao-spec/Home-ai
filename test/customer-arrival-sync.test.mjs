@@ -8,6 +8,7 @@ const peer={id:'p1',name:'Synthetic Provider',category:'electricity',verified:tr
 const settle=async()=>{for(let i=0;i<18;i++)await new Promise(resolve=>setImmediate(resolve));};
 async function application({status='travelling',delayed=false}={}){
   const dom=new JSDOM('<div id="root"></div>',{url:'https://example.test'});const root=dom.window.document.querySelector('#root');const tasks=[];
+  let hidden=false;Object.defineProperty(dom.window.document,'hidden',{configurable:true,get:()=>hidden});
   let current={id:'m1',providerId:'p1',status,version:2,serviceCategory:'electricity',problemDescription:'Synthetic',address:'Test',clientLocation:{latitude:12.2,longitude:109.2},paymentStatus:'unpaid'};
   let receive;let routeCalls=0;let finishRoute;
   const gps={latitude:12.22,longitude:109.2,recordedAt:new Date().toISOString(),providerId:'p1',missionId:'m1'};
@@ -19,7 +20,7 @@ async function application({status='travelling',delayed=false}={}){
     async()=>({source:'supabase',activeMission:current,repository,providerRepository:{getProfessionalProfile:async()=>peer}}),
     {resume:async()=>({authenticated:true,session:{user:{id:'customer'}}})});
   await tasks[0]();await settle();
-  return {root,dom,tasks,get routeCalls(){return routeCalls;},async realtime(next){current={...current,...next};await receive({table:'missions',new:current});await settle();},async poll(){await tasks.at(-1)();await settle();},finishRoute:async()=>{finishRoute?.();await settle();}};
+  return {root,dom,tasks,get routeCalls(){return routeCalls;},async realtime(next){current={...current,...next};await receive({table:'missions',new:current});await settle();},async foregroundRefresh(){hidden=true;dom.window.document.dispatchEvent(new dom.window.Event('visibilitychange'));hidden=false;dom.window.document.dispatchEvent(new dom.window.Event('visibilitychange'));await settle();},finishRoute:async()=>{finishRoute?.();await settle();}};
 }
 function assertArrived(root){
   const stage=root.querySelector('[data-mission-stage]');
@@ -35,7 +36,7 @@ test('Client realtime travelling -> arrived, polling and stale versions preserve
     assert.equal(app.root.querySelector('[data-tracking-eta]').textContent,'8 phút');
     assert.ok(app.root.querySelector('[data-tracking-distance]'));
     await app.realtime({status:'arrived',version:3});assertArrived(app.root);
-    const routeCalls=app.routeCalls;await app.poll();assertArrived(app.root);assert.equal(app.routeCalls,routeCalls);
+    const routeCalls=app.routeCalls;await app.foregroundRefresh();assertArrived(app.root);assert.equal(app.routeCalls,routeCalls);
     await app.realtime({status:'travelling',version:2});assertArrived(app.root);
   }finally{app.dom.window.close();}
 });
@@ -58,7 +59,7 @@ test('hourly in_progress without a quote never returns to travelling after realt
   const app=await application({status:'arrived'});
   try{
     await app.realtime({status:'in_progress',version:4});
-    await app.poll();
+    await app.foregroundRefresh();
     const stage=app.root.querySelector('[data-mission-stage]');
     assert.equal(stage.querySelector('[data-tracking-status]').textContent,'Đang sửa chữa');
     assert.doesNotMatch(stage.textContent,/Thợ đang đến|Đang tính|Thời gian đến|Quãng đường còn lại/);

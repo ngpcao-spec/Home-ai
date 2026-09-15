@@ -26,6 +26,9 @@ export function createProviderLocationHeartbeat({
   getState,
   geolocation = globalThis.navigator?.geolocation,
   intervalMs = 60000,
+  minAbsolutePublishIntervalMs = 2000,
+  minPublishIntervalMs = 5000,
+  minPublishDistanceMeters = 20,
   scheduleTask = globalThis.setTimeout,
   clearTask = globalThis.clearTimeout,
   isPageActive = () => !globalThis.document?.hidden,
@@ -40,6 +43,19 @@ export function createProviderLocationHeartbeat({
   let generation = 0;
   let lastObservedAt = -Infinity;
   let writeQueue = Promise.resolve();
+  let lastPublishedPosition = null;
+  let lastPublishedAt = -Infinity;
+
+  const distanceMeters = (left, right) => {
+    if (!left || !right) return Infinity;
+    const radians = value => value * Math.PI / 180;
+    const latitudeDelta = radians(right.latitude - left.latitude);
+    const longitudeDelta = radians(right.longitude - left.longitude);
+    const a = Math.sin(latitudeDelta / 2) ** 2
+      + Math.cos(radians(left.latitude)) * Math.cos(radians(right.latitude))
+      * Math.sin(longitudeDelta / 2) ** 2;
+    return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
 
   const stateMode = () => {
     const state = getState();
@@ -76,6 +92,15 @@ export function createProviderLocationHeartbeat({
     lastObservedAt = position.observedAt;
     onDiagnostic({ stage: 'provider', outcome: 'position-accepted', position });
     if (expectedMode === 'tracking') onPosition(position);
+    const elapsed = position.observedAt - lastPublishedAt;
+    const moved = distanceMeters(lastPublishedPosition, position);
+    if (lastPublishedPosition && elapsed < minPublishIntervalMs
+        && (elapsed < minAbsolutePublishIntervalMs || moved < minPublishDistanceMeters)) {
+      onDiagnostic({ stage: 'backend', outcome: 'send-skipped', reason: 'throttled', elapsed, moved });
+      return Promise.resolve(null);
+    }
+    lastPublishedPosition = position;
+    lastPublishedAt = position.observedAt;
     writeQueue = writeQueue.then(async () => {
       if (stopped || expectedGeneration !== generation || stateMode() !== expectedMode) {
         onDiagnostic({ stage: 'backend', outcome: 'send-skipped', reason: 'inactive-watch-or-mission' });

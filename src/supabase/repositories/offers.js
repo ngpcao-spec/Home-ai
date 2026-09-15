@@ -53,20 +53,33 @@ export function createSupabaseOffersRepository(supabase) {
     async declineCurrentProviderOffer(offerId) {
       return unwrap(await client.rpc('decline_current_provider_offer', { target_offer_id: offerId }), 'offers.declineCurrentProviderOffer');
     },
-    subscribeProviderDispatch(providerId, onChange, onStatus = () => {}) {
+    subscribeProviderDispatch(providerId, missionId, onChange, onStatus = () => {}) {
+      if (typeof missionId === 'function') {
+        onStatus = onChange ?? (() => {});
+        onChange = missionId;
+        missionId = null;
+      }
       const channel = client.channel(`provider-dispatch:${providerId}`)
         .on('postgres_changes', {
           event: '*', schema: 'public', table: 'mission_offers',
           filter: `provider_id=eq.${providerId}`,
         }, onChange)
-        .on('postgres_changes', {
-          event: '*', schema: 'public', table: 'missions',
-        }, onChange)
-        .on('postgres_changes', {
-          event: '*', schema: 'public', table: 'mission_calls',
-        }, onChange)
-        .on('postgres_changes', {event:'INSERT',schema:'public',table:'mission_messages'}, onChange)
-        .subscribe(onStatus);
+      if (missionId) {
+        channel
+          .on('postgres_changes', {
+            event: '*', schema: 'public', table: 'missions', filter: `id=eq.${missionId}`,
+          }, onChange)
+          .on('postgres_changes', {
+            event: 'INSERT', schema: 'public', table: 'mission_events', filter: `mission_id=eq.${missionId}`,
+          }, onChange)
+          .on('postgres_changes', {
+            event: '*', schema: 'public', table: 'mission_calls', filter: `mission_id=eq.${missionId}`,
+          }, onChange)
+          .on('postgres_changes', {
+            event: 'INSERT', schema: 'public', table: 'mission_messages', filter: `mission_id=eq.${missionId}`,
+          }, onChange);
+      }
+      channel.subscribe(onStatus);
       return () => client.removeChannel(channel);
     },
     async setProviderAvailability({ online }) {

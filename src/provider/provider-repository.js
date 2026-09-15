@@ -157,15 +157,20 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
   });
   const initial = await repositories.offers.getProviderDashboard();
   if (!initial?.provider?.id) throw new Error('Authenticated provider is not provisioned');
+  let dashboardState = initial;
   const loadDashboard = async () => {
     const dashboard = await repositories.offers.getProviderDashboard();
-    if (!dashboard.assignment) return dashboard;
+    if (!dashboard.assignment) {
+      dashboardState = dashboard;
+      return dashboardState;
+    }
     const [quote, billing] = await Promise.all([
       repositories.offers.getCurrentProviderQuoteState(),
       repositories.offers.getCurrentProviderBillingState(dashboard.assignment.id),
     ]);
-    return { ...dashboard, assignment: { ...dashboard.assignment, quote,
+    dashboardState = { ...dashboard, assignment: { ...dashboard.assignment, quote,
       pricing: billing.pricing ?? null, invoice: billing.invoice ?? null } };
+    return dashboardState;
   };
   return Object.freeze({
     source: 'supabase', load: loadDashboard,
@@ -204,11 +209,23 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
     async previewIdentity(file) { return repositories.offers.previewCurrentProviderIdentity(file); },
     async getIdentityPreview(documentPath) { return repositories.offers.createCurrentProviderKycSignedUrl(documentPath); },
     async confirmKyc(submissionId, fields) { return repositories.offers.confirmCurrentProviderKycSubmission(submissionId, fields); },
-    subscribeDispatch(onChange, onStatus) {
-      return repositories.offers.subscribeProviderDispatch(initial.provider.id, onChange, onStatus);
+    subscribeDispatch(missionId, onChange, onStatus) {
+      return repositories.offers.subscribeProviderDispatch(initial.provider.id, missionId, onChange, onStatus);
     },
     async setAvailability(next) { await repositories.offers.setProviderAvailability(next); return loadDashboard(); },
-    async updateLocation(position) { await repositories.offers.updateProviderLocation(position); return loadDashboard(); },
+    async updateLocation(position) {
+      const row = await repositories.offers.updateProviderLocation(position);
+      dashboardState = {
+        ...dashboardState,
+        status: {
+          ...dashboardState.status,
+          online: row.online,
+          available: row.available,
+          lastLocationAt: row.last_location_at,
+        },
+      };
+      return dashboardState;
+    },
     async accept(id) { await repositories.offers.acceptCurrentProviderOffer(id); return loadDashboard(); },
     async decline(id) { await repositories.offers.declineCurrentProviderOffer(id); return loadDashboard(); },
     async updateMissionProgress(id, status, location) { await repositories.offers.updateProviderMissionProgress(id, status, location); return loadDashboard(); },
