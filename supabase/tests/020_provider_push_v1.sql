@@ -37,6 +37,31 @@ do $$ begin
  if has_function_privilege('anon','public.claim_provider_push_outbox(uuid,text)','execute') then raise exception 'Anon can claim outbox';end if;
  if has_function_privilege('authenticated','public.claim_provider_push_outbox(uuid,text)','execute') then raise exception 'Authenticated can claim outbox';end if;
  if not has_function_privilege('service_role','public.claim_provider_push_outbox(uuid,text)','execute') then raise exception 'Service role cannot claim outbox';end if;
+ if not has_column_privilege('service_role','public.mission_offers','id','select')
+    or not has_column_privilege('service_role','public.mission_offers','push_reference','select')
+    or not has_column_privilege('service_role','public.mission_offers','status','select')
+    or not has_column_privilege('service_role','public.mission_offers','expires_at','select')
+    or not has_column_privilege('service_role','public.mission_offers','mission_id','select')
+    or not has_column_privilege('service_role','public.mission_offers','provider_id','select') then
+   raise exception 'Push backend cannot read the required offer columns';
+ end if;
+ if not has_column_privilege('service_role','public.missions','id','select')
+    or not has_column_privilege('service_role','public.missions','status','select')
+    or not has_column_privilege('service_role','public.missions','service_category','select')
+    or not has_column_privilege('service_role','public.missions','provider_id','select') then
+   raise exception 'Push backend cannot read the required mission columns';
+ end if;
+ if not has_column_privilege('service_role','public.provider_status','provider_id','select')
+    or not has_column_privilege('service_role','public.provider_status','online','select')
+    or not has_column_privilege('service_role','public.provider_status','available','select')
+    or not has_column_privilege('service_role','public.provider_status','current_mission_id','select') then
+   raise exception 'Push backend cannot read the required provider status columns';
+ end if;
+ if has_table_privilege('service_role','public.mission_offers','select')
+    or has_table_privilege('service_role','public.missions','select')
+    or has_table_privilege('service_role','public.provider_status','select') then
+   raise exception 'Push backend received broader table SELECT than required';
+ end if;
  if not exists(select 1 from pg_trigger where tgname='provider_push_outbox_webhook' and not tgisinternal) then raise exception 'Push webhook trigger missing';end if;
  if not exists(select 1 from vault.secrets where name='provider_push_webhook_secret') then raise exception 'Push webhook Vault secret missing';end if;
 end $$;
