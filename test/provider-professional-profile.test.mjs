@@ -57,7 +57,7 @@ describe('Provider professional profile V1', () => {
     try {
       root.querySelector('[data-provider-view="profile"]').click();
       await tick(); await tick();
-      for (const text of ['Hồ sơ nghề nghiệp', 'Hoạt động của tôi', 'Khu vực hoạt động', 'Lịch nhận việc']) {
+      for (const text of ['Hồ sơ nghề nghiệp', 'Hoạt động của tôi', 'Khu vực hoạt động', 'Lịch nhận việc', 'Thông báo nhiệm vụ']) {
         assert.match(root.textContent, new RegExp(text));
       }
       assert.doesNotMatch(root.textContent,/Xác minh danh tính/);

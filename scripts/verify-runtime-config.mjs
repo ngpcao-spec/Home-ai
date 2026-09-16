@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { VAPID_PUBLIC_KEY } from '../supabase/functions/_shared/provider-push-config.js';
 
 const runtimeConfigPath = 'dist/src/runtime-config.js';
 
@@ -25,6 +26,7 @@ const runtimeSupabaseAnonKey = readRuntimeString('SUPABASE_ANON_KEY');
 const runtimeSupabaseRequired = readRuntimeBoolean('SUPABASE_REQUIRED');
 const runtimeProviderTestMode = readRuntimeBoolean('PROVIDER_TEST_MODE');
 const runtimeProviderTestProviderId = readRuntimeString('PROVIDER_TEST_PROVIDER_ID');
+const runtimeVapidPublicKey = readRuntimeString('VAPID_PUBLIC_KEY');
 
 const expectedKey = process.env.AMAZON_LOCATION_API_KEY?.trim() ?? '';
 if (!expectedKey) throw new Error('AMAZON_LOCATION_API_KEY is not configured');
@@ -57,5 +59,8 @@ if (runtimeProviderTestMode !== expectedProviderTestMode
     || expectedProviderTestProviderId !== allowedProviderTestId))) {
   throw new Error('Provider test mode is not restricted to the authorized test provider');
 }
+const requestedVapidPublicKey=process.env.VAPID_PUBLIC_KEY?.trim()??'';
+if(requestedVapidPublicKey&&requestedVapidPublicKey!==VAPID_PUBLIC_KEY)throw new Error('VAPID public key does not match the canonical HOME AI key');
+if(runtimeVapidPublicKey!==VAPID_PUBLIC_KEY)throw new Error('VAPID public key is missing or does not match the canonical HOME AI key');
 
 console.log(`Runtime configuration verified (values redacted; Supabase: ${runtimeSupabaseUrl ? 'configured' : 'local fallback only'}).`);

@@ -1,4 +1,5 @@
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { VAPID_PUBLIC_KEY } from '../supabase/functions/_shared/provider-push-config.js';
 
 await rm('dist', { force: true, recursive: true });
 await mkdir('dist/src', { recursive: true });
@@ -16,6 +17,11 @@ const supabaseAnonKey = process.env.SUPABASE_ANON_KEY ?? '';
 const supabaseRequired = process.env.REQUIRE_SUPABASE_CONFIG === 'true';
 const providerTestModeRequested = process.env.PROVIDER_TEST_MODE === 'true';
 const providerTestProviderId = process.env.PROVIDER_TEST_PROVIDER_ID ?? '';
+const requestedVapidPublicKey = process.env.VAPID_PUBLIC_KEY?.trim() ?? '';
+if (requestedVapidPublicKey && requestedVapidPublicKey !== VAPID_PUBLIC_KEY) {
+  throw new Error('VAPID_PUBLIC_KEY does not match the canonical HOME AI key');
+}
+const vapidPublicKey = VAPID_PUBLIC_KEY;
 const allowedProviderTestId = '2040840f-10c6-4acf-a800-1640e1520f4b';
 if (providerTestModeRequested && providerTestProviderId !== allowedProviderTestId) {
   throw new Error('PROVIDER_TEST_MODE requires the exact authorized test provider');
@@ -36,6 +42,7 @@ await writeFile('dist/src/runtime-config.js', `globalThis.__HOME_AI_CONFIG__ = O
   SUPABASE_REQUIRED: ${supabaseRequired},
   PROVIDER_TEST_MODE: ${providerTestMode},
   PROVIDER_TEST_PROVIDER_ID: ${JSON.stringify(providerTestMode ? providerTestProviderId : '')},
+  VAPID_PUBLIC_KEY: ${JSON.stringify(vapidPublicKey)},
   BUILD_ID: ${JSON.stringify(buildId)},
 });\n`);
 if (!providerTestMode) {

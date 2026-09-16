@@ -91,6 +91,10 @@ export function createSupabaseOffersRepository(supabase) {
       channel.subscribe(onStatus);
       return () => client.removeChannel(channel);
     },
+    async registerProviderPushSubscription(subscription) { return unwrap(await client.rpc('register_current_provider_push_subscription',{target_installation_id:subscription.installationId,target_endpoint:subscription.endpoint,target_p256dh:subscription.p256dh,target_auth:subscription.auth}),'offers.registerProviderPushSubscription'); },
+    async touchProviderPushInstallation(installationId,foreground) { return unwrap(await client.rpc('touch_current_provider_push_installation',{target_installation_id:installationId,target_foreground:foreground}),'offers.touchProviderPushInstallation'); },
+    async revokeProviderPushInstallation(installationId) { return unwrap(await client.rpc('revoke_current_provider_push_installation',{target_installation_id:installationId}),'offers.revokeProviderPushInstallation'); },
+    async resolveProviderPushOffer(reference) { return unwrap(await client.rpc('resolve_current_provider_push_offer',{target_reference:reference}),'offers.resolveProviderPushOffer'); },
     async setProviderAvailability({ online }) {
       return unwrap(await client.rpc('set_current_provider_availability', {
         new_online: online, new_available: online,

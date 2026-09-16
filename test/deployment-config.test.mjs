@@ -24,6 +24,14 @@ describe('configuration du déploiement GitHub Pages', () => {
     assert.match(verify, /values redacted/);
   });
 
+  it('injecte la clé VAPID publique canonique sans secret privé dans GitHub Pages',async()=>{
+    const [workflow,build,verify,config]=await Promise.all([read('.github/workflows/deploy-pages.yml'),read('scripts/build.mjs'),read('scripts/verify-runtime-config.mjs'),read('supabase/functions/_shared/provider-push-config.js')]);
+    assert.match(config,/VAPID_PUBLIC_KEY/);
+    assert.match(build,/VAPID_PUBLIC_KEY/);
+    assert.match(verify,/canonical HOME AI key/);
+    assert.doesNotMatch(workflow,/VAPID_PRIVATE_KEY|VAPID_SUBJECT/);
+  });
+
   it('limite le mode arrivée GitHub Pages au seul provider de test autorisé',async()=>{
     const [workflow,build,verify,runtime,providerApp]=await Promise.all([
       readFile(new URL('../.github/workflows/deploy-pages.yml',import.meta.url),'utf8'),

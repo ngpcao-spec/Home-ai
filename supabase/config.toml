@@ -14,3 +14,8 @@ verify_jwt = true
 # verified inside the function with STRINGEE_SIGNING_SECRET_KEY.
 [functions.stringee-answer]
 verify_jwt = false
+
+# Called only by the authenticated Database Webhook; the function verifies
+# x-home-ai-push-secret before reading the durable outbox.
+[functions.send-provider-push]
+verify_jwt = false

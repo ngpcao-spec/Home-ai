@@ -9,6 +9,7 @@ const OFFLINE_ASSETS = new Set([
   '../src/provider/provider-app.js', '../src/provider/provider-dispatch.js', '../src/provider/provider-repository.js',
   '../src/provider/provider-navigation.js', '../src/provider/provider-arrival.js', '../src/provider/provider-auth.js', '../src/provider/provider-location-heartbeat.js',
   '../src/provider/provider-activities.js', '../src/provider/provider-activity-ai.js',
+  '../src/provider/provider-push.js',
   '../src/provider/provider-rating.js',
   '../src/chat/mission-chat.js', '../src/chat/mission-chat-repository.js', '../src/chat/mission-chat.css', '../src/calls/call-manager.js', '../src/calls/stringee-client.js', '../src/calls/stringee-sdk.js',
   '../src/calls/call-audio.js', '../src/calls/mission-call.css',
@@ -40,4 +41,14 @@ self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin || !offlinePaths.has(url.pathname)) return;
   event.respondWith(networkFirst(event.request));
+});
+self.addEventListener('push',event=>{
+  let data={};try{data=event.data?.json()??{};}catch{return;}
+  if(data.type!=='mission_offer'||!data.offerRef)return;
+  event.waitUntil(self.registration.showNotification(data.title??'HOME AI — Nhiệm vụ mới',{body:data.body??'Có nhiệm vụ mới gần bạn.',icon:'../provider-icon.svg',badge:'../provider-icon.svg',tag:`home-ai-offer-${data.offerRef}`,renotify:true,data:{type:'mission_offer',offerRef:data.offerRef}}));
+});
+self.addEventListener('notificationclick',event=>{
+  event.notification.close();const ref=event.notification.data?.offerRef;if(!ref)return;
+  const target=new URL(`./?push_offer=${encodeURIComponent(ref)}`,self.registration.scope).href;
+  event.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(async clients=>{const provider=clients.find(client=>new URL(client.url).pathname.startsWith(new URL(self.registration.scope).pathname));if(provider){await provider.focus();provider.postMessage({type:'mission_offer_push',offerRef:ref});return;}await self.clients.openWindow(target);}));
 });
