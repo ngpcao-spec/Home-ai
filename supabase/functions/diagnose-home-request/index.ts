@@ -1,6 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { diagnosticSchema, validateDiagnostic, validateRequest } from '../_shared/diagnostic-contract.ts';
 import { diagnosticInstructionsFast } from '../_shared/diagnostic-instructions-fast.js';
+import { enforceIntakeCompleteness, requiresIntakeClarification } from '../_shared/intake-completeness.js';
 
 const allowedOrigins = new Set(['https://ngpcao-spec.github.io', 'http://localhost:3000', 'http://127.0.0.1:3000']);
 const jsonHeaders = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
@@ -63,37 +64,69 @@ Deno.serve(async request => {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 12000);
   try {
-    logStage('openai_request_started');
-    const openAiResponse = await fetch('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      signal: controller.signal,
-      body: JSON.stringify({
-        model: Deno.env.get('OPENAI_MODEL') || 'gpt-5-mini',
-        reasoning: { effort: 'minimal' },
-        max_output_tokens: 400,
-        store: false,
-        instructions: diagnosticInstructionsFast,
-        input: [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify({
-          initialProblem: input.description,
-          clarificationHistory: input.clarifications,
-        }) }] }],
-        text: { format: { type: 'json_schema', name: 'home_ai_diagnostic', strict: true, schema: diagnosticSchema } },
-      }),
+    const callOpenAi = async (requireQuestion: boolean) => {
+      logStage('openai_request_started');
+      const openAiResponse = await fetch('https://api.openai.com/v1/responses', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: 'gpt-5-mini',
+          reasoning: { effort: 'minimal' },
+          max_output_tokens: 400,
+          store: false,
+          instructions: diagnosticInstructionsFast,
+          input: [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify({
+            initialProblem: input.description,
+            clarificationHistory: input.clarifications,
+            ...(requireQuestion ? { intakeRequirement: 'clarification_required' } : {}),
+          }) }] }],
+          text: { format: { type: 'json_schema', name: 'home_ai_diagnostic', strict: true, schema: diagnosticSchema } },
+        }),
+      });
+      logStage('openai_response_received', { status: openAiResponse.status });
+      if (!openAiResponse.ok) throw Object.assign(new Error('AI_REQUEST_FAILED'), { status: openAiResponse.status });
+      const payload = await openAiResponse.json();
+      if (payload.status === 'incomplete') {
+        const reason = payload.incomplete_details?.reason === 'max_output_tokens' ? 'max_output_tokens' : 'other';
+        logStage('openai_response_incomplete', { reason });
+      }
+      return validateDiagnostic(JSON.parse(extractOutputText(payload)));
+    };
+    const requiresQuestion = requiresIntakeClarification(input);
+    let initialResult;
+    try {
+      initialResult = await callOpenAi(requiresQuestion);
+    } catch (error) {
+      if (!requiresQuestion || (error instanceof Error && 'status' in error)
+          || (error instanceof DOMException && error.name === 'AbortError')) throw error;
+      logStage('invalid_response_retry');
+      initialResult = await callOpenAi(true);
+    }
+    const result = await enforceIntakeCompleteness({
+      input,
+      diagnostic: initialResult,
+      retry: () => callOpenAi(true),
     });
-    logStage('openai_response_received', { status: openAiResponse.status });
-    if (openAiResponse.status === 429) return failure(origin, 429, 'AI_RATE_LIMIT');
-    if (openAiResponse.status >= 500) return failure(origin, 503, 'AI_UNAVAILABLE');
-    if (!openAiResponse.ok) return failure(origin, 502, 'AI_REQUEST_FAILED');
-    const payload = await openAiResponse.json();
-    const result = validateDiagnostic(JSON.parse(extractOutputText(payload)));
     logStage('json_validated');
     return response(origin, 200, result);
   } catch (error) {
+    if (requiresIntakeClarification(input)) {
+      logStage('clarification_question_unavailable');
+      return failure(origin, 422, 'CLARIFICATION_REQUIRED');
+    }
+    if (error instanceof Error && 'code' in error && error.code === 'CLARIFICATION_REQUIRED') {
+      logStage('clarification_question_missing');
+      return failure(origin, 422, 'CLARIFICATION_REQUIRED');
+    }
+    if (error instanceof Error && 'status' in error) {
+      if (error.status === 429) return failure(origin, 429, 'AI_RATE_LIMIT');
+      if (typeof error.status === 'number' && error.status >= 500) return failure(origin, 503, 'AI_UNAVAILABLE');
+      return failure(origin, 502, 'AI_REQUEST_FAILED');
+    }
     if (error instanceof DOMException && error.name === 'AbortError') return failure(origin, 504, 'AI_TIMEOUT');
     return failure(origin, 502, 'AI_INVALID_RESPONSE');
   } finally {
     clearTimeout(timer);
   }
 });
-

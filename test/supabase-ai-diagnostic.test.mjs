@@ -130,6 +130,17 @@ it('uses the technical fallback for network, 429, 5xx and invalid JSON responses
   }
 });
 
+it('never turns an incomplete service request into a final result after an AI failure', async () => {
+  const diagnostic = createSupabaseAiDiagnostic({
+    client: client(async () => ({ data: null, error: { context: { status: 502 } } })),
+    getVerifiedUserId: () => 'customer-1', fallback,
+  });
+  await assert.rejects(
+    diagnostic.analyse({ description: 'Tôi cần sửa điện trong nhà' }),
+    { code: 'CLARIFICATION_REQUIRED' },
+  );
+});
+
 it('aborts a slow invocation and falls back after the configured timeout', async () => {
   const diagnostic = createSupabaseAiDiagnostic({
     client: client((_name, { signal }) => new Promise((_resolve, reject) => {
@@ -204,4 +215,3 @@ it('never exposes OPENAI_API_KEY through browser runtime configuration or Pages'
   ]);
   files.forEach(source => assert.doesNotMatch(source, /OPENAI_API_KEY/));
 });
-

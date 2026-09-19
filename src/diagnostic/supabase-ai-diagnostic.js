@@ -1,6 +1,7 @@
 import { getSupabaseBrowserClient } from '../supabase/client.js';
 import { adaptAiDiagnostic } from './diagnostic-contract.js';
 import { createMockDiagnostic } from './mock-diagnostic.js';
+import { requiresIntakeClarification } from './intake-completeness.js';
 
 const fallbackCodes = new Set(['AI_TIMEOUT', 'AI_RATE_LIMIT', 'AI_UNAVAILABLE', 'AI_INVALID_RESPONSE', 'FUNCTION_NETWORK_ERROR']);
 
@@ -83,7 +84,12 @@ export function createSupabaseAiDiagnostic({
           ? new AiDiagnosticError('AI_TIMEOUT', 'AI diagnostic timed out', { cause: error })
           : error instanceof AiDiagnosticError ? error : normalizeInvokeError(error);
         logger({ event: 'edge_function_call_failed', code: normalized.code });
-        if (fallbackCodes.has(normalized.code)) return runFallback({ description: cleanDescription, preferredCategory }, normalized.code);
+        if (fallbackCodes.has(normalized.code)) {
+          if (requiresIntakeClarification({ description: cleanDescription, clarifications: cleanClarifications })) {
+            throw new AiDiagnosticError('CLARIFICATION_REQUIRED', 'More service information is required', { cause: normalized });
+          }
+          return runFallback({ description: cleanDescription, preferredCategory }, normalized.code);
+        }
         throw normalized;
       } finally {
         globalThis.clearTimeout(timer);
@@ -96,4 +102,3 @@ function newAbortController() {
   if (typeof globalThis.AbortController !== 'function') throw new AiDiagnosticError('AI_UNAVAILABLE', 'AbortController unavailable');
   return new globalThis.AbortController();
 }
-
