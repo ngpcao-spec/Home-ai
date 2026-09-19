@@ -94,12 +94,13 @@ h1 em { color: var(--green); font-style: normal; }
 .clarification h2 { margin: 0; color: #153b34; font-size: clamp(20px, 5.5vw, 26px); font-weight: 850; line-height: 1.22; letter-spacing: -.025em; overflow-wrap: anywhere; }
 .clarification .clarification-hint { margin: 8px 0 15px; color: #70847e; font-size: 12px; font-weight: 550; line-height: 1.45; }
 .clarification-options { display: grid; gap: 9px; }
-.clarification-options button { position: relative; display: grid; grid-template-columns: 28px minmax(0, 1fr) 16px; width: 100%; min-height: 52px; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid #d7e5e0; border-radius: 14px; background: #fff; color: #174b3e; font: inherit; font-size: 13px; font-weight: 780; line-height: 1.35; text-align: left; box-shadow: 0 3px 11px rgb(22 74 62 / 4%); }
-.clarification-options button::before { content: '＋'; display: grid; width: 28px; height: 28px; place-items: center; border-radius: 9px; color: #087b61; background: #eef8f4; font-size: 14px; font-weight: 850; }
+.clarification-options button { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) 16px; width: 100%; min-height: 52px; align-items: center; gap: 10px; padding: 9px 11px; border: 1px solid #d7e5e0; border-radius: 14px; background: #fff; color: #174b3e; font: inherit; font-size: 13px; font-weight: 780; line-height: 1.35; text-align: left; box-shadow: 0 3px 11px rgb(22 74 62 / 4%); overflow-wrap: anywhere; }
+.clarification-options button::before { display: none; }
 .clarification-options button::after { content: '›'; color: #829791; font-size: 22px; font-weight: 500; line-height: 1; text-align: right; }
 .clarification-options button:active { border-color: #087b61; background: #dff2eb; }
 .clarification-options button[aria-pressed="true"] { border-color: #087b61; background: #dff2eb; color: #174b3e; }
-.clarification-options button[aria-pressed="true"]::before { content: '✓'; color: white; background: #087b61; font-weight: 900; }
+.clarification-options button[aria-pressed="true"] { padding-left: 49px; }
+.clarification-options button[aria-pressed="true"]::before { content: '✓'; position: absolute; left: 11px; display: grid; width: 28px; height: 28px; place-items: center; border-radius: 9px; color: white; background: #087b61; font-weight: 900; }
 .clarification-options button:disabled { cursor: default; }
 .start-button[aria-pressed="true"] { background: #dff2eb; color: #087b61; box-shadow: inset 0 0 0 1px #087b61; }
 .start-button[aria-pressed="true"] svg { display: none; }
@@ -463,7 +464,7 @@ footer strong { color: #627872; }
   .diagnostic-result.is-clarifying { padding: 15px; border-radius: 19px; }
   .clarification-heading { margin-bottom: 11px; }
   .clarification-icon { width: 35px; height: 35px; }
-  .clarification h2 { font-size: clamp(19px, 5.8vw, 23px); }
+  .clarification h2 { font-size: clamp(17px, 5vw, 21px); }
   .clarification .clarification-hint { margin: 7px 0 12px; }
   .clarification-options { gap: 8px; }
   .clarification-options button { min-height: 50px; padding-block: 8px; }

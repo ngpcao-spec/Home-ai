@@ -192,8 +192,11 @@ it('keeps a long dynamic question and a variable answer count inside the compact
     assert.equal(state.root.querySelector('[data-clarification-question]').textContent, longQuestion);
     assert.deepEqual([...state.root.querySelectorAll('[data-clarification-options] button')].map(item => item.textContent), [...answers, 'Khác']);
     assert.match(customerStyles, /@media \(max-width: 480px\)[\s\S]*\.diagnostic-result\.is-clarifying \{ padding: 15px/);
+    assert.match(customerStyles, /@media \(max-width: 480px\)[\s\S]*\.clarification h2 \{ font-size: clamp\(17px, 5vw, 21px\)/);
     assert.match(customerStyles, /\.clarification h2 \{[^}]*overflow-wrap: anywhere/);
-    assert.match(customerStyles, /\.clarification-options button \{[^}]*min-height: 52px/);
+    assert.match(customerStyles, /\.clarification-options button \{[^}]*grid-template-columns: minmax\(0, 1fr\) 16px[^}]*min-height: 52px[^}]*overflow-wrap: anywhere/);
+    assert.match(customerStyles, /\.clarification-options button::before \{ display: none; \}/);
+    assert.doesNotMatch(customerStyles, /content: '＋'/);
   } finally { state.dom.window.close(); }
 });
 
