@@ -168,7 +168,7 @@ it('keeps the Edge Function authenticated, secret-only and strictly validated', 
   assert.match(source, /reasoning: \{ effort: 'minimal' \}/);
   assert.match(source, /max_output_tokens: 400/);
   assert.match(source, /store: false/);
-  assert.match(source, /instructions: diagnosticInstructions/);
+  assert.match(source, /instructions: diagnosticInstructionsFast/);
   assert.doesNotMatch(source, /logStage\([^\n]*(?:token|apiKey|description|userData)/);
   assert.match(source, /AbortController/);
   assert.match(source, /AI_TIMEOUT/);
@@ -204,3 +204,4 @@ it('never exposes OPENAI_API_KEY through browser runtime configuration or Pages'
   ]);
   files.forEach(source => assert.doesNotMatch(source, /OPENAI_API_KEY/));
 });
+

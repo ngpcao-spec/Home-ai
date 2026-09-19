@@ -1,6 +1,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { diagnosticSchema, validateDiagnostic, validateRequest } from '../_shared/diagnostic-contract.ts';
-import { diagnosticInstructions } from '../_shared/diagnostic-instructions.js';
+import { diagnosticInstructionsFast } from '../_shared/diagnostic-instructions-fast.js';
 
 const allowedOrigins = new Set(['https://ngpcao-spec.github.io', 'http://localhost:3000', 'http://127.0.0.1:3000']);
 const jsonHeaders = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
@@ -73,7 +73,7 @@ Deno.serve(async request => {
         reasoning: { effort: 'minimal' },
         max_output_tokens: 400,
         store: false,
-        instructions: diagnosticInstructions,
+        instructions: diagnosticInstructionsFast,
         input: [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify({
           initialProblem: input.description,
           clarificationHistory: input.clarifications,
@@ -96,3 +96,4 @@ Deno.serve(async request => {
     clearTimeout(timer);
   }
 });
+

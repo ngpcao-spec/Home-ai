@@ -2,6 +2,7 @@ import { getGlobalMissionChat } from './chat/mission-chat.js';
 import { getGlobalCallManager } from './calls/call-manager.js';
 import { createMockDiagnostic } from './diagnostic/mock-diagnostic.js';
 import { createSupabaseAiDiagnostic } from './diagnostic/supabase-ai-diagnostic.js';
+import { createAiIntakeTiming } from './diagnostic/ai-intake-timing.js';
 import { getSupabaseBrowserClient } from './supabase/client.js';
 import { getCustomerDispatchState, renderCustomerDispatchState } from './customer/dispatch-state.js';
 import { getMatchReasons, getRouteMatrixCandidates } from './technicians/matching.js';
@@ -416,6 +417,7 @@ export function initialiseHomePage(
   let restoreActiveMission = async () => false;
   let browserStorage;
   let verifiedCustomerUserId = null;
+  const aiIntakeTiming = createAiIntakeTiming();
   const requiresSupabaseSession = globalThis.__HOME_AI_CONFIG__?.SUPABASE_REQUIRED === true
     || globalThis.location?.hostname === 'ngpcao-spec.github.io';
   const localDiagnostic = createMockDiagnostic();
@@ -423,6 +425,7 @@ export function initialiseHomePage(
     client: getSupabaseBrowserClient(),
     fallback: createMockDiagnostic({ delay: 0 }),
     getVerifiedUserId: () => verifiedCustomerUserId,
+    timing: aiIntakeTiming,
   });
   const diagnosticService = diagnostic ?? Object.freeze({
     analyse: request => verifiedCustomerUserId
@@ -772,6 +775,12 @@ export function initialiseHomePage(
     root.querySelector('[data-result-note]').hidden = canClarify;
     status.textContent = '';
     resultCard.hidden = false;
+    if (canClarify) {
+      const timingRunId = diagnosticConversation.timingRunId;
+      const view = root.ownerDocument.defaultView;
+      if (view?.requestAnimationFrame) view.requestAnimationFrame(() => aiIntakeTiming.firstQuestionRendered(timingRunId));
+      else aiIntakeTiming.firstQuestionRendered(timingRunId);
+    }
     resultCard.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
   };
   const analyseCurrentConversation = async () => {
@@ -804,7 +813,8 @@ export function initialiseHomePage(
     if (diagnosticConversation.submitting) return;
     const description = input.value.trim();
     if (!description) return;
-    diagnosticConversation = { initialDescription: description, clarifications: [], currentQuestion: null, pending: false, submitting: true };
+    const timingRunId = aiIntakeTiming.start();
+    diagnosticConversation = { initialDescription: description, clarifications: [], currentQuestion: null, pending: false, submitting: true, timingRunId };
     resultCard.hidden = true;
     await analyseCurrentConversation();
   });
@@ -1960,3 +1970,4 @@ if (typeof document !== 'undefined') {
   const root = document.querySelector('#root');
   if (root) initialiseHomePage(root);
 }
+

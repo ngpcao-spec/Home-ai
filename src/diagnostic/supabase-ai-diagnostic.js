@@ -34,6 +34,7 @@ export function createSupabaseAiDiagnostic({
   timeoutMs = 12000,
   getVerifiedUserId = () => null,
   logger = defaultDiagnosticLogger,
+  timing = null,
 } = {}) {
   const runFallback = async (request, reason) => Object.freeze({
     ...await fallback.analyse(request), source: 'fallback', fallbackReason: reason,
@@ -59,6 +60,7 @@ export function createSupabaseAiDiagnostic({
       const timer = globalThis.setTimeout(() => controller.abort(), timeoutMs);
       try {
         logger({ event: 'edge_function_call_started', functionName: 'diagnose-home-request' });
+        timing?.mark('request_sent');
         const { data, error } = await client.functions.invoke('diagnose-home-request', {
           body: {
             description: cleanDescription,
@@ -67,6 +69,7 @@ export function createSupabaseAiDiagnostic({
           },
           signal: controller.signal,
         });
+        timing?.mark('response_received');
         if (error) throw normalizeInvokeError(error);
         logger({ event: 'edge_function_response_received', functionName: 'diagnose-home-request' });
         try {
@@ -93,3 +96,4 @@ function newAbortController() {
   if (typeof globalThis.AbortController !== 'function') throw new AiDiagnosticError('AI_UNAVAILABLE', 'AbortController unavailable');
   return new globalThis.AbortController();
 }
+
