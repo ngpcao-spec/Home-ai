@@ -99,24 +99,102 @@ it('confirms the initial AI request immediately and prevents duplicate submissio
     assert.equal(button.querySelector('span').textContent, '✓ Đã gửi');
     assert.equal(button.disabled, true);
     assert.equal(button.getAttribute('aria-pressed'), 'true');
-    assert.equal(state.root.querySelector('[data-form-status]').textContent, 'AI đang phân tích vấn đề của bạn...');
+    const status = state.root.querySelector('[data-form-status]');
+    assert.equal(status.textContent, 'AI đang phân tích vấn đề của bạn...');
+    assert.equal(status.classList.contains('is-ai-loading'), true);
+    assert.equal(form.getAttribute('aria-busy'), 'true');
+    assert.match(customerStyles, /\.form-status\.is-ai-loading::before[^}]*animation: ai-wait-spin/);
     form.dispatchEvent(new state.dom.window.Event('submit', {bubbles:true,cancelable:true}));
     assert.equal(state.calls.length, 1);
     resolveAnalysis(diagnosis('Đã hiểu.', []));
     await settle();
     assert.equal(button.querySelector('span').textContent, 'Bắt đầu với AI');
     assert.equal(button.disabled, false);
+    assert.equal(status.classList.contains('is-ai-loading'), false);
+    assert.equal(form.hasAttribute('aria-busy'), false);
   } finally { state.dom.window.close(); }
 });
 
 it('restores the initial AI button after an analysis error', async () => {
-  const state = setup([Promise.reject(new Error('network'))]);
+  let rejectAnalysis;
+  const state = setup([new Promise((_resolve, reject) => { rejectAnalysis = reject; })]);
   try {
-    await submitInitial(state.root);
+    const form = state.root.querySelector('[data-request-form]');
+    form.elements.request.value = 'Ổ cắm điện không hoạt động';
+    form.dispatchEvent(new state.dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    assert.equal(state.root.querySelector('[data-form-status]').classList.contains('is-ai-loading'), true);
+    rejectAnalysis(new Error('network'));
+    await settle();
     const button = state.root.querySelector('[data-request-form] [type="submit"]');
     assert.equal(button.querySelector('span').textContent, 'Bắt đầu với AI');
     assert.equal(button.disabled, false);
     assert.equal(button.hasAttribute('aria-pressed'), false);
+    assert.match(state.root.querySelector('[data-form-status]').textContent, /Không thể phân tích/);
+    assert.equal(state.root.querySelector('[data-form-status]').classList.contains('is-ai-loading'), false);
+    assert.equal(form.hasAttribute('aria-busy'), false);
+  } finally { state.dom.window.close(); }
+});
+
+it('shows a compact accessible spinner for each Q1→Q2→Q3→summary analysis', async () => {
+  let resolveQ2;
+  let resolveQ3;
+  let resolveSummary;
+  const state = setup([
+    diagnosis('Cần bổ sung.', [question('Câu hỏi 1?')]),
+    new Promise(resolve => { resolveQ2 = resolve; }),
+    new Promise(resolve => { resolveQ3 = resolve; }),
+    new Promise(resolve => { resolveSummary = resolve; }),
+  ]);
+  const feedback = state.root.querySelector('[data-clarification-feedback]');
+  try {
+    await submitInitial(state.root);
+    for (const [answer, resolve, next] of [
+      ['Lựa chọn A', resolveQ2, question('Câu hỏi 2?')],
+      ['Lựa chọn B', resolveQ3, question('Câu hỏi 3?')],
+      ['Lựa chọn C', resolveSummary, null],
+    ]) {
+      const button = [...state.root.querySelectorAll('[data-clarification-options] button')]
+        .find(item => item.textContent === answer);
+      button.click();
+      assert.equal(feedback.textContent, `✓ Đã chọn: ${answer}`);
+      assert.equal(feedback.classList.contains('is-ai-loading'), false);
+      await new Promise(resolveWait => setTimeout(resolveWait, 1050));
+      await settle();
+      assert.equal(feedback.textContent, 'AI đang phân tích...');
+      assert.equal(feedback.classList.contains('is-ai-loading'), true);
+      assert.equal(state.root.querySelector('[data-diagnostic-result]').getAttribute('aria-busy'), 'true');
+      assert.equal(state.root.querySelector('[data-form-status]').classList.contains('is-ai-loading'), false);
+      resolve(diagnosis(next ? 'Question suivante.' : 'Diagnostic terminé.', next ? [next] : []));
+      await settle();
+      assert.equal(feedback.classList.contains('is-ai-loading'), false);
+      assert.equal(feedback.hidden, true);
+      assert.equal(state.root.querySelector('[data-diagnostic-result]').hasAttribute('aria-busy'), false);
+    }
+    assert.equal(state.calls.length, 4);
+    assert.equal(state.root.querySelector('[data-find-technician]').hidden, false);
+    assert.match(customerStyles, /@media \(prefers-reduced-motion: reduce\)[^}]*animation: none/);
+    assert.match(customerStyles, /\.clarification \.clarification-feedback\.is-ai-loading::before/);
+  } finally { state.dom.window.close(); }
+});
+
+it('removes the in-card spinner and keeps the existing retry error after a clarification failure', async () => {
+  let rejectAnalysis;
+  const state = setup([
+    diagnosis('Cần bổ sung.', [question('Câu hỏi 1?')]),
+    new Promise((_resolve, reject) => { rejectAnalysis = reject; }),
+  ]);
+  try {
+    await submitInitial(state.root);
+    state.root.querySelector('[data-clarification-answer="Lựa chọn A"]').click();
+    await new Promise(resolve => setTimeout(resolve, 1050));
+    await settle();
+    const feedback = state.root.querySelector('[data-clarification-feedback]');
+    assert.equal(feedback.classList.contains('is-ai-loading'), true);
+    rejectAnalysis(new Error('network'));
+    await settle();
+    assert.equal(feedback.classList.contains('is-ai-loading'), false);
+    assert.equal(feedback.hidden, true);
+    assert.equal(state.root.querySelector('[data-diagnostic-result]').hasAttribute('aria-busy'), false);
     assert.match(state.root.querySelector('[data-form-status]').textContent, /Không thể phân tích/);
   } finally { state.dom.window.close(); }
 });

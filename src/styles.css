@@ -71,6 +71,11 @@ h1 em { color: var(--green); font-style: normal; }
 .start-button svg { width: 18px; fill: none; stroke: currentColor; stroke-width: 2; }
 .form-status { min-height: 20px; margin: 11px auto 0; color: var(--green); font-size: 12px; font-weight: 650; }
 .form-status:empty { min-height: 0; margin-top: 0; }
+.form-status.is-ai-loading, .clarification .clarification-feedback.is-ai-loading { display: flex; align-items: center; justify-content: center; gap: 7px; }
+.clarification .clarification-feedback.is-ai-loading { justify-content: flex-start; font-size: 12px; font-weight: 650; }
+.form-status.is-ai-loading::before, .clarification .clarification-feedback.is-ai-loading::before { width: 12px; height: 12px; flex: 0 0 12px; border: 2px solid #cce8de; border-top-color: var(--green); border-radius: 50%; content: ''; animation: ai-wait-spin .75s linear infinite; }
+@keyframes ai-wait-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .form-status.is-ai-loading::before, .clarification .clarification-feedback.is-ai-loading::before { animation: none; } }
 .diagnostic-result { display: flex; width: min(100%, 610px); gap: 14px; margin: 7px auto 0; padding: 20px; border: 1px solid #cfe8dc; border-radius: 20px; background: white; box-shadow: 0 15px 38px rgb(22 74 62 / 10%); text-align: left; }
 .diagnostic-result[hidden] { display: none; }
 .diagnostic-summary { display: contents; }

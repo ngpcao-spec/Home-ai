@@ -298,7 +298,7 @@ export function createHomeAiMarkup() {
               </button>
             </div>
           </form>
-          <p class="form-status" data-form-status aria-live="polite"></p>
+          <p class="form-status" data-form-status role="status" aria-live="polite"></p>
           <section class="diagnostic-result" data-diagnostic-result hidden aria-live="polite">
             <div class="diagnostic-summary" data-diagnostic-summary>
               <div class="result-check" aria-hidden="true">✓</div>
@@ -786,11 +786,23 @@ export function initialiseHomePage(
   const analyseCurrentConversation = async () => {
     const submitButton = form.querySelector('[type="submit"]');
     const submitLabel = submitButton.querySelector('span');
+    const clarificationFeedback = root.querySelector('[data-clarification-feedback]');
+    const isClarification = diagnosticConversation.clarifications.length > 0;
     submitLabel.textContent = '✓ Đã gửi';
     submitButton.setAttribute('aria-pressed', 'true');
     submitButton.disabled = true;
     root.querySelectorAll('[data-clarification-options] button, [data-clarification-form] button').forEach(button => { button.disabled = true; });
-    status.textContent = 'AI đang phân tích vấn đề của bạn...';
+    if (isClarification) {
+      status.textContent = '';
+      clarificationFeedback.textContent = 'AI đang phân tích...';
+      clarificationFeedback.hidden = false;
+      clarificationFeedback.classList.add('is-ai-loading');
+      resultCard.setAttribute('aria-busy', 'true');
+    } else {
+      status.textContent = 'AI đang phân tích vấn đề của bạn...';
+      status.classList.add('is-ai-loading');
+      form.setAttribute('aria-busy', 'true');
+    }
     try {
       const diagnosis = await diagnosticService.analyse({
         description: diagnosticConversation.initialDescription,
@@ -799,8 +811,14 @@ export function initialiseHomePage(
       });
       renderDiagnosis(diagnosis);
     } catch {
+      clarificationFeedback.hidden = true;
+      clarificationFeedback.textContent = '';
       status.textContent = 'Không thể phân tích lúc này. Vui lòng thử lại.';
     } finally {
+      status.classList.remove('is-ai-loading');
+      clarificationFeedback.classList.remove('is-ai-loading');
+      form.removeAttribute('aria-busy');
+      resultCard.removeAttribute('aria-busy');
       submitLabel.textContent = 'Bắt đầu với AI';
       submitButton.removeAttribute('aria-pressed');
       submitButton.disabled = false;
