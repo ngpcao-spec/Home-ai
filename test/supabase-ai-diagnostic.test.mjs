@@ -124,7 +124,7 @@ it('uses the technical fallback for network, 429, 5xx and invalid JSON responses
   ];
   for (const invoke of failures) {
     const diagnostic = createSupabaseAiDiagnostic({ client: client(invoke), getVerifiedUserId: () => 'customer-1', fallback });
-    const result = await diagnostic.analyse({ description: 'Test', preferredCategory: 'plumbing' });
+    const result = await diagnostic.analyse({ description: 'Vòi nước dưới bồn rửa bị rò', preferredCategory: 'plumbing' });
     assert.equal(result.source, 'fallback');
     assert.equal(result.categoryId, 'plumbing');
   }
@@ -148,7 +148,7 @@ it('aborts a slow invocation and falls back after the configured timeout', async
     })),
     getVerifiedUserId: () => 'customer-1', fallback, timeoutMs: 2,
   });
-  const result = await diagnostic.analyse({ description: 'Test timeout', preferredCategory: 'appliances' });
+  const result = await diagnostic.analyse({ description: 'Máy giặt không hoạt động', preferredCategory: 'appliances' });
   assert.equal(result.source, 'fallback');
   assert.equal(result.fallbackReason, 'AI_TIMEOUT');
 });

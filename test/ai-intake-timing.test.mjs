@@ -8,7 +8,7 @@ import { diagnosticInstructionsFast } from '../supabase/functions/_shared/diagno
 it('uses the FAST production prompt while preserving the model, contract and safety rules', async () => {
   const source = await (await import('node:fs/promises')).readFile(new URL('../supabase/functions/diagnose-home-request/index.ts', import.meta.url), 'utf8');
   assert.match(source, /instructions: diagnosticInstructionsFast/);
-  assert.match(source, /Deno\.env\.get\('OPENAI_MODEL'\) \|\| 'gpt-5-mini'/);
+  assert.match(source, /model: 'gpt-5-mini'/);
   assert.match(source, /max_output_tokens: 400/);
   assert.ok(diagnosticInstructionsFast.length < diagnosticInstructions.length * 0.6);
   for (const term of ['serviceCategory', 'missingQuestions', 'suggestedAnswers', 'allowUnknown',
@@ -68,4 +68,3 @@ it('does not emit timing when opt-in is absent', () => {
   timing.firstQuestionRendered();
   assert.deepEqual(events, []);
 });
-

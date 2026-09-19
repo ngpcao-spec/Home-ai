@@ -220,7 +220,7 @@ it('continues the conversation correctly after a custom Khác answer', async () 
   } finally { state.dom.window.close(); }
 });
 
-it('ends clarification after three answers even when the AI still requests information', async () => {
+it('keeps all answers through Q1, Q2 and Q3, then stops at the three-question ceiling', async () => {
   const state = setup([
     diagnosis('Tour initial', [question('Câu hỏi 1?')]),
     diagnosis('Tour 1', [question('Câu hỏi 2?')]),
@@ -229,11 +229,15 @@ it('ends clarification after three answers even when the AI still requests infor
   ]);
   try {
     await submitInitial(state.root);
+    assert.equal(state.root.querySelector('[data-clarification-progress]').textContent, 'Câu hỏi 1/3');
     await choose(state.root, 'Lựa chọn A');
+    assert.equal(state.root.querySelector('[data-clarification-progress]').textContent, 'Câu hỏi 2/3');
     await choose(state.root, 'Lựa chọn B');
+    assert.equal(state.root.querySelector('[data-clarification-progress]').textContent, 'Câu hỏi 3/3');
     await choose(state.root, 'Lựa chọn C');
     assert.equal(state.calls.length, 4);
     assert.equal(state.calls[3].clarifications.length, 3);
+    assert.deepEqual(state.calls[3].clarifications.map(item => item.answer), ['Lựa chọn A', 'Lựa chọn B', 'Lựa chọn C']);
     assert.equal(state.root.querySelector('[data-result-questions]').hidden, true);
     assert.equal(state.root.querySelector('[data-find-technician]').hidden, false);
     assert.equal(state.missionConnections(), 0);

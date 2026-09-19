@@ -1,7 +1,7 @@
 import { createClient } from 'npm:@supabase/supabase-js@2';
 import { diagnosticSchema, validateDiagnostic, validateRequest } from '../_shared/diagnostic-contract.ts';
 import { diagnosticInstructionsFast } from '../_shared/diagnostic-instructions-fast.js';
-import { enforceIntakeCompleteness, requiresIntakeClarification } from '../_shared/intake-completeness.js';
+import { enforceIntakeCompleteness, getIntakeCompleteness, requiresIntakeClarification } from '../_shared/intake-completeness.js';
 
 const allowedOrigins = new Set(['https://ngpcao-spec.github.io', 'http://localhost:3000', 'http://127.0.0.1:3000']);
 const jsonHeaders = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
@@ -79,6 +79,7 @@ Deno.serve(async request => {
           input: [{ role: 'user', content: [{ type: 'input_text', text: JSON.stringify({
             initialProblem: input.description,
             clarificationHistory: input.clarifications,
+            intakeFacts: getIntakeCompleteness(input),
             ...(requireQuestion ? { intakeRequirement: 'clarification_required' } : {}),
           }) }] }],
           text: { format: { type: 'json_schema', name: 'home_ai_diagnostic', strict: true, schema: diagnosticSchema } },
