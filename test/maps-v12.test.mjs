@@ -54,6 +54,7 @@ describe('architecture cartographique V1.2', () => {
       addLayer(layer) { this.layers.push(layer); }
       setPaintProperty() {}
       fitBounds() { this.fitCount=(this.fitCount??0)+1; }
+      resize() { this.resizeCount=(this.resizeCount??0)+1; }
       remove() { this.removed = true; }
     }
     class FakeMarker {
@@ -91,6 +92,10 @@ describe('architecture cartographique V1.2', () => {
       provider.setRoute([{latitude:12.247,longitude:109.192},clientLocation],{fit:false});
       assert.equal(maps[1].sources.get('route'),routeSource);
       assert.equal(maps[1].layers.length,layerCount);assert.equal(maps[1].fitCount,fitCount);
+      provider.resize();
+      assert.equal(maps[1].resizeCount,1);
+      assert.equal(maps[1].fitCount,fitCount);
+      assert.equal(maps[1].removed,false);
       assert.equal(maps.length, 2);
     } finally {
       globalThis.maplibregl = previousMapLibre;

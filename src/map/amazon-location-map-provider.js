@@ -118,6 +118,7 @@ export function createAmazonLocationMapProvider({ apiKey, region = 'ap-southeast
       if(!marker||!diagnostic)return null;
       return { ...diagnostic, position:{...diagnostic.position}, mapInstanceId:state.mapInstanceId, markerCount:state.markers.size, attached:marker.getElement?.().isConnected!==false };
     },
+    resize() { state.map?.resize(); },
     setRoute(points, { fit = true } = {}) {
       if (!state.map) return;
       const data = featureCollection([{ type: 'Feature', geometry: { type: 'LineString', coordinates: points.map(point) }, properties: {} }]);
