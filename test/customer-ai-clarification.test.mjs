@@ -66,6 +66,13 @@ it('submits a proposed answer and stops early when no question remains', async (
   ]);
   try {
     await submitInitial(state.root);
+    const summary = state.root.querySelector('[data-diagnostic-summary]');
+    const result = state.root.querySelector('[data-diagnostic-result]');
+    assert.equal(summary.hidden, true);
+    assert.equal(state.dom.window.getComputedStyle(summary).display, 'none');
+    assert.equal(result.classList.contains('is-clarifying'), true);
+    assert.equal(state.root.querySelector('[data-result-questions] > .clarification-heading strong').textContent.trim(), 'Cần bổ sung');
+    assert.equal(state.root.querySelector('.clarification-hint').textContent, 'Chọn mô tả phù hợp nhất để thợ hiểu rõ hơn');
     assert.deepEqual([...state.root.querySelectorAll('[data-clarification-options] button')].map(item => item.textContent),
       ['Phòng khách', 'Phòng ngủ', 'Nhà bếp', 'Khác']);
     const form = state.root.querySelector('[data-clarification-form]');
@@ -74,6 +81,8 @@ it('submits a proposed answer and stops early when no question remains', async (
     await choose(state.root, 'Phòng khách');
     assert.deepEqual(state.calls[1].clarifications, [{ question: 'Ổ cắm ở phòng nào?', answer: 'Phòng khách' }]);
     assert.equal(state.root.querySelector('[data-result-questions]').hidden, true);
+    assert.equal(summary.hidden, false);
+    assert.equal(result.classList.contains('is-clarifying'), false);
     assert.equal(state.root.querySelector('[data-find-technician]').hidden, false);
     assert.equal(state.missionConnections(), 0);
   } finally { state.dom.window.close(); }
@@ -159,7 +168,7 @@ it('immediately confirms a choice, locks double clicks and advances once after o
     assert.equal(feedback.hidden, false);
     assert.equal(feedback.textContent, '✓ Đã chọn: 2 cái');
     assert.match(customerStyles, /aria-pressed="true".*\{ border-color: #087b61; background: #dff2eb/);
-    assert.match(customerStyles, /content: '✓ '/);
+    assert.match(customerStyles, /content: '✓'/);
     button.click();
     button.dispatchEvent(new state.dom.window.MouseEvent('click', { bubbles: true }));
     await new Promise(resolve => setTimeout(resolve, 800));
@@ -171,6 +180,20 @@ it('immediately confirms a choice, locks double clicks and advances once after o
     assert.deepEqual(state.calls[1].clarifications, [{question:'Bao nhiêu ổ cắm?',answer:'2 cái'}]);
     assert.equal(state.root.querySelector('[data-clarification-question]').textContent, 'Bạn muốn làm gì?');
     assert.equal(feedback.hidden, true);
+  } finally { state.dom.window.close(); }
+});
+
+it('keeps a long dynamic question and a variable answer count inside the compact responsive card', async () => {
+  const longQuestion = 'Thiết bị điện nào cần sửa và hiện tượng bạn nhìn thấy cụ thể là gì?';
+  const answers = ['Ổ cắm không hoạt động', 'Đèn chớp liên tục', 'Cầu dao thường xuyên bị ngắt', 'Có mùi khét gần dây điện', 'Thiết bị khác'];
+  const state = setup([diagnosis('Cần bổ sung.', [question(longQuestion, answers)])]);
+  try {
+    await submitInitial(state.root);
+    assert.equal(state.root.querySelector('[data-clarification-question]').textContent, longQuestion);
+    assert.deepEqual([...state.root.querySelectorAll('[data-clarification-options] button')].map(item => item.textContent), [...answers, 'Khác']);
+    assert.match(customerStyles, /@media \(max-width: 480px\)[\s\S]*\.diagnostic-result\.is-clarifying \{ padding: 15px/);
+    assert.match(customerStyles, /\.clarification h2 \{[^}]*overflow-wrap: anywhere/);
+    assert.match(customerStyles, /\.clarification-options button \{[^}]*min-height: 52px/);
   } finally { state.dom.window.close(); }
 });
 

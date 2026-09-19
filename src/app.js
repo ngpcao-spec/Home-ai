@@ -299,32 +299,42 @@ export function createHomeAiMarkup() {
           </form>
           <p class="form-status" data-form-status aria-live="polite"></p>
           <section class="diagnostic-result" data-diagnostic-result hidden aria-live="polite">
-            <div class="result-check" aria-hidden="true">✓</div>
-            <div class="result-content">
-              <p class="result-eyebrow">AI đã hiểu vấn đề của bạn</p>
-              <dl>
-                <div><dt>Vấn đề:</dt><dd data-result-summary></dd></div>
-                <div><dt>Dịch vụ phù hợp:</dt><dd data-result-category></dd></div>
-                <div><dt>Thợ được đề xuất:</dt><dd data-result-technician></dd></div>
-                <div data-result-confidence-row hidden><dt>Độ tin cậy:</dt><dd data-result-confidence></dd></div>
-              </dl>
-              <div class="clarification" data-result-questions hidden>
-                <strong>Cần bổ sung</strong>
-                <p data-clarification-question></p>
-                <div class="clarification-options" data-clarification-options role="group" aria-label="Các câu trả lời đề xuất"></div>
-                <p class="clarification-feedback" data-clarification-feedback role="status" aria-live="polite" hidden></p>
-                <form data-clarification-form hidden>
-                  <label for="clarification-answer">Nhập câu trả lời khác</label>
-                  <input id="clarification-answer" name="answer" maxlength="500" autocomplete="off" required />
-                  <button type="submit">Tiếp tục</button>
-                </form>
-                <small data-clarification-progress></small>
+            <div class="diagnostic-summary" data-diagnostic-summary>
+              <div class="result-check" aria-hidden="true">✓</div>
+              <div class="result-content">
+                <p class="result-eyebrow">AI đã hiểu vấn đề của bạn</p>
+                <dl>
+                  <div><dt>Vấn đề:</dt><dd data-result-summary></dd></div>
+                  <div><dt>Dịch vụ phù hợp:</dt><dd data-result-category></dd></div>
+                  <div><dt>Thợ được đề xuất:</dt><dd data-result-technician></dd></div>
+                  <div data-result-confidence-row hidden><dt>Độ tin cậy:</dt><dd data-result-confidence></dd></div>
+                </dl>
+                <p class="result-note" data-result-note>HOME AI đề xuất tìm một chuyên gia phù hợp với vấn đề này.</p>
+                <div class="result-actions">
+                  <button class="find-button" type="button" data-find-technician>Tìm thợ phù hợp</button>
+                  <button class="edit-button" type="button" data-edit-description>Chỉnh sửa mô tả</button>
+                </div>
               </div>
-              <p class="result-note" data-result-note>HOME AI đề xuất tìm một chuyên gia phù hợp với vấn đề này.</p>
-              <div class="result-actions">
-                <button class="find-button" type="button" data-find-technician>Tìm thợ phù hợp</button>
-                <button class="edit-button" type="button" data-edit-description>Chỉnh sửa mô tả</button>
+            </div>
+            <div class="clarification" data-result-questions hidden>
+              <div class="clarification-heading">
+                <span class="clarification-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M7 3.5h7l3 3V20H7z"/><path d="M14 3.5V7h3M12 10v6M9 13h6"/></svg>
+                </span>
+                <div>
+                  <strong>Cần bổ sung</strong>
+                  <small data-clarification-progress></small>
+                </div>
               </div>
+              <h2 data-clarification-question></h2>
+              <p class="clarification-hint">Chọn mô tả phù hợp nhất để thợ hiểu rõ hơn</p>
+              <div class="clarification-options" data-clarification-options role="group" aria-label="Các câu trả lời đề xuất"></div>
+              <p class="clarification-feedback" data-clarification-feedback role="status" aria-live="polite" hidden></p>
+              <form data-clarification-form hidden>
+                <label for="clarification-answer">Nhập câu trả lời khác</label>
+                <input id="clarification-answer" name="answer" maxlength="500" autocomplete="off" required />
+                <button type="submit">Tiếp tục</button>
+              </form>
             </div>
           </section>
           <section class="map-search" data-map-search hidden aria-live="polite" aria-labelledby="map-search-title">
@@ -734,6 +744,8 @@ export function initialiseHomePage(
     diagnosticConversation.pending = canClarify;
     diagnosticConversation.submitting = false;
     questions.hidden = !canClarify;
+    resultCard.classList.toggle('is-clarifying', Boolean(canClarify));
+    root.querySelector('[data-diagnostic-summary]').hidden = Boolean(canClarify);
     root.querySelector('[data-clarification-question]').textContent = diagnosticConversation.currentQuestion?.question ?? '';
     const optionContainer = root.querySelector('[data-clarification-options]');
     const feedback = root.querySelector('[data-clarification-feedback]');
