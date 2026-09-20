@@ -135,15 +135,18 @@ export function createInterventionProgressMarkup(state) {
 
 export function createTrackingStageMarkup(technician, { missionStatus = 'travelling' } = {}) {
   const moving = missionStatus === 'travelling';
-  const trackingStatus = missionStatus === 'arrived' ? 'Thợ đã đến' : moving ? 'Thợ đang đến' : 'Đang sửa chữa';
-  const message = missionStatus === 'arrived' ? 'Thợ đã đến địa điểm của bạn.' : moving ? '' : 'Thợ đang kiểm tra và sửa chữa thiết bị của bạn.';
+  const preparing = missionStatus === 'accepted';
+  const showMap = preparing || moving;
+  const trackingStatus = missionStatus === 'arrived' ? 'Thợ đã đến' : preparing ? 'Thợ đang chuẩn bị' : moving ? 'Thợ đang đến' : 'Đang sửa chữa';
+  const message = missionStatus === 'arrived' ? 'Thợ đã đến địa điểm của bạn.' : preparing ? 'Thợ đang chuẩn bị dụng cụ cho nhiệm vụ.' : moving ? '' : 'Thợ đang kiểm tra và sửa chữa thiết bị của bạn.';
   return `<div class="tracking-shell" data-tracking-mission-status="${escapeHtml(missionStatus)}">
-    ${moving ? '<div class="tracking-map-card"><div class="tracking-map" data-tracking-map aria-label="Bản đồ theo dõi thợ"></div><div class="tracking-map-resize-handle" data-provider-map-resize-handle role="separator" tabindex="0" aria-label="Thay đổi chiều cao bản đồ" aria-orientation="horizontal"></div></div>' : ''}
+    ${showMap ? '<div class="tracking-map-card"><div class="tracking-map" data-tracking-map aria-label="Bản đồ theo dõi thợ"></div><div class="tracking-map-resize-handle" data-provider-map-resize-handle role="separator" tabindex="0" aria-label="Thay đổi chiều cao bản đồ" aria-orientation="horizontal"></div></div>' : ''}
     <article class="tracking-provider-panel" aria-label="${trackingStatus}">
       ${createAssignedProviderCompactMarkup(technician, { tracking: true, trackingStatus })}
+      ${showMap ? '<p class="tracking-status-message" data-provider-location-waiting hidden>Đang chờ vị trí của thợ</p>' : ''}
       <p class="tracking-status-message" data-tracking-message ${moving ? 'hidden' : ''}>${message}</p>
       <div class="tracking-metrics" data-tracking-metrics ${moving ? '' : 'hidden'}>
-        ${moving ? `
+        ${showMap ? `
         <div><span>Thời gian đến</span><strong data-tracking-eta>Đang tính...</strong></div>
         <div><span>Quãng đường còn lại</span><strong data-tracking-distance>Đang tính...</strong></div>
         ` : ''}

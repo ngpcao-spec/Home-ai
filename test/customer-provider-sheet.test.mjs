@@ -34,6 +34,21 @@ test('Client map handle sits between the map and the Provider card, with chat an
   assert.doesNotMatch(createTrackingStageMarkup({ name: 'Provider' }, { missionStatus: 'arrived' }), /data-provider-map-resize-handle/);
 });
 
+test('accepted Client mission shows the same resizable map and Provider actions without a premature ETA', () => {
+  const markup=createTrackingStageMarkup({name:'Provider',category:'electricity',
+    chatMission:{id:'m1',status:'accepted'},callMission:{id:'m1',status:'accepted'}},
+  {missionStatus:'accepted'});
+  const dom=new JSDOM(markup);const stage=dom.window.document;
+  assert.ok(stage.querySelector('[data-tracking-map]'));
+  assert.ok(stage.querySelector('[data-provider-map-resize-handle]'));
+  assert.ok(stage.querySelector('[data-provider-location-waiting]'));
+  assert.match(stage.querySelector('[data-tracking-status]').textContent,/Thợ đang chuẩn bị/);
+  assert.equal(stage.querySelector('[data-tracking-metrics]').hidden,true);
+  assert.ok(stage.querySelector('[data-mission-chat-open]'));
+  assert.ok(stage.querySelector('[data-mission-call-start]'));
+  dom.window.close();
+});
+
 test('Client CSS keeps the normal map at 390px, expands it to 72dvh and floats only the handle', () => {
   const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
   assert.match(css, /\.tracking-map-card \.tracking-map \{ height: 390px; min-height: 390px;/);

@@ -3,6 +3,12 @@ import { straightLineDistanceKm } from '../routing/routing-provider.js';
 const valid = point => Number.isFinite(point?.latitude) && Number.isFinite(point?.longitude)
   && Math.abs(point.latitude) <= 90 && Math.abs(point.longitude) <= 180;
 
+export const isAssignedProviderLocationValid = ({ mission, providerLocation }) => Boolean(
+  mission?.providerId && providerLocation?.providerId === mission.providerId
+  && providerLocation?.missionId === mission.id && valid(providerLocation)
+  && Number.isFinite(Date.parse(providerLocation.recordedAt))
+);
+
 export function preserveNewestProviderLocation(previous, next) {
   if (!previous?.providerLocation || !next?.providerLocation
       || previous.mission?.id !== next.mission?.id) return next;
@@ -15,8 +21,7 @@ export function preserveNewestProviderLocation(previous, next) {
 export async function prepareSupabaseTracking(snapshot, routes) {
   const { mission, providerLocation: origin } = snapshot;
   const destination = mission.clientLocation;
-  if (!mission.providerId || origin?.providerId !== mission.providerId || origin?.missionId !== mission.id
-      || !valid(origin) || !valid(destination) || !Number.isFinite(Date.parse(origin.recordedAt))) {
+  if (!isAssignedProviderLocationValid(snapshot) || !valid(destination)) {
     throw new Error('Assigned provider GPS unavailable');
   }
   const near = straightLineDistanceKm(origin, destination) < 0.1;
