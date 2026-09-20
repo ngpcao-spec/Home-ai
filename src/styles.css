@@ -541,6 +541,7 @@ footer strong { color: #627872; }
 .tracking-provider-panel .tracking-metrics > div { padding: 6px 8px; }
 .tracking-provider-panel .tracking-action-status:empty { display: none; }
 @media (max-width: 600px) {
+  .page-shell:has(.mission-tracker:not([hidden]) .tracking-shell[data-tracking-mission-status="travelling"]) > .topbar { height: 56px; }
   .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) { margin-top: -8px; padding: 0; border: 0; background: transparent; box-shadow: none; }
   .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) > .mission-technician,
   .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) > .mission-facts,
