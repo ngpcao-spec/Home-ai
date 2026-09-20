@@ -1,6 +1,11 @@
 const liveOptions = Object.freeze({ enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
 const idleOptions = Object.freeze({ enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
 
+// Temporary foreground diagnostics; records contain no GPS coordinates or IDs.
+const consoleGpsTrace = record => {
+  if (typeof globalThis.window !== 'undefined') globalThis.console?.info?.('[HOME AI GPS]', record);
+};
+
 function normalizePosition(position) {
   const latitude = position?.coords?.latitude;
   const longitude = position?.coords?.longitude;
@@ -36,6 +41,7 @@ export function createProviderLocationHeartbeat({
   onError = () => {},
   onDiagnostic = () => {},
   onPosition = () => {},
+  onTrace = consoleGpsTrace,
 }) {
   let timer;
   let watchId;
@@ -46,6 +52,9 @@ export function createProviderLocationHeartbeat({
   let lastPublishedPosition = null;
   let lastPublishedAt = -Infinity;
   let lastQueuedPosition = null;
+  const trace = (event, details = {}) => {
+    try { onTrace({ event, at: new Date().toISOString(), ...details }); } catch { /* Diagnostics cannot interrupt GPS. */ }
+  };
 
   const distanceMeters = (left, right) => {
     if (!left || !right) return Infinity;
@@ -65,6 +74,14 @@ export function createProviderLocationHeartbeat({
     if (!state.assignment && state.status.available) return 'idle';
     return 'off';
   };
+  const traceStateMode = mode => {
+    const state = getState();
+    trace('GPS_STATE_MODE', {
+      mode, stopped, repositorySource: repository.source,
+      online: Boolean(state?.status?.online), assignmentStatus: state?.assignment?.status ?? null,
+      documentHidden: Boolean(globalThis.document?.hidden), pageActive: Boolean(isPageActive()),
+    });
+  };
   const clearTimer = () => {
     if (timer !== undefined) clearTask(timer);
     timer = undefined;
@@ -78,19 +95,24 @@ export function createProviderLocationHeartbeat({
     generation += 1;
   };
   const publish = (browserPosition, expectedGeneration = generation, expectedMode = stateMode()) => {
+    trace('GPS_CALLBACK');
+    traceStateMode(stateMode());
     onDiagnostic({ stage: 'provider', outcome: 'callback', receivedAt: Date.now(), position: browserPosition });
     let position;
     try { position = normalizePosition(browserPosition); }
-    catch (error) { onDiagnostic({ stage: 'provider', outcome: 'rejected', reason: 'invalid-coordinates' }); onError(error); return Promise.resolve(null); }
+    catch (error) { traceStateMode(stateMode()); onDiagnostic({ stage: 'provider', outcome: 'rejected', reason: 'invalid-coordinates' }); onError(error); return Promise.resolve(null); }
     if (stopped || expectedGeneration !== generation || stateMode() !== expectedMode) {
+      traceStateMode(stateMode());
       onDiagnostic({ stage: 'provider', outcome: 'rejected', reason: 'inactive-watch-or-mission' });
       return Promise.resolve(null);
     }
     if (position.observedAt <= lastObservedAt) {
+      traceStateMode(stateMode());
       onDiagnostic({ stage: 'provider', outcome: 'rejected', reason: 'stale-or-equal-timestamp' });
       return Promise.resolve(null);
     }
     lastObservedAt = position.observedAt;
+    trace('GPS_ACCEPTED');
     onDiagnostic({ stage: 'provider', outcome: 'position-accepted', position });
     if (expectedMode === 'tracking') onPosition(position);
     const referencePosition = lastQueuedPosition ?? lastPublishedPosition;
@@ -99,17 +121,33 @@ export function createProviderLocationHeartbeat({
     const moved = distanceMeters(referencePosition, position);
     if (referencePosition && elapsed < minPublishIntervalMs
         && (elapsed < minAbsolutePublishIntervalMs || moved < minPublishDistanceMeters)) {
+      trace('GPS_THROTTLED', { elapsedMs: elapsed, movementThresholdReached: moved >= minPublishDistanceMeters });
       onDiagnostic({ stage: 'backend', outcome: 'send-skipped', reason: 'throttled', elapsed, moved });
       return Promise.resolve(null);
     }
     lastQueuedPosition = position;
+    trace('GPS_QUEUE', { outcome: 'enqueued' });
     writeQueue = writeQueue.then(async () => {
       if (stopped || expectedGeneration !== generation || stateMode() !== expectedMode) {
+        trace('GPS_QUEUE', { outcome: 'skipped', reason: 'inactive-watch-or-mission' });
+        traceStateMode(stateMode());
         onDiagnostic({ stage: 'backend', outcome: 'send-skipped', reason: 'inactive-watch-or-mission' });
         return null;
       }
+      trace('GPS_QUEUE', { outcome: 'dequeued' });
       onDiagnostic({ stage: 'backend', outcome: 'sending', position });
-      const next = await repository.updateLocation({ latitude: position.latitude, longitude: position.longitude });
+      trace('GPS_UPDATELOCATION_CALL');
+      let next;
+      try {
+        next = await repository.updateLocation({ latitude: position.latitude, longitude: position.longitude });
+        trace('GPS_UPDATELOCATION_SUCCESS');
+      } catch (error) {
+        trace('GPS_UPDATELOCATION_ERROR', {
+          code: typeof error?.code === 'string' && /^[A-Z0-9_]{1,16}$/.test(error.code) ? error.code : null,
+          status: Number.isInteger(error?.status) ? error.status : null,
+        });
+        throw error;
+      }
       lastPublishedPosition = position;
       lastPublishedAt = position.observedAt;
       onDiagnostic({ stage: 'backend', outcome: 'accepted', position, sentAt: Date.now() });
@@ -138,20 +176,23 @@ export function createProviderLocationHeartbeat({
   const startTracking = () => {
     if (watchId !== undefined || stateMode() !== 'tracking') return;
     if (!geolocation?.watchPosition) {
+      traceStateMode(stateMode());
       onError(new Error('Continuous geolocation unavailable'));
       return;
     }
     const expectedGeneration = generation;
     watchId = geolocation.watchPosition(
       position => publish(position, expectedGeneration, 'tracking'),
-      error => { onDiagnostic({ stage: 'provider', outcome: 'watch-error', reason: `geolocation-${error?.code ?? 'unknown'}` }); onError(error); },
+      error => { traceStateMode(stateMode()); onDiagnostic({ stage: 'provider', outcome: 'watch-error', reason: `geolocation-${error?.code ?? 'unknown'}` }); onError(error); },
       liveOptions,
     );
+    trace('GPS_WATCH_STARTED');
     onDiagnostic({ stage: 'provider', outcome: 'watch-started', watchId, options: liveOptions });
   };
   const sync = () => {
     clearTimer();
     const mode = stateMode();
+    traceStateMode(mode);
     if (mode !== 'tracking') clearWatch();
     if (mode === 'tracking') startTracking();
     else if (mode === 'idle') void refresh();
