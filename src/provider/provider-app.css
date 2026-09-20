@@ -9,6 +9,9 @@ nav{grid-template-columns:repeat(5,1fr)}
 .provider-map-resize-handle{height:32px;display:flex;align-items:center;justify-content:center;cursor:ns-resize;touch-action:none;user-select:none}
 .provider-map-resize-handle::before{content:'';display:block;width:40px;height:4px;border-radius:999px;background:#abcfc2}
 .provider-map-resize-handle:focus-visible{outline:2px solid var(--green);outline-offset:-3px}
+.mission-map-card.is-map-expanded .provider-map-resize-handle{position:fixed;left:50%;bottom:calc(80px + env(safe-area-inset-bottom));z-index:3;width:88px;height:44px;transform:translateX(-50%);background:transparent}
+.mission-map-card.is-map-expanded .provider-map-resize-handle::before{background:#eefaf5;box-shadow:0 0 0 1px var(--green),0 1px 5px #17342d80}
+@media(min-width:760px){.mission-map-card.is-map-expanded .provider-map-resize-handle{bottom:100px}}
 .mission-map-card.is-map-expanded .provider-map{height:72vh;min-height:0;height:72dvh}
 .mission-map-card:not(.is-map-dragging) .provider-map{transition:height .22s ease-out}
 .mission-map-card.is-map-dragging .provider-map{min-height:0;transition:none}

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { it } from 'node:test';
 import { JSDOM } from 'jsdom';
 import { mountProviderMapResizeGesture } from '../src/provider/provider-map-resize.js';
@@ -16,6 +17,14 @@ function pointer(target, type, { id = 1, y = 0, time = 0 } = {}) {
 const mission = { id: 'm1', serviceCategory: 'electricity', request: 'Test', address: 'Nha Trang', status: 'travelling' };
 const location = { latitude: 12.245, longitude: 109.19 };
 const navigation = map => ({ map, route: { distanceKm: 1, durationMinutes: 4, points: [] }, providerLocation: location, destination: { latitude: 12.25, longitude: 109.2 } });
+
+it('keeps the expanded handle above the iPhone bottom navigation without moving it in normal mode', () => {
+  const css = readFileSync(new URL('../src/provider/provider-app.css', import.meta.url), 'utf8');
+  assert.match(css, /\.provider-map-resize-handle\{[^}]*height:32px;[^}]*touch-action:none/);
+  assert.match(css, /\.mission-map-card\.is-map-expanded \.provider-map-resize-handle\{[^}]*position:fixed;[^}]*left:50%;[^}]*bottom:calc\(80px \+ env\(safe-area-inset-bottom\)\);[^}]*z-index:3;[^}]*height:44px;[^}]*background:transparent/);
+  assert.match(css, /\.mission-map-card\.is-map-expanded \.provider-map-resize-handle::before\{[^}]*box-shadow:/);
+  assert.match(css, /\.mission-map-card\.is-map-expanded \.provider-map\{height:72vh;min-height:0;height:72dvh\}/);
+});
 
 it('shows a visual-only handle only with an active mission map', () => {
   const map = { resize() {} };
@@ -50,6 +59,8 @@ it('drags the bottom handle down to expand and up to collapse without recreating
     assert.ok(Number.parseFloat(mapElement.style.height) > 270);
     pointer(handle, 'pointerup', { y: 500, time: 2020 });
     assert.equal(card.classList.contains('is-map-expanded'), true);
+    assert.equal(card.querySelector('[data-provider-map-resize-handle]'), handle, 'expanded state keeps the same handle');
+    assert.equal(handle.isConnected, true);
     assert.equal(document.body.style.overflow, '');
     await new Promise(resolve => setTimeout(resolve, 35));
     assert.ok(events.length >= 1);
@@ -59,6 +70,7 @@ it('drags the bottom handle down to expand and up to collapse without recreating
     pointer(handle, 'pointermove', { y: 100, time: 5000 });
     pointer(handle, 'pointerup', { y: 100, time: 5020 });
     assert.equal(card.classList.contains('is-map-expanded'), false);
+    assert.equal(card.querySelector('[data-provider-map-resize-handle]'), handle, 'upward drag keeps the handle mounted');
     assert.equal(mapElement.style.height, '');
     const transition = new dom.window.Event('transitionend');
     Object.defineProperty(transition, 'propertyName', { value: 'height' });
