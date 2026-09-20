@@ -31,8 +31,8 @@ it('shows a visual-only handle only with an active mission map', () => {
   assert.doesNotMatch(renderActiveProviderMission(mission), /data-provider-map-resize-handle/);
 });
 
-it('drags the existing map up and down, snaps, resizes and restores page scrolling', async () => {
-  const dom = new JSDOM('<body><section class="mission-map-card"><div data-provider-map-resize-handle></div><div class="provider-map" data-provider-map></div></section></body>', { pretendToBeVisual: true });
+it('drags the bottom handle down to expand and up to collapse without recreating the map', async () => {
+  const dom = new JSDOM('<body><section class="mission-map-card"><div class="provider-map" data-provider-map></div><div data-provider-map-resize-handle></div><div class="map-metrics"></div></section></body>', { pretendToBeVisual: true });
   const { document } = dom.window;
   const card = document.querySelector('.mission-map-card');
   const mapElement = document.querySelector('[data-provider-map]');
@@ -44,26 +44,34 @@ it('drags the existing map up and down, snaps, resizes and restores page scrolli
   const stop = mountProviderMapResizeGesture({ card, mapElement, navigation: { map }, view: dom.window });
   try {
     assert.equal(document.body.style.overflow, '');
-    pointer(handle, 'pointerdown', { y: 500, time: 0 });
+    pointer(handle, 'pointerdown', { y: 100, time: 0 });
     assert.equal(document.body.style.overflow, 'hidden');
-    pointer(handle, 'pointermove', { y: 100, time: 100 });
+    pointer(handle, 'pointermove', { y: 500, time: 2000 });
     assert.ok(Number.parseFloat(mapElement.style.height) > 270);
-    pointer(handle, 'pointerup', { y: 100, time: 120 });
+    pointer(handle, 'pointerup', { y: 500, time: 2020 });
     assert.equal(card.classList.contains('is-map-expanded'), true);
     assert.equal(document.body.style.overflow, '');
     await new Promise(resolve => setTimeout(resolve, 35));
     assert.ok(events.length >= 1);
     assert.equal(document.querySelector('[data-provider-map]'), sameElement);
     assert.equal(map, sameMap);
-    pointer(handle, 'pointerdown', { y: 100, time: 200 });
-    pointer(handle, 'pointermove', { y: 500, time: 300 });
-    pointer(handle, 'pointerup', { y: 500, time: 320 });
+    pointer(handle, 'pointerdown', { y: 500, time: 3000 });
+    pointer(handle, 'pointermove', { y: 100, time: 5000 });
+    pointer(handle, 'pointerup', { y: 100, time: 5020 });
     assert.equal(card.classList.contains('is-map-expanded'), false);
     assert.equal(mapElement.style.height, '');
     const transition = new dom.window.Event('transitionend');
     Object.defineProperty(transition, 'propertyName', { value: 'height' });
     mapElement.dispatchEvent(transition);
     assert.ok(events.length >= 2);
+    pointer(handle, 'pointerdown', { y: 100, time: 6000 });
+    pointer(handle, 'pointermove', { y: 130, time: 6020 });
+    pointer(handle, 'pointerup', { y: 130, time: 6030 });
+    assert.equal(card.classList.contains('is-map-expanded'), true, 'fast downward drag expands below midpoint');
+    pointer(handle, 'pointerdown', { y: 130, time: 7000 });
+    pointer(handle, 'pointermove', { y: 100, time: 7020 });
+    pointer(handle, 'pointerup', { y: 100, time: 7030 });
+    assert.equal(card.classList.contains('is-map-expanded'), false, 'fast upward drag collapses above midpoint');
   } finally { stop(); dom.window.close(); }
 });
 
@@ -88,9 +96,9 @@ it('keeps one navigation and marker through GPS refresh while expanded', async (
     const mapElement = root.querySelector('[data-provider-map]');
     const handle = root.querySelector('[data-provider-map-resize-handle]');
     const originalMarker = root.querySelector('[data-provider-marker]');
-    pointer(handle, 'pointerdown', { y: 500, time: 0 });
-    pointer(handle, 'pointermove', { y: 100, time: 100 });
-    pointer(handle, 'pointerup', { y: 100, time: 120 });
+    pointer(handle, 'pointerdown', { y: 100, time: 0 });
+    pointer(handle, 'pointermove', { y: 500, time: 100 });
+    pointer(handle, 'pointerup', { y: 500, time: 120 });
     assert.equal(mapElement.closest('.mission-map-card').classList.contains('is-map-expanded'), true);
     heartbeatOptions.onPosition({ latitude: 12.246, longitude: 109.191 });
     state = { ...state, status: { ...state.status, lastLocationAt: '2026-09-13T01:00:01Z' } };

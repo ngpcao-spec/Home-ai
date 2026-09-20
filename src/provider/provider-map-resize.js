@@ -54,10 +54,10 @@ export function mountProviderMapResizeGesture({ card, mapElement, navigation, ex
   const onPointerMove = event => {
     if (event.pointerId !== pointerId) return;
     const elapsed = Math.max(1, event.timeStamp - lastTime);
-    velocity = (lastY - event.clientY) / elapsed;
+    velocity = (event.clientY - lastY) / elapsed;
     lastY = event.clientY;
     lastTime = event.timeStamp;
-    const height = Math.min(expandedHeight(), Math.max(normalHeight(view), startHeight + startY - event.clientY));
+    const height = Math.min(expandedHeight(), Math.max(normalHeight(view), startHeight + event.clientY - startY));
     mapElement.style.height = `${height}px`;
     scheduleResize();
     event.preventDefault?.();
@@ -74,7 +74,7 @@ export function mountProviderMapResizeGesture({ card, mapElement, navigation, ex
   const onKeyDown = event => {
     if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
     event.preventDefault();
-    snap(event.key === 'ArrowUp');
+    snap(event.key === 'ArrowDown');
   };
   const onTransitionEnd = event => {
     if (event.target !== mapElement || event.propertyName !== 'height') return;
