@@ -70,8 +70,11 @@ it('refreshes assigned GPS via realtime and polling fallback', async () => {
   await realtime({ table: 'provider_status' });
   state.providerLocation.latitude += 0.001;
   await tick();
-  assert.equal(updates.length, 2);
+  state.providerLocation.latitude += 0.001;
+  await realtime({ table: 'provider_status' });
+  assert.equal(updates.length, 3);
   assert.notEqual(updates[0].providerLocation.latitude, updates[1].providerLocation.latitude);
+  assert.notEqual(updates[1].providerLocation.latitude, updates[2].providerLocation.latitude);
   stop(); stopPolling();
 });
 
@@ -119,6 +122,72 @@ it('moves the local marker for every GPS callback but throttles insignificant ba
   assert.equal(marker.length,3);
   assert.equal(writes.length,1);
   assert.equal(diagnostics.filter(event=>event.reason==='throttled').length,2);
+  heartbeat.stop();
+});
+
+it('publishes accumulated five-metre GPS steps against the last successful backend position', async () => {
+  const writes=[];const marker=[];const diagnostics=[];let callback;
+  const heartbeat=createProviderLocationHeartbeat({
+    repository:{source:'supabase',updateLocation:async value=>{writes.push(value);return{};}},
+    getState:()=>({status:{online:true,available:false},assignment:{id:'m1',status:'travelling'}}),
+    geolocation:{watchPosition(success){callback=success;return 1;},clearWatch(){}},
+    onPosition:position=>marker.push(position),onDiagnostic:event=>diagnostics.push(event),
+  });
+  heartbeat.sync();
+  for(let step=0;step<=10;step+=1){
+    await callback({coords:{latitude:12.245+step*.000045,longitude:109.19,accuracy:5},timestamp:10000+step*1000});
+  }
+  assert.equal(marker.length,11,'the local marker receives every accepted callback');
+  assert.deepEqual(writes.map(value=>value.latitude),[12.245,12.245+4*.000045,12.245+8*.000045]);
+  const skipped=diagnostics.filter(event=>event.reason==='throttled');
+  assert.equal(skipped.length,8);
+  assert.equal(skipped[0].elapsed,1000);
+  assert.equal(skipped[1].elapsed,2000,'a skip must not advance lastPublishedAt');
+  assert.ok(skipped[1].moved>9&&skipped[1].moved<11,'a skip must not advance lastPublishedPosition');
+  assert.equal(skipped[3].elapsed,1000,'success resets the publication baseline');
+  heartbeat.stop();
+});
+
+it('does not advance the published GPS baseline when a backend write fails', async () => {
+  const writes=[];const diagnostics=[];let callback;
+  const heartbeat=createProviderLocationHeartbeat({
+    repository:{source:'supabase',updateLocation:async value=>{
+      writes.push(value);if(writes.length===1)throw new Error('temporary backend failure');return{};
+    }},
+    getState:()=>({status:{online:true,available:false},assignment:{id:'m1',status:'travelling'}}),
+    geolocation:{watchPosition(success){callback=success;return 1;},clearWatch(){}},
+    onDiagnostic:event=>diagnostics.push(event),onError() {},
+  });
+  heartbeat.sync();
+  await callback({coords:{latitude:12.245,longitude:109.19},timestamp:10000});
+  await callback({coords:{latitude:12.245045,longitude:109.19},timestamp:11000});
+  await callback({coords:{latitude:12.24509,longitude:109.19},timestamp:12000});
+  assert.equal(writes.length,2,'the next callback retries after the failed publication');
+  assert.equal(diagnostics.filter(event=>event.outcome==='send-error').length,1);
+  assert.equal(diagnostics.filter(event=>event.stage==='backend'&&event.outcome==='accepted').length,1);
+  assert.equal(diagnostics.find(event=>event.reason==='throttled')?.elapsed,1000);
+  heartbeat.stop();
+});
+
+it('throttles callbacks while a GPS write is still queued', async () => {
+  const writes=[];let callback;let finishWrite;
+  const heartbeat=createProviderLocationHeartbeat({
+    repository:{source:'supabase',updateLocation:value=>{
+      writes.push(value);
+      return new Promise(resolve=>{finishWrite=()=>resolve({});});
+    }},
+    getState:()=>({status:{online:true,available:false},assignment:{id:'m1',status:'travelling'}}),
+    geolocation:{watchPosition(success){callback=success;return 1;},clearWatch(){}},
+  });
+  heartbeat.sync();
+  const pending=callback({coords:{latitude:12.245,longitude:109.19},timestamp:10000});
+  await Promise.resolve();
+  await callback({coords:{latitude:12.245045,longitude:109.19},timestamp:11000});
+  await callback({coords:{latitude:12.24509,longitude:109.19},timestamp:12000});
+  assert.equal(writes.length,1,'frequent callbacks must not create concurrent writes');
+  finishWrite();await pending;
+  await callback({coords:{latitude:12.245135,longitude:109.19},timestamp:13000});
+  assert.equal(writes.length,1,'the successful publication remains the throttle baseline');
   heartbeat.stop();
 });
 

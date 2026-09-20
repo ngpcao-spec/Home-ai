@@ -45,6 +45,7 @@ export function createProviderLocationHeartbeat({
   let writeQueue = Promise.resolve();
   let lastPublishedPosition = null;
   let lastPublishedAt = -Infinity;
+  let lastQueuedPosition = null;
 
   const distanceMeters = (left, right) => {
     if (!left || !right) return Infinity;
@@ -92,15 +93,16 @@ export function createProviderLocationHeartbeat({
     lastObservedAt = position.observedAt;
     onDiagnostic({ stage: 'provider', outcome: 'position-accepted', position });
     if (expectedMode === 'tracking') onPosition(position);
-    const elapsed = position.observedAt - lastPublishedAt;
-    const moved = distanceMeters(lastPublishedPosition, position);
-    if (lastPublishedPosition && elapsed < minPublishIntervalMs
+    const referencePosition = lastQueuedPosition ?? lastPublishedPosition;
+    const referenceAt = lastQueuedPosition ? lastQueuedPosition.observedAt : lastPublishedAt;
+    const elapsed = position.observedAt - referenceAt;
+    const moved = distanceMeters(referencePosition, position);
+    if (referencePosition && elapsed < minPublishIntervalMs
         && (elapsed < minAbsolutePublishIntervalMs || moved < minPublishDistanceMeters)) {
       onDiagnostic({ stage: 'backend', outcome: 'send-skipped', reason: 'throttled', elapsed, moved });
       return Promise.resolve(null);
     }
-    lastPublishedPosition = position;
-    lastPublishedAt = position.observedAt;
+    lastQueuedPosition = position;
     writeQueue = writeQueue.then(async () => {
       if (stopped || expectedGeneration !== generation || stateMode() !== expectedMode) {
         onDiagnostic({ stage: 'backend', outcome: 'send-skipped', reason: 'inactive-watch-or-mission' });
@@ -108,10 +110,13 @@ export function createProviderLocationHeartbeat({
       }
       onDiagnostic({ stage: 'backend', outcome: 'sending', position });
       const next = await repository.updateLocation({ latitude: position.latitude, longitude: position.longitude });
+      lastPublishedPosition = position;
+      lastPublishedAt = position.observedAt;
       onDiagnostic({ stage: 'backend', outcome: 'accepted', position, sentAt: Date.now() });
       await onState(next);
       return next;
-    }).catch((error) => { onDiagnostic({ stage: 'backend', outcome: 'send-error', reason: error?.code ?? 'location-send-failed' }); onError(error); return null; });
+    }).catch((error) => { onDiagnostic({ stage: 'backend', outcome: 'send-error', reason: error?.code ?? 'location-send-failed' }); onError(error); return null; })
+      .finally(() => { if (lastQueuedPosition === position) lastQueuedPosition = null; });
     return writeQueue;
   };
   const scheduleIdle = () => {
