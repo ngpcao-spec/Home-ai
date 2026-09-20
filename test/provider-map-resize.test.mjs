@@ -22,6 +22,11 @@ it('shows a visual-only handle only with an active mission map', () => {
   const visible = renderActiveProviderMission(mission, { navigation: navigation(map) });
   assert.match(visible, /data-provider-map-resize-handle/);
   assert.doesNotMatch(visible, /Kéo|Glisser|Drag/);
+  const dom = new JSDOM(visible);
+  assert.deepEqual([...dom.window.document.querySelector('.mission-map-card').children].map(child =>
+    child.hasAttribute('data-provider-map') ? 'map' : child.hasAttribute('data-provider-map-resize-handle') ? 'handle' : child.className
+  ), ['map', 'handle', 'map-metrics']);
+  dom.window.close();
   assert.doesNotMatch(renderActiveProviderMission({ ...mission, status: 'arrived' }), /data-provider-map-resize-handle/);
   assert.doesNotMatch(renderActiveProviderMission(mission), /data-provider-map-resize-handle/);
 });
