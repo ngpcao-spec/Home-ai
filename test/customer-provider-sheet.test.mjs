@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { JSDOM } from 'jsdom';
 import { createTrackingStageMarkup } from '../src/tracking/tracking-sheet.js';
-import { mountTrackingProviderSheet } from '../src/tracking/provider-sheet-gesture.js';
+import { mountProviderMapResizeGesture } from '../src/provider/provider-map-resize.js';
 
 function pointer(target, type, y, time) {
   const event = new target.ownerDocument.defaultView.Event(type, { bubbles: true, cancelable: true });
@@ -11,7 +11,7 @@ function pointer(target, type, y, time) {
   target.dispatchEvent(event);
 }
 
-test('travelling Provider card has one compact sheet, two actions and no phone', () => {
+test('Client map handle sits between the map and the Provider card, with chat and call intact', () => {
   const markup = createTrackingStageMarkup({
     name: 'Provider Test Nha Trang', avatarUrl: 'https://example.test/avatar.jpg', rating: 4.4, reviewCount: 14,
     verified: true, distanceKm: 1.2, category: 'electricity', experienceYears: 5,
@@ -19,59 +19,58 @@ test('travelling Provider card has one compact sheet, two actions and no phone',
     chatMission: { id: 'm1', status: 'travelling' }, callMission: { id: 'm1', status: 'travelling' },
   });
   const dom = new JSDOM(markup);
-  const sheet = dom.window.document.querySelector('.tracking-bottom-sheet');
-  assert.ok(sheet.querySelector('[data-tracking-sheet-handle]'));
-  assert.equal(sheet.classList.contains('is-expanded'), false);
-  assert.equal(sheet.querySelector('[data-tracking-sheet-handle]').getAttribute('aria-expanded'), 'false');
-  assert.ok(sheet.querySelector('[data-mission-chat-open]'));
-  assert.ok(sheet.querySelector('[data-mission-call-start]'));
-  assert.equal(sheet.querySelector('.tracking-contact-actions').hidden, true, 'no duplicate message action');
-  assert.match(sheet.textContent, /Thợ điện|Thợ ở gần|Đã xác minh|5 năm/);
-  assert.doesNotMatch(sheet.textContent, /Kéo|Số điện thoại/);
+  const shell = dom.window.document.querySelector('.tracking-shell');
+  const mapCard = shell.querySelector('.tracking-map-card');
+  const panel = shell.querySelector('.tracking-provider-panel');
+  assert.deepEqual([...shell.children], [mapCard, panel]);
+  assert.deepEqual([...mapCard.children].map(node => node.hasAttribute('data-tracking-map') ? 'map' : node.hasAttribute('data-provider-map-resize-handle') ? 'handle' : 'other'), ['map', 'handle']);
+  assert.ok(panel.querySelector('[data-mission-chat-open]'));
+  assert.ok(panel.querySelector('[data-mission-call-start]'));
+  assert.equal(panel.querySelector('.tracking-contact-actions').hidden, true, 'no duplicate message action');
+  assert.match(panel.textContent, /Thợ điện|Thợ ở gần|Đã xác minh|5 năm/);
+  assert.doesNotMatch(panel.textContent, /Kéo|Số điện thoại/);
   assert.equal(dom.window.document.querySelectorAll('[data-tracking-map]').length, 1);
   dom.window.close();
+  assert.doesNotMatch(createTrackingStageMarkup({ name: 'Provider' }, { missionStatus: 'arrived' }), /data-provider-map-resize-handle/);
 });
 
-test('compact sheet CSS limits its height, clamps the name and leaves the bottom navigation above it', () => {
+test('Client CSS keeps the normal map at 390px, expands it to 72dvh and floats only the handle', () => {
   const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
-  assert.match(css, /\.tracking-bottom-sheet \.assigned-provider-heading h3 \{[^}]*-webkit-line-clamp: 2;/);
-  assert.match(css, /\.tracking-shell\[data-tracking-mission-status="travelling"\] \.tracking-bottom-sheet \{[^}]*height: 46dvh;/);
-  assert.match(css, /\.tracking-shell\[data-tracking-mission-status="travelling"\] \.tracking-bottom-sheet\.is-expanded \{[^}]*height: 72dvh;/);
-  assert.match(css, /\.tracking-bottom-sheet:not\(\.is-expanded\) \.mission-contact-actions \{[^}]*position: sticky; bottom: 0;/);
+  assert.match(css, /\.tracking-map-card \.tracking-map \{ height: 390px; min-height: 390px;/);
+  assert.match(css, /\.tracking-map-card\.is-map-expanded \.tracking-map \{ height: 72vh; height: 72dvh;/);
+  assert.match(css, /\.tracking-map-card\.is-map-expanded \.tracking-map-resize-handle \{[^}]*position: fixed;[^}]*safe-area-inset-bottom[^}]*z-index: 19;/);
+  assert.match(css, /\.tracking-provider-panel \{ position: relative; width: 100%; margin: 10px auto 0;/);
+  assert.match(css, /\.tracking-provider-panel \.assigned-provider-heading h3 \{[^}]*-webkit-line-clamp: 2;/);
   assert.match(css, /\.app-navigation \{[^}]*z-index: 20;/);
-  assert.match(css, /\.tracking-shell\[data-tracking-mission-status="travelling"\] \{[^}]*safe-area-inset-bottom/);
-  assert.match(css, /\.mission-tracker:has\(\.tracking-shell\[data-tracking-mission-status="travelling"\]\) > \.mission-timeline \{ display: none; \}/);
-  assert.match(css, /max-height: 700px[^}]*height: 42dvh;/);
-  assert.doesNotMatch(css.match(/\.tracking-sheet-handle[^}]+\}/g)?.join('') ?? '', /Kéo/);
+  assert.doesNotMatch(css, /tracking-bottom-sheet|tracking-sheet-handle|height: 46dvh|height: 42dvh/);
 });
 
-test('handle-only drag expands upward and returns downward without touching the map', () => {
-  const dom = new JSDOM('<div class="tracking-shell"><div class="tracking-map"><div data-map></div></div><article class="tracking-bottom-sheet"><button data-tracking-sheet-handle aria-expanded="false"></button></article></div>', { pretendToBeVisual: true });
+test('shared Provider gesture expands the same Client map downward and restores it upward', async () => {
+  const dom = new JSDOM('<div class="tracking-map-card"><div class="tracking-map" data-tracking-map><i data-provider-marker></i></div><div data-provider-map-resize-handle></div></div><article class="tracking-provider-panel"></article>', { pretendToBeVisual: true });
   const { document } = dom.window;
-  const sheet = document.querySelector('.tracking-bottom-sheet');
-  const handle = document.querySelector('[data-tracking-sheet-handle]');
-  const map = document.querySelector('[data-map]');
-  let mapCreates = 1;
-  let fitBounds = 0;
-  let markerMoves = 0;
-  const stop = mountTrackingProviderSheet(sheet);
+  const card = document.querySelector('.tracking-map-card');
+  const mapElement = document.querySelector('[data-tracking-map]');
+  const marker = document.querySelector('[data-provider-marker]');
+  const handle = document.querySelector('[data-provider-map-resize-handle]');
+  let resizeCount = 0;
+  const navigation = { map: { resize() { resizeCount += 1; }, fitBounds() { throw Error('fitBounds during drag'); }, render() { throw Error('render during drag'); } } };
+  const stop = mountProviderMapResizeGesture({ card, mapElement, navigation, normalHeightPx: 390, view: dom.window });
   try {
-    pointer(handle, 'pointerdown', 500, 1000);
-    pointer(handle, 'pointermove', 200, 2000);
-    assert.ok(Number.parseFloat(sheet.style.height) > dom.window.innerHeight * .46);
-    pointer(handle, 'pointerup', 200, 2020);
-    assert.equal(sheet.classList.contains('is-expanded'), true);
-    assert.equal(handle.getAttribute('aria-expanded'), 'true');
-    markerMoves += 1;
-    pointer(handle, 'pointerdown', 200, 3000);
-    pointer(handle, 'pointermove', 500, 4000);
-    pointer(handle, 'pointerup', 500, 4020);
-    assert.equal(sheet.classList.contains('is-expanded'), false);
-    assert.equal(handle.getAttribute('aria-expanded'), 'false');
-    assert.equal(sheet.style.height, '');
-    assert.equal(document.querySelector('[data-map]'), map);
-    assert.equal(mapCreates, 1);
-    assert.equal(fitBounds, 0);
-    assert.equal(markerMoves, 1);
+    pointer(handle, 'pointerdown', 100, 1000);
+    pointer(handle, 'pointermove', 500, 2000);
+    assert.ok(Number.parseFloat(mapElement.style.height) > 390);
+    pointer(handle, 'pointerup', 500, 2020);
+    assert.equal(card.classList.contains('is-map-expanded'), true);
+    await new Promise(resolve => setTimeout(resolve, 35));
+    assert.ok(resizeCount > 0);
+    marker.dataset.latitude = '12.246';
+    pointer(handle, 'pointerdown', 500, 3000);
+    pointer(handle, 'pointermove', 100, 4000);
+    pointer(handle, 'pointerup', 100, 4020);
+    assert.equal(card.classList.contains('is-map-expanded'), false);
+    assert.equal(mapElement.style.height, '');
+    assert.equal(document.querySelector('[data-tracking-map]'), mapElement);
+    assert.equal(document.querySelector('[data-provider-marker]'), marker);
+    assert.equal(marker.dataset.latitude, '12.246');
   } finally { stop(); dom.window.close(); }
 });

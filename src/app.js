@@ -15,7 +15,7 @@ import { createRouteService } from './routing/routing-provider.js';
 import { createMockProviderLocationSource } from './tracking/location-stream.js';
 import { prepareSupabaseTracking, preserveNewestProviderLocation } from './tracking/supabase-tracking.js';
 import { createTrackingRouteSession } from './tracking/route-session.js';
-import { mountTrackingProviderSheet } from './tracking/provider-sheet-gesture.js';
+import { mountProviderMapResizeGesture } from './provider/provider-map-resize.js';
 import { createInterventionQuote } from './mission/intervention-quote.js';
 import { createCompletionSummaryMarkup, createPaidExternalMarkup, createProviderReviewMarkup, getCompletedMissionPricePresentation } from './mission/completion-summary.js';
 import {
@@ -539,6 +539,7 @@ export function initialiseHomePage(
   let matchedTechnicians = [];
   let currentRadiusKm = 2;
   let mapProvider;
+  const clientMapResizeNavigation = { map: { resize: () => mapProvider?.resize?.() } };
   let clientLocation;
   let stopLocationStream;
   let searchGeneration = 0;
@@ -1363,8 +1364,10 @@ export function initialiseHomePage(
     scheduleTask(() => showBookingConfirmation(null), 700);
   });
   const mission = root.querySelector('[data-mission-tracker]');
-  let mountedTrackingSheet;
-  let stopTrackingSheetGesture;
+  let mountedTrackingMap;
+  let stopTrackingMapResize;
+  let clientMapExpanded = false;
+  let clientMapMissionId = null;
   const renderMissionProgress = () => {
     const status = missionStatuses[missionState.statusIndex];
     mission.querySelector('[data-mission-status-badge]').textContent = status.label;
@@ -1401,17 +1404,23 @@ export function initialiseHomePage(
       completed_pending_payment: completedMarkup,
     };
     const trackingStageKey = `${remoteMissionState?.mission.id}:${status.id}:${missionState.paymentStatus}:${missionState.reviewStage}:${missionState.reviewSent}:${missionState.rating}:${reviewSubmissionPending}:${reviewSubmissionError}:${missionState.completion?.invoice?.id ?? ''}:${missionState.completion?.finalAuthorizedAmount ?? ''}`;
+    const currentMissionId = remoteMissionState?.mission.id ?? persistedMission?.id ?? null;
+    if (currentMissionId !== clientMapMissionId) { clientMapMissionId = currentMissionId; clientMapExpanded = false; }
     if (!remoteMissionState || stage.dataset.trackingStage !== trackingStageKey) {
-      stopTrackingSheetGesture?.();
-      stopTrackingSheetGesture = undefined;
-      mountedTrackingSheet = undefined;
+      stopTrackingMapResize?.();
+      stopTrackingMapResize = undefined;
+      mountedTrackingMap = undefined;
       stage.innerHTML = stageMarkup[status.id];
       stage.dataset.trackingStage = trackingStageKey;
     }
-    const trackingSheet = stage.querySelector('[data-tracking-sheet-handle]')?.closest('.tracking-bottom-sheet');
-    if (trackingSheet && mountedTrackingSheet !== trackingSheet) {
-      mountedTrackingSheet = trackingSheet;
-      stopTrackingSheetGesture = mountTrackingProviderSheet(trackingSheet);
+    const trackingMap = stage.querySelector('[data-tracking-map]');
+    if (trackingMap && mountedTrackingMap !== trackingMap) {
+      mountedTrackingMap = trackingMap;
+      stopTrackingMapResize = mountProviderMapResizeGesture({
+        card: trackingMap.closest('.tracking-map-card'), mapElement: trackingMap,
+        navigation: clientMapResizeNavigation, normalHeightPx: 390, expanded: clientMapExpanded,
+        onExpandedChange: value => { clientMapExpanded = value; },
+      });
     }
     if (status.id === 'in_progress' && missionState.quote) {
       mission.querySelector('[data-mission-status-badge]').textContent = updateInterventionQuotePresentation(stage, missionState);
@@ -1915,7 +1924,7 @@ export function initialiseHomePage(
       return;
     }
     if (event.target.closest('[data-profile-logout]')) {
-      stopTrackingSheetGesture?.();stopTrackingSheetGesture=undefined;mountedTrackingSheet=undefined;
+      stopTrackingMapResize?.();stopTrackingMapResize=undefined;mountedTrackingMap=undefined;
       chatManager?.dispose();chatManager=undefined;missionChatServices=undefined;callManager?.dispose();callManager=undefined;missionCallServices=undefined;
       stopMissionPolling?.();
       stopMissionRealtime?.();

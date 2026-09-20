@@ -138,9 +138,8 @@ export function createTrackingStageMarkup(technician, { missionStatus = 'travell
   const trackingStatus = missionStatus === 'arrived' ? 'Thợ đã đến' : moving ? 'Thợ đang đến' : 'Đang sửa chữa';
   const message = missionStatus === 'arrived' ? 'Thợ đã đến địa điểm của bạn.' : moving ? '' : 'Thợ đang kiểm tra và sửa chữa thiết bị của bạn.';
   return `<div class="tracking-shell" data-tracking-mission-status="${escapeHtml(missionStatus)}">
-    ${moving ? '<div class="tracking-map" data-tracking-map aria-label="Bản đồ theo dõi thợ"></div>' : ''}
-    <article class="tracking-bottom-sheet" aria-label="${trackingStatus}">
-      ${moving ? '<button type="button" class="tracking-sheet-handle" data-tracking-sheet-handle aria-label="Mở rộng hồ sơ thợ" aria-expanded="false"></button>' : ''}
+    ${moving ? '<div class="tracking-map-card"><div class="tracking-map" data-tracking-map aria-label="Bản đồ theo dõi thợ"></div><div class="tracking-map-resize-handle" data-provider-map-resize-handle role="separator" tabindex="0" aria-label="Thay đổi chiều cao bản đồ" aria-orientation="horizontal"></div></div>' : ''}
+    <article class="tracking-provider-panel" aria-label="${trackingStatus}">
       ${createAssignedProviderCompactMarkup(technician, { tracking: true, trackingStatus })}
       <p class="tracking-status-message" data-tracking-message ${moving ? 'hidden' : ''}>${message}</p>
       <div class="tracking-metrics" data-tracking-metrics ${moving ? '' : 'hidden'}>

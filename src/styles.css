@@ -220,8 +220,7 @@ h1 em { color: var(--green); font-style: normal; }
 .mission-stage { padding: 17px; border-radius: 16px; background: #f7faf9; }.mission-stage h3 { margin: 0 0 8px; color: #183b34; font-size: 16px; }.mission-stage p { margin: 5px 0; color: #607770; font-size: 11px; line-height: 1.5; }.mission-stage button, .demo-next { min-height: 40px; padding: 0 14px; border: 0; border-radius: 10px; color: white; background: var(--green); font-size: 11px; font-weight: 800; }.demo-next { width: 100%; margin-top: 12px; }.travel-stats { display: flex; justify-content: space-between; color: #536c66; font-size: 11px; }.mock-map { position: relative; display: flex; height: 150px; align-items: end; justify-content: space-between; margin-top: 13px; padding: 15px; overflow: hidden; border-radius: 13px; color: #34544c; background: linear-gradient(35deg, #dceee7 25%, transparent 25%) 0 0 / 45px 45px, #edf5f2; font-size: 9px; }.mock-map::after { position: absolute; top: 45%; left: 18%; width: 64%; border-top: 3px dashed #65a996; content: ""; transform: rotate(-12deg); }.mock-map i { position: absolute; z-index: 1; top: 53px; right: 25%; width: 16px; height: 16px; border: 4px solid white; border-radius: 50%; background: var(--orange); box-shadow: 0 2px 8px #55756c; }.mock-map strong { z-index: 1; }.mission-stage dl { margin: 8px 0; }.mission-stage dl div { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid #e2ebe8; font-size: 10px; }.mission-stage dd { margin: 0; font-weight: 750; text-align: right; }.supplement { margin-top: 12px; padding: 12px; border: 1px solid #f1c4b2; border-radius: 11px; background: #fff7f3; }.supplement > div { display: flex; gap: 8px; }.supplement button:last-child { color: #a2492e; background: white; border: 1px solid #d8a492; }.supplement .decision { color: var(--dark-green); font-weight: 750; }.final-summary div:last-child { color: var(--dark-green); font-size: 12px; }.stars { display: flex; gap: 4px; margin: 9px 0 14px; }.stars button { padding: 0 2px; color: #c9d4d0; background: transparent; font-size: 25px; }.stars button.is-selected { color: #f0aa31; }.review label { display: block; color: #526c65; font-size: 10px; }.review textarea { width: 100%; margin: 6px 0 10px; padding: 10px; border: 1px solid #ccded8; border-radius: 10px; resize: vertical; }.review-thanks { color: var(--green) !important; font-weight: 800; }
 .tracking-shell { position: relative; padding-bottom: 12px; }
 .tracking-shell .tracking-map { margin: 0; }
-.tracking-shell:not([data-tracking-mission-status="travelling"]) .tracking-bottom-sheet { margin: 0 auto; }
-.tracking-bottom-sheet { position: relative; z-index: 6; width: calc(100% - 24px); margin: -160px auto 0; padding: 16px; border: 1px solid #d5e5df; border-radius: 20px; background: rgb(255 255 255 / 97%); box-shadow: 0 16px 40px rgb(23 70 59 / 24%); backdrop-filter: blur(9px); }
+.tracking-provider-panel { position: relative; width: 100%; margin: 10px auto 0; padding: 14px; border: 1px solid #d5e5df; border-radius: 20px; background: #fff; box-shadow: 0 10px 28px rgb(23 70 59 / 12%); }
 .assigned-provider-card { display: grid; gap: 11px; }
 .assigned-provider-heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; }
 .assigned-provider-heading h3, .assigned-provider-heading p { margin: 0; }
@@ -512,39 +511,36 @@ footer strong { color: #627872; }
 .map-error span, .route-error { font-size: 12px; }.route-error { padding: 9px; border-radius: 9px; color: #813c28; background: #fff0e9; }
 .sheet-actions { grid-template-columns: repeat(3, 1fr); }.sheet-actions button:nth-child(3) { border: 1px solid #bdd6ce; border-radius: 12px; color: var(--dark-green); background: white; font-size: 11px; font-weight: 800; }
 
-/* The travelling sheet overlays the existing map without changing its DOM or camera. */
-.tracking-bottom-sheet .assigned-provider-heading { grid-template-columns: auto minmax(0, 1fr); }
-.tracking-bottom-sheet .assigned-provider-identity { min-width: 0; }
-.tracking-bottom-sheet .assigned-provider-heading h3 { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; line-height: 1.2; }
+/* The existing map grows in place; the Provider card stays in document flow. */
+.tracking-provider-panel .assigned-provider-heading { grid-template-columns: auto minmax(0, 1fr); }
+.tracking-provider-panel .assigned-provider-identity { min-width: 0; }
+.tracking-provider-panel .assigned-provider-heading h3 { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; line-height: 1.2; }
 .assigned-provider-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 5px; }
 .assigned-provider-badges > strong, .assigned-provider-proximity { padding: 3px 7px; border-radius: 999px; color: var(--dark-green); background: var(--mint); font-size: 9px; font-weight: 800; }
 .assigned-provider-proximity { background: #eef5f2; }
-.tracking-shell[data-tracking-mission-status="travelling"] { height: calc(100vh - 174px - env(safe-area-inset-bottom)); height: calc(100dvh - 174px - env(safe-area-inset-bottom)); min-height: 390px; padding-bottom: 0; }
-.tracking-shell[data-tracking-mission-status="travelling"] .tracking-map { height: 100%; min-height: 0; }
-.tracking-shell[data-tracking-mission-status="travelling"] .tracking-map .maplibregl-map { height: 100%; }
-.tracking-shell[data-tracking-mission-status="travelling"] .tracking-bottom-sheet { position: absolute; bottom: 0; left: 8px; width: calc(100% - 16px); height: 46vh; height: 46dvh; max-height: calc(100% - 64px); margin: 0; padding: 6px 12px 12px; overflow-y: auto; overscroll-behavior: contain; transition: height .22s ease-out; }
-.tracking-shell[data-tracking-mission-status="travelling"] .tracking-bottom-sheet.is-expanded { height: 72vh; height: 72dvh; max-height: calc(100% - 12px); }
-.tracking-shell[data-tracking-mission-status="travelling"] .tracking-bottom-sheet.is-dragging { transition: none; }
-.mission-stage .tracking-sheet-handle { display: grid; width: 100%; min-height: 28px; margin: 0 0 4px; padding: 0; place-items: center; border: 0; background: transparent; cursor: ns-resize; touch-action: none; user-select: none; }
-.tracking-sheet-handle::before { width: 40px; height: 4px; border-radius: 999px; background: #a5c6b9; content: ""; }
-.tracking-sheet-handle:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
-.tracking-bottom-sheet .assigned-provider-card { gap: 7px; }
-.tracking-bottom-sheet .assigned-provider-photo { width: 46px; height: 46px; border-width: 2px; font-size: 14px; }
-.tracking-bottom-sheet .assigned-provider-heading { gap: 8px; }
-.tracking-bottom-sheet .assigned-provider-heading h3 { margin: 0; font-size: 14px; }
-.tracking-bottom-sheet .assigned-provider-facts { gap: 6px !important; }
-.tracking-bottom-sheet .assigned-provider-facts div { padding: 6px 8px !important; }
-.tracking-bottom-sheet .assigned-provider-facts dd { margin-top: 1px; }
-.tracking-bottom-sheet:not(.is-expanded) .assigned-provider-facts dt, .tracking-bottom-sheet:not(.is-expanded) .assigned-provider-contact { display: none; }
-.tracking-bottom-sheet:not(.is-expanded) .assigned-provider-introduction { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
-.tracking-bottom-sheet .mission-contact-actions { gap: 8px; }
-.tracking-bottom-sheet:not(.is-expanded) .mission-contact-actions { position: sticky; bottom: 0; z-index: 1; padding-top: 4px; background: rgb(255 255 255 / 97%); }
-.tracking-bottom-sheet .mission-contact-actions > button { min-height: 44px; padding: 7px 9px; }
-.tracking-bottom-sheet .tracking-metrics { margin: 5px 0; }
-.tracking-bottom-sheet .tracking-metrics > div { padding: 6px 8px; }
-.tracking-bottom-sheet .tracking-action-status:empty { display: none; }
+.tracking-map-card { position: relative; overflow: hidden; border-radius: 24px; }
+.tracking-map-card .tracking-map { height: 390px; min-height: 390px; margin: 0; }
+.tracking-map-resize-handle { display: flex; height: 32px; align-items: center; justify-content: center; cursor: ns-resize; touch-action: none; user-select: none; }
+.tracking-map-resize-handle::before { width: 40px; height: 4px; border-radius: 999px; background: #a5c6b9; content: ""; }
+.tracking-map-resize-handle:focus-visible { outline: 2px solid var(--green); outline-offset: -3px; }
+.tracking-map-card.is-map-expanded .tracking-map-resize-handle { position: fixed; bottom: calc(80px + env(safe-area-inset-bottom)); left: 50%; z-index: 19; width: 88px; height: 44px; transform: translateX(-50%); background: transparent; }
+.tracking-map-card.is-map-expanded .tracking-map-resize-handle::before { background: #eefaf5; box-shadow: 0 0 0 1px var(--green), 0 1px 5px #17342d80; }
+.tracking-map-card.is-map-expanded .tracking-map { height: 72vh; height: 72dvh; min-height: 0; }
+.tracking-map-card:not(.is-map-dragging) .tracking-map { transition: height .22s ease-out; }
+.tracking-map-card.is-map-dragging .tracking-map { min-height: 0; transition: none; }
+.tracking-provider-panel .assigned-provider-card { gap: 7px; }
+.tracking-provider-panel .assigned-provider-photo { width: 46px; height: 46px; border-width: 2px; font-size: 14px; }
+.tracking-provider-panel .assigned-provider-heading { gap: 8px; }
+.tracking-provider-panel .assigned-provider-heading h3 { margin: 0; font-size: 14px; }
+.tracking-provider-panel .assigned-provider-facts { gap: 6px !important; }
+.tracking-provider-panel .assigned-provider-facts div { padding: 6px 8px !important; }
+.tracking-provider-panel .assigned-provider-facts dd { margin-top: 1px; }
+.tracking-provider-panel .mission-contact-actions { gap: 8px; }
+.tracking-provider-panel .mission-contact-actions > button { min-height: 44px; padding: 7px 9px; }
+.tracking-provider-panel .tracking-metrics { margin: 5px 0; }
+.tracking-provider-panel .tracking-metrics > div { padding: 6px 8px; }
+.tracking-provider-panel .tracking-action-status:empty { display: none; }
 @media (max-width: 600px) {
-  .tracking-shell[data-tracking-mission-status="travelling"] { min-height: 0; }
   .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) { margin-top: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
   .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) > .mission-technician,
   .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) > .mission-facts,
@@ -552,10 +548,4 @@ footer strong { color: #627872; }
   .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) > .mission-heading { margin: 4px 0 8px; }
   .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) .mission-stage { padding: 0; background: transparent; }
 }
-@media (max-height: 700px) {
-  .tracking-shell[data-tracking-mission-status="travelling"] .tracking-bottom-sheet:not(.is-expanded) { height: 42dvh; padding: 3px 10px 8px; }
-  .tracking-bottom-sheet:not(.is-expanded) .assigned-provider-photo { width: 42px; height: 42px; }
-  .tracking-bottom-sheet:not(.is-expanded) .assigned-provider-card { gap: 5px; }
-  .tracking-bottom-sheet:not(.is-expanded) .assigned-provider-introduction { -webkit-line-clamp: 1; line-clamp: 1; }
-}
-@media (prefers-reduced-motion: reduce) { .tracking-shell[data-tracking-mission-status="travelling"] .tracking-bottom-sheet { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .tracking-map-card:not(.is-map-dragging) .tracking-map { transition: none; } }

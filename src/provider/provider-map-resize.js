@@ -1,9 +1,10 @@
 const normalHeight = view => view.matchMedia?.('(max-width: 420px)').matches || view.innerWidth <= 420 ? 238 : 270;
 
-export function mountProviderMapResizeGesture({ card, mapElement, navigation, expanded = false, onExpandedChange = () => {}, view = mapElement?.ownerDocument?.defaultView }) {
+export function mountProviderMapResizeGesture({ card, mapElement, navigation, normalHeightPx, expanded = false, onExpandedChange = () => {}, view = mapElement?.ownerDocument?.defaultView }) {
   const handle = card?.querySelector('[data-provider-map-resize-handle]');
   if (!handle || !mapElement || !navigation?.map || !view) return () => {};
   const body = mapElement.ownerDocument.body;
+  const getNormalHeight = () => normalHeightPx ?? normalHeight(view);
   let pointerId = null;
   let startY = 0;
   let startHeight = 0;
@@ -21,7 +22,7 @@ export function mountProviderMapResizeGesture({ card, mapElement, navigation, ex
     if (frame != null) return;
     frame = requestFrame(() => { frame = null; resize(); });
   };
-  const expandedHeight = () => Math.max(normalHeight(view), (view.visualViewport?.height ?? view.innerHeight) * .72);
+  const expandedHeight = () => Math.max(getNormalHeight(), (view.visualViewport?.height ?? view.innerHeight) * .72);
   const releaseScroll = () => {
     if (pointerId == null) return;
     pointerId = null;
@@ -44,7 +45,7 @@ export function mountProviderMapResizeGesture({ card, mapElement, navigation, ex
     lastTime = event.timeStamp;
     velocity = 0;
     startExpanded = expanded;
-    startHeight = mapElement.getBoundingClientRect().height || (expanded ? expandedHeight() : normalHeight(view));
+    startHeight = mapElement.getBoundingClientRect().height || (expanded ? expandedHeight() : getNormalHeight());
     previousOverflow = body.style.overflow;
     body.style.overflow = 'hidden';
     card.classList.add('is-map-dragging');
@@ -57,7 +58,7 @@ export function mountProviderMapResizeGesture({ card, mapElement, navigation, ex
     velocity = (event.clientY - lastY) / elapsed;
     lastY = event.clientY;
     lastTime = event.timeStamp;
-    const height = Math.min(expandedHeight(), Math.max(normalHeight(view), startHeight + event.clientY - startY));
+    const height = Math.min(expandedHeight(), Math.max(getNormalHeight(), startHeight + event.clientY - startY));
     mapElement.style.height = `${height}px`;
     scheduleResize();
     event.preventDefault?.();
@@ -67,7 +68,7 @@ export function mountProviderMapResizeGesture({ card, mapElement, navigation, ex
     const height = Number.parseFloat(mapElement.style.height) || startHeight;
     const next = event.type === 'pointercancel' || Math.abs(startY - lastY) < 5
       ? startExpanded
-      : velocity > .35 || (velocity >= -.35 && height >= (normalHeight(view) + expandedHeight()) / 2);
+      : velocity > .35 || (velocity >= -.35 && height >= (getNormalHeight() + expandedHeight()) / 2);
     releaseScroll();
     snap(next);
   };
