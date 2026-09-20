@@ -12,11 +12,12 @@ const flush = async () => { for (let index = 0; index < 12; index++) await new P
 const fixtures = [];
 afterEach(() => { for (const fixture of fixtures.splice(0)) { fixture.manager.dispose(); fixture.dom.window.close(); } });
 function network({ringingMs=45000,streams=false}={}) {
-  const clients = new Map(); let current = null; let sequence = 0; let connectionCount = 0;
+  const clients = new Map(); let current = null; let sequence = 0; let connectionCount = 0; let sdkClientCount = 0;
   let missionStatus = 'accepted';
   const mission = () => ({id:'mission-test',status:missionStatus,serviceCategory:'electricity'});
-  class Emitter { handlers = new Map(); on(key, callback) { this.handlers.set(key, callback); } emit(key, data) { this.handlers.get(key)?.(data); } }
+  class Emitter { handlers = new Map(); registrations = new Map(); on(key, callback) { this.handlers.set(key, callback); this.registrations.set(key,(this.registrations.get(key)??0)+1); } emit(key, data) { this.handlers.get(key)?.(data); } }
   class Client extends Emitter {
+    constructor() { super(); sdkClientCount++; }
     connect(identity) { this.identity=identity; clients.set(identity,this); connectionCount++; queueMicrotask(()=>this.emit('authen',{r:0})); }
     disconnect() { clients.delete(this.identity); this.emit('disconnect'); }
   }
@@ -49,14 +50,15 @@ function network({ringingMs=45000,streams=false}={}) {
   });
   const fixture = (role, options={}) => {
     const dom=new JSDOM('<main id="app"></main>',{url:'https://example.test/Home-ai/'});
-    let ringCount=0;let clearCount=0;let microphoneCount=0;let attaches=0;let clock=Date.now();let interval;
+    let ringCount=0;let clearCount=0;let microphoneCount=0;let attaches=0;let clock=Date.now();let interval;let hidden=false;let tokenFailure=false;
+    Object.defineProperty(dom.window.document,'hidden',{configurable:true,get:()=>hidden});
     const audio={ activate:async()=>{},prepareMicrophone:async()=>{microphoneCount++;if(options.microphoneError)throw options.microphoneError;},ring:()=>{ringCount++;},stopRinging:()=>{},needsActivation:()=>false,attach:async()=>{attaches++;},clear:()=>{clearCount++;},dispose:()=>{} };
     const missionCalls=service(role);
-    const tokens={issue:async id=>({accessToken:identities[role],userId:identities[role],expiresAt:2000000000,...(id?{peerUserId:identities[role==='customer'?'provider':'customer'],participantRole:current.caller_user_id===role?'caller':'callee'}:{})})};
+    const tokens={issue:async id=>{if(tokenFailure && !id)throw new Error('Stringee connection failed');return {accessToken:identities[role],userId:identities[role],expiresAt:2000000000,...(id?{peerUserId:identities[role==='customer'?'provider':'customer'],participantRole:current.caller_user_id===role?'caller':'callee'}:{})};}};
     const manager=createCallManager({documentRef:dom.window.document,userId:role,role,missionCalls,tokens,sdkLoader:async()=>({StringeeClient:Client,StringeeCall:Call}),audio,now:()=>clock,scheduleInterval:callback=>{interval=callback;return 1;},clearIntervalTask:()=>{interval=null;}});
-    const result={dom,manager,missionCalls,audio,observe:async()=>{manager.observe({mission:mission(),peer:{name:role==='provider'?'Synthetic Customer':'Synthetic Provider',avatarUrl:'https://example.test/avatar.png',phone:'PRIVATE',cccd:'PRIVATE'},currentCall:await missionCalls.current(),callLoaded:true});},tick:seconds=>{clock+=seconds*1000;interval?.();},getAttaches:()=>attaches,getMicrophoneCount:()=>microphoneCount,getClearCount:()=>clearCount,getRingCount:()=>ringCount};fixtures.push(result); return result;
+    const result={dom,manager,missionCalls,audio,observe:async()=>{manager.observe({mission:mission(),peer:{name:role==='provider'?'Synthetic Customer':'Synthetic Provider',avatarUrl:'https://example.test/avatar.png',phone:'PRIVATE',cccd:'PRIVATE'},currentCall:await missionCalls.current(),callLoaded:true});},setHidden:value=>{hidden=value;dom.window.document.dispatchEvent(new dom.window.Event('visibilitychange'));},setTokenFailure:value=>{tokenFailure=value;},tick:seconds=>{clock+=seconds*1000;interval?.();},getAttaches:()=>attaches,getMicrophoneCount:()=>microphoneCount,getClearCount:()=>clearCount,getRingCount:()=>ringCount};fixtures.push(result); return result;
   };
-  return {fixture,mission,getCurrent:()=>current,getConnections:()=>connectionCount,disconnect:role=>clients.get(identities[role]).emit('disconnect'),terminal:status=>{missionStatus=status;if(current)current.status='ended';}};
+  return {fixture,mission,getCurrent:()=>current,getConnections:()=>connectionCount,getSdkClients:()=>sdkClientCount,getListenerCount:(role,key)=>clients.get(identities[role]).registrations.get(key)??0,disconnect:role=>clients.get(identities[role]).emit('disconnect'),terminal:status=>{missionStatus=status;if(current)current.status='ended';}};
 }
 
 describe('foreground Client/Provider calls',()=>{
@@ -101,7 +103,36 @@ describe('foreground Client/Provider calls',()=>{
     const net=network();const a=net.fixture('customer',{microphoneError:Object.assign(new Error('denied'),{name:'NotAllowedError'})});await a.observe();await flush();await a.manager.start();assert.equal(net.getCurrent(),null);assert.match(a.manager.host.textContent,/quyền sử dụng micro/);assert.doesNotMatch(a.manager.host.textContent,/denied|PRIVATE/);
   });
   it('Stringee connection loss stops media and permits retry',async()=>{
-    const net=network();const a=net.fixture('customer');const b=net.fixture('provider');await a.observe();await b.observe();await flush();await a.manager.start();await flush();net.disconnect('customer');await flush();assert.equal(a.manager.getState().phase,null);assert.equal(net.getCurrent().status,'ended');assert.match(a.manager.host.textContent,/gián đoạn/);await a.manager.start();await flush();assert.equal(net.getCurrent().status,'ringing');
+    const net=network();const a=net.fixture('customer');const b=net.fixture('provider');await a.observe();await b.observe();await flush();await a.manager.start();await flush();a.setHidden(true);net.disconnect('customer');await flush();assert.equal(a.manager.getState().phase,null);assert.equal(net.getCurrent().status,'ended');assert.match(a.manager.host.textContent,/gián đoạn/);a.setHidden(false);await flush();await a.manager.start();await flush();assert.equal(net.getCurrent().status,'ringing');
+  });
+  it('silently reconnects once after an idle iPhone background disconnect and clears an old connection notice',async()=>{
+    const net=network();const a=net.fixture('customer');const b=net.fixture('provider');await a.observe();await b.observe();await flush();
+    assert.equal(net.getConnections(),2);assert.equal(net.getSdkClients(),2);
+    a.setHidden(true);net.disconnect('customer');await flush();
+    assert.equal(a.manager.getState().connected,false);assert.equal(a.manager.host.textContent,'');
+    a.manager.reportError('Kết nối cuộc gọi bị gián đoạn. Vui lòng thử lại.');
+    a.setHidden(false);
+    for(let index=0;index<5;index++)a.dom.window.document.dispatchEvent(new a.dom.window.Event('visibilitychange'));
+    a.dom.window.dispatchEvent(new a.dom.window.Event('pageshow'));
+    await flush();
+    assert.equal(a.manager.getState().connected,true);assert.equal(net.getConnections(),3);
+    assert.equal(net.getSdkClients(),2);assert.equal(net.getListenerCount('customer','disconnect'),1);assert.equal(a.manager.host.textContent,'');
+    await a.manager.start();await flush();assert.equal(net.getCurrent().status,'ringing');
+  });
+  it('keeps an idle foreground reconnect failure silent until the user starts a call',async()=>{
+    const net=network();const a=net.fixture('customer');await a.observe();await flush();
+    a.setHidden(true);net.disconnect('customer');a.setTokenFailure(true);a.setHidden(false);await flush();
+    assert.equal(a.manager.host.textContent,'');assert.equal(a.manager.getState().connected,false);
+    await a.manager.start();await flush();assert.match(a.manager.host.textContent,/gián đoạn/);
+    assert.equal(net.getCurrent(),null);
+  });
+  it('restores the same manager after a persisted pagehide/pageshow',async()=>{
+    const net=network();const a=net.fixture('provider');await a.observe();await flush();
+    a.setHidden(true);
+    a.dom.window.dispatchEvent(new a.dom.window.PageTransitionEvent('pagehide',{persisted:true}));
+    assert.equal(a.manager.getState().connected,false);
+    a.setHidden(false);await flush();
+    assert.equal(a.manager.getState().connected,true);assert.equal(net.getConnections(),2);assert.equal(net.getSdkClients(),1);
   });
   it('microphone denied while answering closes the existing call with an explicit error',async()=>{
     const net=network();const a=net.fixture('customer');const b=net.fixture('provider',{microphoneError:Object.assign(new Error('denied'),{name:'NotAllowedError'})});await a.observe();await b.observe();await flush();await a.manager.start();await flush();await b.manager.action('answer');await flush();assert.equal(net.getCurrent().status,'ended');assert.equal(a.manager.getState().phase,null);assert.match(b.manager.host.textContent,/quyền sử dụng micro/);

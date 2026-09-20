@@ -30,6 +30,7 @@ export function createStringeeAudioClient({
   onIncomingCall = () => {},
   onStateChange = () => {},
   onError = () => {},
+  onDisconnect = () => {},
   onRemoteStream = () => {},
   waitForAuthentication = false,
 }) {
@@ -132,7 +133,7 @@ export function createStringeeAudioClient({
     });
     client.on('authen', result => authenticate?.(result));
     client.on('disconnect', () => {
-      if (!intentionalDisconnect) { connection = null; onError(new Error('Stringee connection lost')); }
+      if (!intentionalDisconnect) { connection = null; onDisconnect(); }
     });
     client.on('requestnewtoken', () => { void refreshToken().catch(onError); });
   };

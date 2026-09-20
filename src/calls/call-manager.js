@@ -59,6 +59,12 @@ export function createCallManager({
     const element = host.querySelector('[data-call-error]');
     if (element) { element.textContent = error; element.hidden = false; }
   };
+  const clearConnectionError = () => {
+    if (!['Kết nối cuộc gọi bị gián đoạn. Vui lòng thử lại.', 'Không thể kết nối cuộc gọi. Vui lòng thử lại.'].includes(error)) return;
+    error = '';
+    if (!phase) host.replaceChildren();
+    else updateControls();
+  };
   const updateControls = () => {
     host.querySelectorAll('[data-call-action]').forEach(button => { button.disabled = busy; });
     const activation = host.querySelector('[data-call-action="audio"]');
@@ -161,9 +167,16 @@ export function createCallManager({
         sdk: await sdkLoader(documentRef), missionCalls, tokens, waitForAuthentication: true,
         onIncomingCall: () => { void incoming(); }, onStateChange: stateChanged,
         onRemoteStream: stream => { remoteStream=stream;playRemoteStream(); },
-        onError: failure => { void finish({ disconnect: true }).then(() => showError(errorMessage(failure))); },
+        onDisconnect: () => {
+          transportReady = false;
+          if (call && !disposed) void finish({ disconnect: true }).then(() => showError(errorMessage(new Error('Stringee connection lost'))));
+        },
+        onError: failure => {
+          if (!call) { transportReady = false; transport?.disconnect(); return; }
+          void finish({ disconnect: true }).then(() => showError(errorMessage(failure)));
+        },
       });
-      await transport.connect(); transportReady = true;
+      await transport.connect(); transportReady = true; clearConnectionError();
       if (disposed || !missionAllowsCalls(context?.mission)) { transport.disconnect(); transportReady = false; }
     })().finally(() => { connecting = null; });
     return connecting;
@@ -182,7 +195,9 @@ export function createCallManager({
       void finish({status});
     }
     // Foreground callees must already be connected to receive incomingcall.
-    void ensureConnection().catch(() => showError('Không thể kết nối cuộc gọi. Vui lòng thử lại.'));
+    if (!documentRef.hidden) void ensureConnection().catch(() => {
+      if (call) showError('Không thể kết nối cuộc gọi. Vui lòng thử lại.');
+    });
     if (currentCall && currentCall.mission_id === mission.id && !closedIds.has(currentCall.id)) {
       if (!isOpen(currentCall)) { if (call?.id === currentCall.id) void finish({ status: currentCall.status }); }
       else {
@@ -236,12 +251,28 @@ export function createCallManager({
     if (control && host.contains(control)) void action(control.dataset.callAction);
     else if (!startButton) void audio.activate().then(updateControls).catch(() => {});
   };
+  const reconnectOnForeground = () => {
+    if (disposed || documentRef.hidden || !missionAllowsCalls(context?.mission)) return;
+    void ensureConnection().catch(() => {
+      if (call) showError('Không thể kết nối cuộc gọi. Vui lòng thử lại.');
+    });
+  };
+  const pageHide = event => {
+    if (!event.persisted) { dispose(); return; }
+    if (!call) { transport?.disconnect(); transportReady = false; }
+  };
   documentRef.addEventListener('click', click);
+  documentRef.addEventListener('visibilitychange', reconnectOnForeground);
+  documentRef.defaultView?.addEventListener('pageshow', reconnectOnForeground);
   const dispose = () => {
     if (disposed) return; disposed = true; void finish({ disconnect: true });
-    documentRef.removeEventListener('click', click); audio.dispose(); host.remove(); managers.delete(documentRef);
+    documentRef.removeEventListener('click', click);
+    documentRef.removeEventListener('visibilitychange', reconnectOnForeground);
+    documentRef.defaultView?.removeEventListener('pageshow', reconnectOnForeground);
+    documentRef.defaultView?.removeEventListener('pagehide', pageHide);
+    audio.dispose(); host.remove(); managers.delete(documentRef);
   };
-  documentRef.defaultView?.addEventListener('pagehide', dispose, { once: true });
+  documentRef.defaultView?.addEventListener('pagehide', pageHide);
   return Object.freeze({ observe, start, action, dispose, host, reportError:showError,
     getState: () => ({ phase, muted, busy, callId: call?.id ?? null, connected:transportReady }) });
 }
