@@ -541,11 +541,12 @@ footer strong { color: #627872; }
 .tracking-provider-panel .tracking-metrics > div { padding: 6px 8px; }
 .tracking-provider-panel .tracking-action-status:empty { display: none; }
 @media (max-width: 600px) {
-  .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) { margin-top: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+  .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) { margin-top: -8px; padding: 0; border: 0; background: transparent; box-shadow: none; }
   .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) > .mission-technician,
   .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) > .mission-facts,
   .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) > .mission-timeline { display: none; }
-  .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) > .mission-heading { margin: 4px 0 8px; }
+  .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) > .mission-heading { margin: 0; }
+  .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) > .mission-heading p { margin-bottom: 2px; }
   .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) .mission-stage { padding: 0; background: transparent; }
 }
 @media (prefers-reduced-motion: reduce) { .tracking-map-card:not(.is-map-dragging) .tracking-map { transition: none; } }
