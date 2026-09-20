@@ -1433,7 +1433,7 @@ export function initialiseHomePage(
       mountedTrackingMap = trackingMap;
       stopTrackingMapResize = mountProviderMapResizeGesture({
         card: trackingMap.closest('.tracking-map-card'), mapElement: trackingMap,
-        navigation: clientMapResizeNavigation, normalHeightPx: 390, expanded: clientMapExpanded,
+        navigation: clientMapResizeNavigation, expanded: clientMapExpanded,
         onExpandedChange: value => { clientMapExpanded = value; },
       });
     }

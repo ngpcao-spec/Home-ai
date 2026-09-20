@@ -125,3 +125,48 @@ it('keeps one navigation and marker through GPS refresh while expanded', async (
     assert.equal(activeNavigation.map, map);
   } finally { app.stop(); dom.window.close(); }
 });
+
+it('keeps the Provider map and camera through accepted to travelling', async () => {
+  let state={provider:{id:'p1',name:'Provider'},status:{online:true,available:false},offers:[],
+    assignment:{...mission,status:'accepted',clientLocation:{latitude:12.25,longitude:109.2}}};
+  const dom=new JSDOM('<div id="provider-root"></div>',{pretendToBeVisual:true});
+  const root=dom.window.document.querySelector('#provider-root');
+  let marker;let renderCount=0;let routeUpdates=0;let discardedMapRenders=0;
+  const map={setClientLocation(){},resize(){},async render(container){renderCount+=1;
+    marker=container.ownerDocument.createElement('span');marker.dataset.providerMarker='';container.append(marker);},
+    moveProvider(_id,position){if(marker?.isConnected)marker.dataset.latitude=String(position.latitude);},
+    setRoute(_points,options){routeUpdates+=1;assert.deepEqual(options,{fit:false});},
+    fitBounds(){throw Error('camera reset during status transition');}};
+  let navigationLoads=0;let heartbeatOptions;
+  const navigationLoader=async()=>{
+    navigationLoads+=1;
+    return navigation(navigationLoads===1?map:{render(){discardedMapRenders+=1;}});
+  };
+  const repository={source:'supabase',load:async()=>structuredClone(state),
+    updateLocation:async()=>structuredClone(state),
+    updateMissionProgress:async(_id,status)=>{state={...state,assignment:{...state.assignment,status}};return structuredClone(state);},
+    subscribeDispatch(){return()=>{};}};
+  const app=await initialiseProviderApp(root,async()=>repository,navigationLoader,
+    {enabled:false,getSession:async()=>null},options=>{heartbeatOptions=options;return{sync(){},stop(){}};},
+    {getState:async()=> 'granted',request:async()=>location,geolocation:{}});
+  try{
+    for(let i=0;i<5;i+=1)await new Promise(resolve=>setImmediate(resolve));
+    const mapElement=root.querySelector('[data-provider-map]');const originalMarker=marker;
+    assert.ok(mapElement);assert.equal(renderCount,1);
+    const handle=root.querySelector('[data-provider-map-resize-handle]');
+    handle.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'ArrowDown',bubbles:true,cancelable:true}));
+    assert.equal(mapElement.closest('.mission-map-card').classList.contains('is-map-expanded'),true);
+    root.querySelector('[data-start-travel]').click();
+    for(let i=0;i<8;i+=1)await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(app.getState().assignment.status,'travelling');
+    assert.equal(root.querySelector('[data-provider-map]'),mapElement);
+    assert.equal(root.querySelector('[data-provider-marker]'),originalMarker);
+    assert.equal(mapElement.closest('.mission-map-card').classList.contains('is-map-expanded'),true);
+    assert.equal(renderCount,1);assert.equal(discardedMapRenders,0);assert.equal(routeUpdates,1);
+    assert.equal(root.querySelector('[data-start-travel]'),null);
+    assert.ok(root.querySelector('[data-mark-arrived]'));
+    heartbeatOptions.onPosition({latitude:12.247,longitude:109.192});
+    assert.equal(originalMarker.dataset.latitude,'12.247');
+    assert.equal(root.querySelector('[data-provider-map]'),mapElement);
+  }finally{app.stop();dom.window.close();}
+});

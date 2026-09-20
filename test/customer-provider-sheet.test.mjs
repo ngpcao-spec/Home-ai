@@ -49,11 +49,18 @@ test('accepted Client mission shows the same resizable map and Provider actions 
   dom.window.close();
 });
 
-test('Client CSS keeps the normal map at 390px, expands it to 72dvh and floats only the handle', () => {
+test('Client and Provider CSS share map heights and handle dimensions on iPhone', () => {
   const css = readFileSync(new URL('../src/styles.css', import.meta.url), 'utf8');
-  assert.match(css, /\.tracking-map-card \.tracking-map \{ height: 390px; min-height: 390px;/);
+  const providerCss=readFileSync(new URL('../src/provider/provider-app.css',import.meta.url),'utf8');
+  assert.match(css, /\.tracking-map-card \.tracking-map \{ height: 270px; min-height: 270px;/);
+  assert.match(css, /@media \(max-width: 420px\) \{ \.tracking-map-card \.tracking-map \{ height: 238px; min-height: 238px; \} \}/);
+  assert.match(providerCss,/\.mission-map-card \.provider-map\{height:270px;min-height:270px;/);
+  assert.match(providerCss,/@media\(max-width:420px\)\{\.mission-map-card \.provider-map\.maplibregl-map,\.mission-map-card \.provider-map \.local-map\{height:238px;min-height:238px\}\}/);
+  assert.match(css,/\.tracking-map-resize-handle::before \{ width: 40px; height: 4px;[^}]*background: #abcfc2;/);
+  assert.match(providerCss,/\.provider-map-resize-handle::before\{[^}]*width:40px;height:4px;[^}]*background:#abcfc2/);
   assert.match(css, /\.tracking-map-card\.is-map-expanded \.tracking-map \{ height: 72vh; height: 72dvh;/);
   assert.match(css, /\.tracking-map-card\.is-map-expanded \.tracking-map-resize-handle \{[^}]*position: fixed;[^}]*safe-area-inset-bottom[^}]*z-index: 19;/);
+  assert.match(css,/@media \(min-width: 760px\) \{ \.tracking-map-card\.is-map-expanded \.tracking-map-resize-handle \{ bottom: 100px; \} \}/);
   assert.match(css, /\.tracking-provider-panel \{ position: relative; width: 100%; margin: 10px auto 0;/);
   assert.match(css, /\.tracking-provider-panel \.assigned-provider-heading h3 \{[^}]*-webkit-line-clamp: 2;/);
   assert.match(css, /\.app-navigation \{[^}]*z-index: 20;/);
@@ -69,11 +76,11 @@ test('shared Provider gesture expands the same Client map downward and restores 
   const handle = document.querySelector('[data-provider-map-resize-handle]');
   let resizeCount = 0;
   const navigation = { map: { resize() { resizeCount += 1; }, fitBounds() { throw Error('fitBounds during drag'); }, render() { throw Error('render during drag'); } } };
-  const stop = mountProviderMapResizeGesture({ card, mapElement, navigation, normalHeightPx: 390, view: dom.window });
+  const stop = mountProviderMapResizeGesture({ card, mapElement, navigation, view: dom.window });
   try {
     pointer(handle, 'pointerdown', 100, 1000);
     pointer(handle, 'pointermove', 500, 2000);
-    assert.ok(Number.parseFloat(mapElement.style.height) > 390);
+    assert.ok(Number.parseFloat(mapElement.style.height) > 270);
     pointer(handle, 'pointerup', 500, 2020);
     assert.equal(card.classList.contains('is-map-expanded'), true);
     await new Promise(resolve => setTimeout(resolve, 35));
