@@ -44,11 +44,16 @@ self.addEventListener('fetch', event => {
 });
 self.addEventListener('push',event=>{
   let data={};try{data=event.data?.json()??{};}catch{return;}
-  if(data.type!=='mission_offer'||!data.offerRef)return;
-  event.waitUntil(self.registration.showNotification(data.title??'HOME AI — Nhiệm vụ mới',{body:data.body??'Có nhiệm vụ mới gần bạn.',icon:'../provider-icon.svg',badge:'../provider-icon.svg',tag:`home-ai-offer-${data.offerRef}`,renotify:true,data:{type:'mission_offer',offerRef:data.offerRef}}));
+  if(data.type==='mission_offer'&&data.offerRef){
+    event.waitUntil(self.registration.showNotification(data.title??'HOME AI — Nhiệm vụ mới',{body:data.body??'Có nhiệm vụ mới gần bạn.',icon:'../provider-icon.svg',badge:'../provider-icon.svg',tag:`home-ai-offer-${data.offerRef}`,renotify:true,data:{type:'mission_offer',offerRef:data.offerRef}}));
+  }else if(data.type==='mission_message'&&data.messageRef){
+    event.waitUntil(self.registration.showNotification('HOME AI',{body:'Tin nhắn mới từ khách hàng',icon:'../provider-icon.svg',badge:'../provider-icon.svg',tag:`home-ai-message-${data.messageRef}`,data:{type:'mission_message',messageRef:data.messageRef}}));
+  }
 });
 self.addEventListener('notificationclick',event=>{
-  event.notification.close();const ref=event.notification.data?.offerRef;if(!ref)return;
-  const target=new URL(`./?push_offer=${encodeURIComponent(ref)}`,self.registration.scope).href;
-  event.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(async clients=>{const provider=clients.find(client=>new URL(client.url).pathname.startsWith(new URL(self.registration.scope).pathname));if(provider){await provider.focus();provider.postMessage({type:'mission_offer_push',offerRef:ref});return;}await self.clients.openWindow(target);}));
+  event.notification.close();
+  const message=event.notification.data?.type==='mission_message';
+  const ref=message?event.notification.data?.messageRef:event.notification.data?.offerRef;if(!ref)return;
+  const target=new URL(`./?${message?'push_message':'push_offer'}=${encodeURIComponent(ref)}`,self.registration.scope).href;
+  event.waitUntil(self.clients.matchAll({type:'window',includeUncontrolled:true}).then(async clients=>{const provider=clients.find(client=>new URL(client.url).pathname.startsWith(new URL(self.registration.scope).pathname));if(provider){await provider.focus();provider.postMessage(message?{type:'mission_message_push',messageRef:ref}:{type:'mission_offer_push',offerRef:ref});return;}await self.clients.openWindow(target);}));
 });

@@ -1,16 +1,34 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
 const migration=readFileSync(new URL('../supabase/migrations/20260915090000_provider_push_v1.sql',import.meta.url),'utf8');
 const backendReadFix=readFileSync(new URL('../supabase/migrations/20260916165000_fix_provider_push_service_role_select.sql',import.meta.url),'utf8');
+const messagePushMigration=readFileSync(new URL('../supabase/migrations/20260920120000_mission_message_provider_push.sql',import.meta.url),'utf8');
+const foregroundLeaseMigration=readFileSync(new URL('../supabase/migrations/20260920130000_provider_push_foreground_lease.sql',import.meta.url),'utf8');
 const edge=readFileSync(new URL('../supabase/functions/send-provider-push/index.ts',import.meta.url),'utf8');
 test('subscriptions are private, provider-owned RPCs reject anon and endpoint reuse',()=>{assert.match(migration,/enable row level security/gi);assert.match(migration,/revoke all on public\.provider_push_subscriptions from public,anon,authenticated/i);assert.match(migration,/provider_id=auth\.uid\(\)/);assert.match(migration,/belongs to another provider/);assert.match(migration,/Provider authentication required/);});
 test('every real pending offer creates one durable push task and keeps matching unchanged',()=>{assert.match(migration,/after insert on public\.mission_offers/);assert.match(migration,/offer_id uuid not null unique/);assert.match(migration,/new\.status='pending'/);assert.doesNotMatch(migration,/create or replace function private\.dispatch_next_mission_offer/);});
 test('backend delivery validates a Vault webhook secret and live offer, fans out devices and disables gone endpoints',()=>{assert.match(migration,/provider_push_webhook_secret/);assert.match(migration,/claim_provider_push_outbox/);assert.match(migration,/net\.http_post/);assert.match(edge,/claim_provider_push_outbox/);assert.match(edge,/VAPID_PRIVATE_KEY/);assert.match(edge,/status==='pending'/);assert.match(edge,/provider\?\.online&&provider\?\.available/);assert.match(edge,/for\(const subscription of subscriptions/);assert.match(edge,/code===404\|\|code===410/);assert.match(edge,/TTL:/);});
 test('VAPID public key has one safe canonical source and the health response exposes booleans only',()=>{assert.match(edge,/VAPID_PUBLIC_KEY/);assert.match(edge,/vapidPairMatches/);assert.doesNotMatch(edge,/Deno\.env\.get\('VAPID_PUBLIC_KEY'\)/);assert.match(edge,/active:true,vapidConfigured/);});
-test('push payload contains service and opaque reference without mission details or PII',()=>{assert.match(edge,/type:'mission_offer',offerRef:offer\.push_reference/);assert.doesNotMatch(edge,/client_name|phone|address|latitude|longitude|description/i);const payloadLine=edge.split('\n').find(line=>line.includes('const payload='));assert.doesNotMatch(payloadLine,/VAPID|SECRET|endpoint|mission_id/i);});
+test('offer push payload still contains service and opaque reference without mission details or PII',()=>{assert.match(edge,/type:'mission_offer',offerRef:offer\.push_reference/);assert.doesNotMatch(edge,/client_name|phone|address|latitude|longitude|description/i);const payloadLine=edge.split('\n').find(line=>line.includes("payload=JSON.stringify({type:'mission_offer'"));assert.doesNotMatch(payloadLine,/VAPID|SECRET|endpoint|mission_id/i);});
 test('Push Edge service role receives only the columns required to validate delivery',()=>{
   assert.match(backendReadFix,/grant select \(id, push_reference, status, expires_at, mission_id, provider_id\)\s+on public\.mission_offers\s+to service_role/i);
   assert.match(backendReadFix,/grant select \(id, status, service_category, provider_id\)\s+on public\.missions\s+to service_role/i);
   assert.match(backendReadFix,/grant select \(provider_id, online, available, current_mission_id\)\s+on public\.provider_status\s+to service_role/i);
   assert.doesNotMatch(backendReadFix,/\b(?:anon|authenticated)\b/i);
   assert.doesNotMatch(backendReadFix,/grant\s+(?:all|select)\s+on\s+public\.(?:mission_offers|missions|provider_status)/i);
+});
+test('message Push reuses the private outbox and grants only minimal backend routing columns',()=>{
+  assert.match(messagePushMigration,/after insert on public\.mission_messages/i);
+  assert.match(messagePushMigration,/provider_push_outbox\(message_id,provider_id\)/i);
+  assert.match(messagePushMigration,/on conflict\(message_id\) do nothing/i);
+  assert.match(messagePushMigration,/grant select \(id,mission_id,sender_user_id\) on public\.mission_messages to service_role/i);
+  assert.match(messagePushMigration,/grant select \(client_id\) on public\.missions to service_role/i);
+  assert.match(messagePushMigration,/revoke all on function public\.resolve_current_provider_push_message\(uuid\) from public,anon/i);
+  assert.doesNotMatch(messagePushMigration,/grant (?:all|select) on public\.(?:mission_messages|missions|provider_push_outbox) to (?:anon|authenticated)/i);
+  assert.doesNotMatch(messagePushMigration,/\b(?:phone|address_text|body)\b/i);
+});
+test('foreground lease lasts 45 seconds and remains Provider-owned',()=>{
+  assert.match(foregroundLeaseMigration,/interval '45 seconds'/i);
+  assert.match(foregroundLeaseMigration,/provider_id=auth\.uid\(\) and installation_id=target_installation_id and enabled/i);
+  assert.match(foregroundLeaseMigration,/revoke all on function public\.touch_current_provider_push_installation\(uuid,boolean\) from public,anon/i);
+  assert.doesNotMatch(foregroundLeaseMigration,/grant .* to anon/i);
 });

@@ -1,6 +1,7 @@
 import webpush from 'npm:web-push@3.6.7';
 import {createClient} from 'npm:@supabase/supabase-js@2.57.4';
 import {VAPID_PUBLIC_KEY} from '../_shared/provider-push-config.js';
+import {isProviderMessagePushDeliverable,providerMessagePushPayload,shouldSendProviderPush} from '../_shared/provider-push-message.js';
 
 const json=(body:unknown,status=200)=>new Response(JSON.stringify(body),{status,headers:{'content-type':'application/json'}});
 const labels:Record<string,string>={electricity:'thợ điện',plumbing:'thợ sửa ống nước','air-conditioning':'thợ điều hòa',appliances:'thợ điện gia dụng'};
@@ -23,20 +24,32 @@ Deno.serve(async(req)=>{
     const {data:claimed,error:claimError}=await supabase.rpc('claim_provider_push_outbox',{target_outbox_id:outboxId,provided_secret:req.headers.get('x-home-ai-push-secret')??''});
     if(claimError)return json({error:'PUSH_AUTHORIZATION_FAILED'},503);
     if(!claimed)return json({error:'FORBIDDEN'},403);
-    const {data:outbox}=await supabase.from('provider_push_outbox').select('id,offer_id,provider_id,status,attempts').eq('id',outboxId).maybeSingle();
+    const {data:outbox}=await supabase.from('provider_push_outbox').select('id,offer_id,message_id,provider_id,status,attempts').eq('id',outboxId).maybeSingle();
     if(!outbox||outbox.status!=='processing')return json({processed:false});
-    const {data:offer}=await supabase.from('mission_offers').select('id,push_reference,status,expires_at,mission_id,provider_id').eq('id',outbox.offer_id).maybeSingle();
-    const {data:mission}=offer?await supabase.from('missions').select('status,service_category,provider_id').eq('id',offer.mission_id).maybeSingle():{data:null};
-    const {data:provider}=await supabase.from('provider_status').select('online,available,current_mission_id').eq('provider_id',outbox.provider_id).maybeSingle();
-    const valid=offer?.status==='pending'&&new Date(offer.expires_at).getTime()>Date.now()&&mission?.status==='offered'&&!mission.provider_id&&provider?.online&&provider?.available&&!provider.current_mission_id;
-    if(!valid){await supabase.from('provider_push_outbox').update({status:'skipped',processed_at:new Date().toISOString(),last_error_code:'OFFER_NOT_DELIVERABLE'}).eq('id',outbox.id);return json({processed:true,sent:0});}
+    let payload:string;let ttl:number;const messagePush=Boolean(outbox.message_id);
+    if(messagePush){
+      const {data:message}=await supabase.from('mission_messages').select('id,mission_id,sender_user_id').eq('id',outbox.message_id).maybeSingle();
+      const {data:mission}=message?await supabase.from('missions').select('id,client_id,provider_id,status').eq('id',message.mission_id).maybeSingle():{data:null};
+      if(!isProviderMessagePushDeliverable(outbox,message,mission)){
+        await supabase.from('provider_push_outbox').update({status:'skipped',processed_at:new Date().toISOString(),last_error_code:'MESSAGE_NOT_DELIVERABLE'}).eq('id',outbox.id);
+        return json({processed:true,sent:0});
+      }
+      payload=JSON.stringify(providerMessagePushPayload(message.id));ttl=3600;
+    }else{
+      const {data:offer}=await supabase.from('mission_offers').select('id,push_reference,status,expires_at,mission_id,provider_id').eq('id',outbox.offer_id).maybeSingle();
+      const {data:mission}=offer?await supabase.from('missions').select('status,service_category,provider_id').eq('id',offer.mission_id).maybeSingle():{data:null};
+      const {data:provider}=await supabase.from('provider_status').select('online,available,current_mission_id').eq('provider_id',outbox.provider_id).maybeSingle();
+      const valid=offer?.status==='pending'&&new Date(offer.expires_at).getTime()>Date.now()&&mission?.status==='offered'&&!mission.provider_id&&provider?.online&&provider?.available&&!provider.current_mission_id;
+      if(!valid){await supabase.from('provider_push_outbox').update({status:'skipped',processed_at:new Date().toISOString(),last_error_code:'OFFER_NOT_DELIVERABLE'}).eq('id',outbox.id);return json({processed:true,sent:0});}
+      payload=JSON.stringify({type:'mission_offer',offerRef:offer.push_reference,title:'HOME AI — Nhiệm vụ mới',body:`Có khách hàng cần ${labels[mission.service_category]??'thợ phù hợp'} gần bạn.`});
+      ttl=Math.max(0,Math.floor((new Date(offer.expires_at).getTime()-Date.now())/1000));
+    }
     const {data:subscriptions}=await supabase.from('provider_push_subscriptions').select('id,endpoint,p256dh,auth_key,foreground_until').eq('provider_id',outbox.provider_id).eq('enabled',true);
     const config=await vapidConfiguration();if(!config.configured||!config.pairMatches){await supabase.from('provider_push_outbox').update({status:'failed',processed_at:new Date().toISOString(),last_error_code:'VAPID_CONFIGURATION_INVALID'}).eq('id',outbox.id);return json({error:'PUSH_CONFIGURATION_ERROR'},503);}
     webpush.setVapidDetails(config.subject,VAPID_PUBLIC_KEY,config.privateKey);
-    const payload=JSON.stringify({type:'mission_offer',offerRef:offer.push_reference,title:'HOME AI — Nhiệm vụ mới',body:`Có khách hàng cần ${labels[mission.service_category]??'thợ phù hợp'} gần bạn.`});
     let sent=0;for(const subscription of subscriptions??[]){
-      if(subscription.foreground_until&&new Date(subscription.foreground_until).getTime()>Date.now())continue;
-      try{await webpush.sendNotification({endpoint:subscription.endpoint,keys:{p256dh:subscription.p256dh,auth:subscription.auth_key}},payload,{TTL:Math.max(0,Math.floor((new Date(offer.expires_at).getTime()-Date.now())/1000)),urgency:'high'});sent++;}
+      if(!shouldSendProviderPush(subscription))continue;
+      try{await webpush.sendNotification({endpoint:subscription.endpoint,keys:{p256dh:subscription.p256dh,auth:subscription.auth_key}},payload,{TTL:ttl,urgency:'high'});sent++;}
       catch(error){const code=Number((error as {statusCode?:number}).statusCode);if(code===404||code===410)await supabase.from('provider_push_subscriptions').update({enabled:false,revoked_at:new Date().toISOString()}).eq('id',subscription.id);}
     }
     await supabase.from('provider_push_outbox').update({status:'sent',processed_at:new Date().toISOString(),last_error_code:null}).eq('id',outbox.id);

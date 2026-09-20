@@ -1,13 +1,14 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {readFileSync} from 'node:fs';
-import {createProviderPushManager,renderProviderPushPrompt} from '../src/provider/provider-push.js';
+import {createProviderPushManager,renderProviderPushPrompt,PROVIDER_PUSH_FOREGROUND_HEARTBEAT_MS} from '../src/provider/provider-push.js';
 import {VAPID_PUBLIC_KEY as publicKey} from '../supabase/functions/_shared/provider-push-config.js';
+import {shouldSendProviderPush} from '../supabase/functions/_shared/provider-push-message.js';
 
 const makeEnv=({standalone=true,permission='default',existing=false,permissionResult='granted',expired=false}={})=>{
-  const store=new Map();let permissionCalls=0,subscribeCalls=0,unsubscribeCalls=0;const listeners=new Map();
+  const store=new Map();let permissionCalls=0,subscribeCalls=0,unsubscribeCalls=0;const listeners=new Map();const intervals=new Map();let nextIntervalId=0;
   const subscription={endpoint:'https://push.example/subscription',expirationTime:expired?Date.now()-1:null,unsubscribe:async()=>{unsubscribeCalls++;existing=false;},toJSON:()=>({endpoint:'https://push.example/subscription',keys:{p256dh:'p'.repeat(40),auth:'a'.repeat(20)}})};
   const pushManager={getSubscription:async()=>existing?subscription:null,subscribe:async options=>{subscribeCalls++;assert.equal(options.userVisibleOnly,true);existing=true;return subscription;}};
-  const environment={isSecureContext:true,PushManager:function(){},crypto:{randomUUID:()=> '11111111-1111-4111-8111-111111111111'},localStorage:{getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v)},matchMedia:()=>({matches:standalone}),Notification:{permission,requestPermission:async()=>{permissionCalls++;environment.Notification.permission=permissionResult;return permissionResult;}},navigator:{serviceWorker:{ready:Promise.resolve({pushManager})}},document:{visibilityState:'visible',addEventListener:(n,f)=>listeners.set(n,f),removeEventListener:()=>{}},location:{href:'https://example.com/Home-ai/provider/'},history:{replaceState(){}},setInterval:()=>1,clearInterval(){}};
-  return {environment,permissionCalls:()=>permissionCalls,subscribeCalls:()=>subscribeCalls,unsubscribeCalls:()=>unsubscribeCalls,listeners};
+  const environment={isSecureContext:true,PushManager:function(){},crypto:{randomUUID:()=> '11111111-1111-4111-8111-111111111111'},localStorage:{getItem:k=>store.get(k)??null,setItem:(k,v)=>store.set(k,v)},matchMedia:()=>({matches:standalone}),Notification:{permission,requestPermission:async()=>{permissionCalls++;environment.Notification.permission=permissionResult;return permissionResult;}},navigator:{serviceWorker:{ready:Promise.resolve({pushManager})}},document:{visibilityState:'visible',addEventListener:(n,f)=>listeners.set(n,f),removeEventListener:n=>listeners.delete(n)},location:{href:'https://example.com/Home-ai/provider/'},history:{replaceState(){}},setInterval:(callback,delay)=>{const id=++nextIntervalId;intervals.set(id,{callback,delay});return id;},clearInterval:id=>intervals.delete(id)};
+  return {environment,permissionCalls:()=>permissionCalls,subscribeCalls:()=>subscribeCalls,unsubscribeCalls:()=>unsubscribeCalls,listeners,intervals,tick:()=>{for(const {callback} of [...intervals.values()])callback();},setVisible:value=>{environment.document.visibilityState=value?'visible':'hidden';listeners.get('visibilitychange')?.();}};
 };
 
 test('first installed PWA launch asks once in HOME AI and explicit acceptance creates the subscription',async()=>{
@@ -62,4 +63,38 @@ test('profile no longer contains notification controls',()=>{
   const source=readFileSync(new URL('../src/provider/provider-app.js',import.meta.url),'utf8');assert.doesNotMatch(source,/renderProviderPushSettings|Thông báo nhiệm vụ|Bật thông báo/);
 });
 
-test('Service Worker uses an opaque reference, deduplicated notification tag and reloads truth after click',()=>{const source=readFileSync(new URL('../provider/provider-sw.js',import.meta.url),'utf8');assert.match(source,/addEventListener\('push'/);assert.match(source,/showNotification/);assert.match(source,/home-ai-offer-\$\{data\.offerRef\}/);assert.match(source,/notificationclick/);assert.match(source,/push_offer=/);for(const forbidden of ['phone','clientName','latitude','longitude','address'])assert.doesNotMatch(source,new RegExp(forbidden,'i'));});
+test('visible Provider renews one foreground lease every 15 seconds for over two minutes',async()=>{
+  const env=makeEnv({permission:'granted',existing:true});let now=Date.parse('2026-09-20T12:00:00Z');let foregroundUntil=null;const touches=[];
+  const manager=createProviderPushManager({environment:env.environment,vapidPublicKey:publicKey,repository:{registerPush:async()=>{},touchPush:async(_id,foreground)=>{touches.push(foreground);foregroundUntil=foreground?new Date(now+45000).toISOString():null;}}});
+  await manager.start();await new Promise(setImmediate);
+  assert.equal(env.intervals.size,1);assert.equal([...env.intervals.values()][0].delay,PROVIDER_PUSH_FOREGROUND_HEARTBEAT_MS);
+  for(let count=0;count<9;count++){now+=PROVIDER_PUSH_FOREGROUND_HEARTBEAT_MS;env.tick();await new Promise(setImmediate);assert.equal(shouldSendProviderPush({foreground_until:foregroundUntil},now),false);}
+  assert.equal(now-Date.parse('2026-09-20T12:00:00Z'),135000);
+  assert.equal(touches.length,10);assert.ok(touches.every(Boolean));
+  manager.stop();await new Promise(setImmediate);assert.equal(env.intervals.size,0);
+});
+
+test('hidden clears the lease immediately, stops heartbeat, and visible resumes one timer',async()=>{
+  const env=makeEnv({permission:'granted',existing:true});let now=Date.parse('2026-09-20T12:00:00Z');let foregroundUntil=null;const touches=[];
+  const manager=createProviderPushManager({environment:env.environment,vapidPublicKey:publicKey,repository:{registerPush:async()=>{},touchPush:async(_id,foreground)=>{touches.push(foreground);foregroundUntil=foreground?new Date(now+45000).toISOString():null;}}});
+  await manager.start();await new Promise(setImmediate);
+  env.setVisible(false);await new Promise(setImmediate);
+  assert.equal(touches.at(-1),false);assert.equal(foregroundUntil,null);assert.equal(env.intervals.size,0);
+  assert.equal(shouldSendProviderPush({foreground_until:foregroundUntil},now),true);
+  env.tick();assert.equal(touches.at(-1),false);
+  env.setVisible(true);await new Promise(setImmediate);
+  assert.equal(touches.at(-1),true);assert.equal(env.intervals.size,1);
+  env.setVisible(true);await new Promise(setImmediate);assert.equal(env.intervals.size,1);
+  now+=46000;assert.equal(shouldSendProviderPush({foreground_until:foregroundUntil},now),true);
+  manager.stop();await new Promise(setImmediate);assert.equal(env.intervals.size,0);
+});
+
+test('foreground heartbeats do not send concurrent touch RPCs',async()=>{
+  const env=makeEnv({permission:'granted',existing:true});let resolveTouch;let calls=0;let concurrent=0;let maxConcurrent=0;
+  const manager=createProviderPushManager({environment:env.environment,vapidPublicKey:publicKey,repository:{registerPush:async()=>{},touchPush:()=>{calls++;concurrent++;maxConcurrent=Math.max(maxConcurrent,concurrent);return new Promise(resolve=>{resolveTouch=()=>{concurrent--;resolve();};});}}});
+  await manager.start();env.tick();env.tick();env.tick();assert.equal(calls,1);
+  resolveTouch();await new Promise(setImmediate);assert.equal(calls,2);assert.equal(maxConcurrent,1);
+  resolveTouch();await new Promise(setImmediate);manager.stop();resolveTouch();await new Promise(setImmediate);
+});
+
+test('Service Worker uses an opaque reference, deduplicated notification tag and reloads truth after click',()=>{const source=readFileSync(new URL('../provider/provider-sw.js',import.meta.url),'utf8');assert.match(source,/addEventListener\('push'/);assert.match(source,/showNotification/);assert.match(source,/home-ai-offer-\$\{data\.offerRef\}/);assert.match(source,/notificationclick/);assert.match(source,/push_offer/);for(const forbidden of ['phone','clientName','latitude','longitude','address'])assert.doesNotMatch(source,new RegExp(forbidden,'i'));});

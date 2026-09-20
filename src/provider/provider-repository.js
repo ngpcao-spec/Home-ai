@@ -22,7 +22,7 @@ export function createMockProviderAppRepository(seed = mockProviderDashboard) {
   }]);
   return Object.freeze({
     source: 'mock', async load() { return clone(state); },
-    async registerPush() { return true; }, async touchPush() { return true; }, async revokePush() { return true; }, async resolvePushOffer() { return null; },
+    async registerPush() { return true; }, async touchPush() { return true; }, async revokePush() { return true; }, async resolvePushOffer() { return null; }, async resolvePushMessage() { return null; },
     async loadKyc() { return clone(kycState); },
     async getProfessionalProfile() { return clone(professionalProfile); },
     async saveProfessionalProfile(profile) {
@@ -200,6 +200,7 @@ export async function createProgressiveProviderAppRepository(runtimeConfig = glo
     async touchPush(id,foreground){return repositories.offers.touchProviderPushInstallation(id,foreground);},
     async revokePush(id){return repositories.offers.revokeProviderPushInstallation(id);},
     async resolvePushOffer(ref){return repositories.offers.resolveProviderPushOffer(ref);},
+    async resolvePushMessage(ref){return repositories.offers.resolveProviderPushMessage(ref);},
     chatServices: repositories.missionMessages ? {userId:data.user.id,messages:repositories.missionMessages} : null,
     callServices: repositories.missionCalls && repositories.stringeeTokens ? {
       userId:data.user.id,missionCalls:repositories.missionCalls,tokens:repositories.stringeeTokens,
