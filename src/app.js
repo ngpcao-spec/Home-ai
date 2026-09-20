@@ -15,6 +15,7 @@ import { createRouteService } from './routing/routing-provider.js';
 import { createMockProviderLocationSource } from './tracking/location-stream.js';
 import { prepareSupabaseTracking, preserveNewestProviderLocation } from './tracking/supabase-tracking.js';
 import { createTrackingRouteSession } from './tracking/route-session.js';
+import { mountTrackingProviderSheet } from './tracking/provider-sheet-gesture.js';
 import { createInterventionQuote } from './mission/intervention-quote.js';
 import { createCompletionSummaryMarkup, createPaidExternalMarkup, createProviderReviewMarkup, getCompletedMissionPricePresentation } from './mission/completion-summary.js';
 import {
@@ -1362,6 +1363,8 @@ export function initialiseHomePage(
     scheduleTask(() => showBookingConfirmation(null), 700);
   });
   const mission = root.querySelector('[data-mission-tracker]');
+  let mountedTrackingSheet;
+  let stopTrackingSheetGesture;
   const renderMissionProgress = () => {
     const status = missionStatuses[missionState.statusIndex];
     mission.querySelector('[data-mission-status-badge]').textContent = status.label;
@@ -1399,8 +1402,16 @@ export function initialiseHomePage(
     };
     const trackingStageKey = `${remoteMissionState?.mission.id}:${status.id}:${missionState.paymentStatus}:${missionState.reviewStage}:${missionState.reviewSent}:${missionState.rating}:${reviewSubmissionPending}:${reviewSubmissionError}:${missionState.completion?.invoice?.id ?? ''}:${missionState.completion?.finalAuthorizedAmount ?? ''}`;
     if (!remoteMissionState || stage.dataset.trackingStage !== trackingStageKey) {
+      stopTrackingSheetGesture?.();
+      stopTrackingSheetGesture = undefined;
+      mountedTrackingSheet = undefined;
       stage.innerHTML = stageMarkup[status.id];
       stage.dataset.trackingStage = trackingStageKey;
+    }
+    const trackingSheet = stage.querySelector('[data-tracking-sheet-handle]')?.closest('.tracking-bottom-sheet');
+    if (trackingSheet && mountedTrackingSheet !== trackingSheet) {
+      mountedTrackingSheet = trackingSheet;
+      stopTrackingSheetGesture = mountTrackingProviderSheet(trackingSheet);
     }
     if (status.id === 'in_progress' && missionState.quote) {
       mission.querySelector('[data-mission-status-badge]').textContent = updateInterventionQuotePresentation(stage, missionState);
@@ -1904,6 +1915,7 @@ export function initialiseHomePage(
       return;
     }
     if (event.target.closest('[data-profile-logout]')) {
+      stopTrackingSheetGesture?.();stopTrackingSheetGesture=undefined;mountedTrackingSheet=undefined;
       chatManager?.dispose();chatManager=undefined;missionChatServices=undefined;callManager?.dispose();callManager=undefined;missionCallServices=undefined;
       stopMissionPolling?.();
       stopMissionRealtime?.();

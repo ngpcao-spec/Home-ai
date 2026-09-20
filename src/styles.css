@@ -255,6 +255,7 @@ h1 em { color: var(--green); font-style: normal; }
 .tracking-metrics span { color: #6d817b; font-size: 9px; }
 .tracking-metrics strong { margin-top: 3px; color: #173d34; font-size: 14px; }
 .tracking-contact-actions { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.tracking-contact-actions[hidden] { display: none; }
 .mission-stage .tracking-contact-actions button { border: 1px solid #bdd6ce; color: var(--dark-green); background: white; }
 .tracking-action-status { min-height: 17px; text-align: center; }
 .mission-stage .start-repair { width: 100%; margin-top: 7px; }
@@ -510,3 +511,51 @@ footer strong { color: #627872; }
 .map-error { display: flex; min-height: 390px; align-items: center; justify-content: center; flex-direction: column; gap: 8px; padding: 30px; border: 1px solid #efc5b6; border-radius: 24px; color: #813c28; background: #fff7f3; text-align: center; }
 .map-error span, .route-error { font-size: 12px; }.route-error { padding: 9px; border-radius: 9px; color: #813c28; background: #fff0e9; }
 .sheet-actions { grid-template-columns: repeat(3, 1fr); }.sheet-actions button:nth-child(3) { border: 1px solid #bdd6ce; border-radius: 12px; color: var(--dark-green); background: white; font-size: 11px; font-weight: 800; }
+
+/* The travelling sheet overlays the existing map without changing its DOM or camera. */
+.tracking-bottom-sheet .assigned-provider-heading { grid-template-columns: auto minmax(0, 1fr); }
+.tracking-bottom-sheet .assigned-provider-identity { min-width: 0; }
+.tracking-bottom-sheet .assigned-provider-heading h3 { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; line-height: 1.2; }
+.assigned-provider-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin-top: 5px; }
+.assigned-provider-badges > strong, .assigned-provider-proximity { padding: 3px 7px; border-radius: 999px; color: var(--dark-green); background: var(--mint); font-size: 9px; font-weight: 800; }
+.assigned-provider-proximity { background: #eef5f2; }
+.tracking-shell[data-tracking-mission-status="travelling"] { height: calc(100vh - 174px - env(safe-area-inset-bottom)); height: calc(100dvh - 174px - env(safe-area-inset-bottom)); min-height: 390px; padding-bottom: 0; }
+.tracking-shell[data-tracking-mission-status="travelling"] .tracking-map { height: 100%; min-height: 0; }
+.tracking-shell[data-tracking-mission-status="travelling"] .tracking-map .maplibregl-map { height: 100%; }
+.tracking-shell[data-tracking-mission-status="travelling"] .tracking-bottom-sheet { position: absolute; bottom: 0; left: 8px; width: calc(100% - 16px); height: 46vh; height: 46dvh; max-height: calc(100% - 64px); margin: 0; padding: 6px 12px 12px; overflow-y: auto; overscroll-behavior: contain; transition: height .22s ease-out; }
+.tracking-shell[data-tracking-mission-status="travelling"] .tracking-bottom-sheet.is-expanded { height: 72vh; height: 72dvh; max-height: calc(100% - 12px); }
+.tracking-shell[data-tracking-mission-status="travelling"] .tracking-bottom-sheet.is-dragging { transition: none; }
+.mission-stage .tracking-sheet-handle { display: grid; width: 100%; min-height: 28px; margin: 0 0 4px; padding: 0; place-items: center; border: 0; background: transparent; cursor: ns-resize; touch-action: none; user-select: none; }
+.tracking-sheet-handle::before { width: 40px; height: 4px; border-radius: 999px; background: #a5c6b9; content: ""; }
+.tracking-sheet-handle:focus-visible { outline: 2px solid var(--green); outline-offset: -2px; }
+.tracking-bottom-sheet .assigned-provider-card { gap: 7px; }
+.tracking-bottom-sheet .assigned-provider-photo { width: 46px; height: 46px; border-width: 2px; font-size: 14px; }
+.tracking-bottom-sheet .assigned-provider-heading { gap: 8px; }
+.tracking-bottom-sheet .assigned-provider-heading h3 { margin: 0; font-size: 14px; }
+.tracking-bottom-sheet .assigned-provider-facts { gap: 6px !important; }
+.tracking-bottom-sheet .assigned-provider-facts div { padding: 6px 8px !important; }
+.tracking-bottom-sheet .assigned-provider-facts dd { margin-top: 1px; }
+.tracking-bottom-sheet:not(.is-expanded) .assigned-provider-facts dt, .tracking-bottom-sheet:not(.is-expanded) .assigned-provider-contact { display: none; }
+.tracking-bottom-sheet:not(.is-expanded) .assigned-provider-introduction { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; }
+.tracking-bottom-sheet .mission-contact-actions { gap: 8px; }
+.tracking-bottom-sheet:not(.is-expanded) .mission-contact-actions { position: sticky; bottom: 0; z-index: 1; padding-top: 4px; background: rgb(255 255 255 / 97%); }
+.tracking-bottom-sheet .mission-contact-actions > button { min-height: 44px; padding: 7px 9px; }
+.tracking-bottom-sheet .tracking-metrics { margin: 5px 0; }
+.tracking-bottom-sheet .tracking-metrics > div { padding: 6px 8px; }
+.tracking-bottom-sheet .tracking-action-status:empty { display: none; }
+@media (max-width: 600px) {
+  .tracking-shell[data-tracking-mission-status="travelling"] { min-height: 0; }
+  .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) { margin-top: 0; padding: 0; border: 0; background: transparent; box-shadow: none; }
+  .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) > .mission-technician,
+  .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) > .mission-facts,
+  .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) > .mission-timeline { display: none; }
+  .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) > .mission-heading { margin: 4px 0 8px; }
+  .mission-tracker:has(.tracking-shell[data-tracking-mission-status="travelling"]) .mission-stage { padding: 0; background: transparent; }
+}
+@media (max-height: 700px) {
+  .tracking-shell[data-tracking-mission-status="travelling"] .tracking-bottom-sheet:not(.is-expanded) { height: 42dvh; padding: 3px 10px 8px; }
+  .tracking-bottom-sheet:not(.is-expanded) .assigned-provider-photo { width: 42px; height: 42px; }
+  .tracking-bottom-sheet:not(.is-expanded) .assigned-provider-card { gap: 5px; }
+  .tracking-bottom-sheet:not(.is-expanded) .assigned-provider-introduction { -webkit-line-clamp: 1; line-clamp: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .tracking-shell[data-tracking-mission-status="travelling"] .tracking-bottom-sheet { transition: none; } }

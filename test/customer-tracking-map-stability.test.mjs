@@ -42,7 +42,10 @@ test('Client keeps one map, container and Provider marker through GPS, polling a
     {resume:async()=>({authenticated:true,session:{user:{id:'customer'}}})},{routeRefreshMs:0,now:()=>Date.now()});
   await tasks[0]();await settle();
   const originalContainer=root.querySelector('[data-tracking-map]');const originalMarker=root.querySelector('[data-provider-marker]');
+  const originalSheet=root.querySelector('.tracking-bottom-sheet');const originalHandle=root.querySelector('[data-tracking-sheet-handle]');
   assert.ok(originalContainer);assert.ok(originalMarker);assert.equal(mapCreateCount,1);assert.equal(providerMarkerCreateCount,1);
+  originalHandle.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'ArrowUp',bubbles:true,cancelable:true}));
+  assert.equal(originalSheet.classList.contains('is-expanded'),true);
 
   gps={...gps,latitude:12.246,longitude:109.191,recordedAt:'2026-09-13T01:00:02Z'};
   await receive({table:'provider_status'});await settle(4);assert.equal(routeCalls,2);
@@ -54,6 +57,9 @@ test('Client keeps one map, container and Provider marker through GPS, polling a
 
   assert.equal(root.querySelector('[data-tracking-map]'),originalContainer);
   assert.equal(root.querySelector('[data-provider-marker]'),originalMarker);
+  assert.equal(root.querySelector('.tracking-bottom-sheet'),originalSheet);
+  assert.equal(root.querySelector('[data-tracking-sheet-handle]'),originalHandle);
+  assert.equal(originalSheet.classList.contains('is-expanded'),true);
   assert.equal(root.querySelectorAll('[data-provider-marker]').length,1);
   assert.equal(originalMarker.dataset.latitude,'12.247');assert.equal(originalMarker.dataset.longitude,'109.192');
   assert.equal(mapCreateCount,1);assert.equal(providerMarkerCreateCount,1);assert.equal(renderCount,1);

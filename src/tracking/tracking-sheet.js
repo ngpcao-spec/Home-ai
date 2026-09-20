@@ -32,9 +32,12 @@ export function createAssignedProviderCompactMarkup(technician, { tracking = fal
   return `<article class="assigned-provider-card" data-assigned-provider-summary>
     <div class="assigned-provider-heading">
       <span class="assigned-provider-photo">${avatar}</span>
-      <div><h3>${escapeHtml(name)}</h3><p>★ ${rating} · ${reviewCount} đánh giá</p>
-        ${technician.verified ? '<span class="verified-badge">✓ Đã xác minh</span>' : ''}</div>
-      ${tracking ? `<strong data-tracking-status>${escapeHtml(trackingStatus)}</strong>` : '<strong>Đã nhận nhiệm vụ</strong>'}
+      ${tracking ? `<div class="assigned-provider-identity"><h3>${escapeHtml(name)}</h3><p>★ ${rating} · ${reviewCount} đánh giá</p>
+        <div class="assigned-provider-badges">${technician.verified ? '<span class="verified-badge">✓ Đã xác minh</span>' : ''}
+          <strong data-tracking-status>${escapeHtml(trackingStatus)}</strong>
+          ${technician.distanceKm != null && Number.isFinite(Number(technician.distanceKm)) && Number(technician.distanceKm) <= 5 ? '<span class="assigned-provider-proximity">Thợ ở gần</span>' : ''}</div></div>`
+        : `<div><h3>${escapeHtml(name)}</h3><p>★ ${rating} · ${reviewCount} đánh giá</p>
+          ${technician.verified ? '<span class="verified-badge">✓ Đã xác minh</span>' : ''}</div><strong>Đã nhận nhiệm vụ</strong>`}
     </div>
     <dl class="assigned-provider-facts">
       <div><dt>Hoạt động</dt><dd>${escapeHtml(activity || '')}</dd></div>
@@ -137,6 +140,7 @@ export function createTrackingStageMarkup(technician, { missionStatus = 'travell
   return `<div class="tracking-shell" data-tracking-mission-status="${escapeHtml(missionStatus)}">
     ${moving ? '<div class="tracking-map" data-tracking-map aria-label="Bản đồ theo dõi thợ"></div>' : ''}
     <article class="tracking-bottom-sheet" aria-label="${trackingStatus}">
+      ${moving ? '<button type="button" class="tracking-sheet-handle" data-tracking-sheet-handle aria-label="Mở rộng hồ sơ thợ" aria-expanded="false"></button>' : ''}
       ${createAssignedProviderCompactMarkup(technician, { tracking: true, trackingStatus })}
       <p class="tracking-status-message" data-tracking-message ${moving ? 'hidden' : ''}>${message}</p>
       <div class="tracking-metrics" data-tracking-metrics ${moving ? '' : 'hidden'}>
@@ -145,7 +149,7 @@ export function createTrackingStageMarkup(technician, { missionStatus = 'travell
         <div><span>Quãng đường còn lại</span><strong data-tracking-distance>Đang tính...</strong></div>
         ` : ''}
       </div>
-      <div class="tracking-contact-actions">
+      <div class="tracking-contact-actions" ${technician.chatMission ? 'hidden' : ''}>
         <button type="button" data-tracking-message>💬 Nhắn tin</button>
       </div>
       <p class="tracking-action-status" data-tracking-action-status role="status"></p>
