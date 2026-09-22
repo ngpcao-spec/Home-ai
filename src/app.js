@@ -36,6 +36,7 @@ import {
 } from './customer/profile.js';
 import { loadSupabaseCustomerProfile } from './customer/supabase-profile.js';
 import { createGoogleCustomerAuth } from './customer/google-auth.js';
+import { createPhoneOtpCooldown, phoneOtpErrorMessage } from './auth/phone-auth.js';
 import { readSupabaseConfig } from './supabase/config.js';
 import {
   connectSupabaseCustomerMissions,
@@ -414,6 +415,9 @@ export function initialiseHomePage(
   const appShell = root.querySelector('[data-app-shell]');
   let onboardingIndex = 0;
   let loginPhone = '';
+  let loginBusy = false;
+  let otpTimer = null;
+  const otpCooldown = createPhoneOtpCooldown();
   let openHomeView = () => {};
   let restoreActiveMission = async () => false;
   let browserStorage;
@@ -435,9 +439,21 @@ export function initialiseHomePage(
   });
   try { browserStorage = globalThis.localStorage; } catch { browserStorage = undefined; }
   const renderLogin = (options = {}) => {
-    startupFlow.innerHTML = createLoginMarkup({ phone: loginPhone, ...options });
+    startupFlow.innerHTML = createLoginMarkup({ phone: loginPhone.replace(/^\+84/, '0'), realOtp: customerAuth.enabled,
+      cooldown: options.step === 'otp' && customerAuth.enabled ? otpCooldown.secondsRemaining() : 0, busy: loginBusy, ...options });
   };
+  const stopOtpTimer = () => { if (otpTimer !== null) { globalThis.clearInterval(otpTimer); otpTimer = null; } };
+  const refreshResend = () => {
+    const button = startupFlow.querySelector('[data-resend-otp]');
+    if (!button) { stopOtpTimer(); return; }
+    const remaining = otpCooldown.secondsRemaining();
+    button.disabled = remaining > 0 || loginBusy;
+    button.textContent = remaining ? `Gửi lại mã (${remaining}s)` : 'Gửi lại mã';
+    if (!remaining) stopOtpTimer();
+  };
+  const startOtpTimer = () => { stopOtpTimer(); otpTimer = globalThis.setInterval(refreshResend, 1000); };
   const showApplication = async () => {
+    stopOtpTimer();
     const restored = await restoreActiveMission();
     startupFlow.hidden = true;
     appShell.hidden = false;
@@ -463,14 +479,15 @@ export function initialiseHomePage(
       oauthAuthenticated = Boolean(oauthSession?.authenticated);
       verifiedCustomerUserId = oauthSession?.session?.user?.id ?? null;
     } catch {
-      // Keep the local phone/OTP fallback available if OAuth recovery fails.
+      // Keep the offline mock fallback available only when Supabase is not required.
     }
     const startupSession = resolveCustomerStartupSession(browserStorage, oauthAuthenticated, {
       supabaseRequired: requiresSupabaseSession,
     });
     if (startupSession.authenticated) await showApplication();
     else if (startupSession.oauthFailed) renderLogin({ error: 'Đăng nhập Google chưa hoàn tất. Vui lòng thử lại.' });
-    else startupFlow.innerHTML = isOnboardingCompleted(browserStorage) ? createLoginMarkup() : createOnboardingMarkup(onboardingIndex);
+    else if (isOnboardingCompleted(browserStorage)) renderLogin();
+    else startupFlow.innerHTML = createOnboardingMarkup(onboardingIndex);
   }, 650);
   startupFlow.addEventListener('click', async (event) => {
     if (event.target.closest('[data-google-login]')) {
@@ -495,29 +512,57 @@ export function initialiseHomePage(
       }
       return;
     }
-    if (event.target.closest('[data-resend-otp]')) {
-      renderLogin({ step: 'otp', phone: maskVietnamesePhone(loginPhone), resendMessage: 'Mã xác thực mới đã sẵn sàng.' });
+    if (event.target.closest('[data-change-phone]') && !loginBusy) {
+      stopOtpTimer(); loginPhone = ''; renderLogin(); return;
+    }
+    if (event.target.closest('[data-resend-otp]') && !loginBusy && !otpCooldown.secondsRemaining()) {
+      if (!customerAuth.enabled) { renderLogin({ step: 'otp', phone: maskVietnamesePhone(loginPhone), resendMessage: 'Mã xác thực mới đã sẵn sàng.' }); return; }
+      loginBusy = true; refreshResend();
+        try { await customerAuth.sendPhoneOtp(loginPhone); otpCooldown.markSent(); loginBusy = false; renderLogin({ step: 'otp', phone: maskVietnamesePhone(loginPhone), resendMessage: 'Mã xác nhận đã được gửi.' }); startOtpTimer(); }
+        catch (error) { loginBusy = false; renderLogin({ step: 'otp', phone: maskVietnamesePhone(loginPhone), error: phoneOtpErrorMessage(error, 'send') }); }
+        finally { loginBusy = false; refreshResend(); startupFlow.querySelector('[name="otp"]')?.focus(); }
     }
   });
-  startupFlow.addEventListener('submit', (event) => {
+  startupFlow.addEventListener('input', (event) => {
+    if (event.target.matches?.('[data-login-otp-form] [name="otp"]') && /^\d{6}$/.test(event.target.value) && !loginBusy) {
+      event.target.form?.requestSubmit();
+    }
+  });
+  startupFlow.addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (loginBusy) return;
     if (event.target.matches('[data-login-phone-form]')) {
       const normalized = normalizeVietnamesePhone(event.target.elements.phone.value);
       if (!normalized) {
         loginPhone = event.target.elements.phone.value;
-        renderLogin({ error: 'Số điện thoại Việt Nam không hợp lệ.' });
+        renderLogin({ error: 'Số điện thoại không hợp lệ' });
         return;
       }
       loginPhone = normalized;
-      renderLogin({ step: 'otp', phone: maskVietnamesePhone(loginPhone) });
-      startupFlow.querySelector('[name="otp"]')?.focus();
+      if (customerAuth.enabled) {
+        loginBusy = true; renderLogin();
+        try { await customerAuth.sendPhoneOtp(loginPhone); otpCooldown.markSent(); loginBusy = false; renderLogin({ step: 'otp', phone: maskVietnamesePhone(loginPhone) }); startOtpTimer(); }
+        catch (error) { loginBusy = false; renderLogin({ error: phoneOtpErrorMessage(error, 'send') }); }
+        finally { loginBusy = false; refreshResend(); startupFlow.querySelector('[name="otp"]')?.focus(); }
+      } else { renderLogin({ step: 'otp', phone: maskVietnamesePhone(loginPhone) }); startupFlow.querySelector('[name="otp"]')?.focus(); }
       return;
     }
     if (event.target.matches('[data-login-otp-form]')) {
-      if (requiresSupabaseSession) {
-        renderLogin({ error: 'Vui lòng đăng nhập bằng Google để sử dụng dữ liệu HOME AI.' });
+      if (customerAuth.enabled) {
+        const token = event.target.elements.otp.value;
+        loginBusy = true; event.target.querySelectorAll('button,input').forEach(element => { element.disabled = true; }); refreshResend();
+        try {
+          await customerAuth.verifyPhoneOtp(loginPhone, token);
+          const resumed = await customerAuth.resume();
+          if (!resumed?.authenticated) throw new Error('INVALID_OTP');
+          verifiedCustomerUserId = resumed.session.user.id;
+          clearGoogleOAuthAttempt(browserStorage);
+          await showApplication();
+        } catch (error) { loginBusy = false; renderLogin({ step: 'otp', phone: maskVietnamesePhone(loginPhone), error: error?.message === 'Account is not a customer' ? 'Tài khoản này không phải tài khoản khách hàng.' : phoneOtpErrorMessage(error) }); startupFlow.querySelector('[name="otp"]')?.focus(); }
+        finally { loginBusy = false; refreshResend(); }
         return;
       }
+      if (requiresSupabaseSession) { renderLogin({ error: 'Không thể gửi mã xác nhận. Vui lòng thử lại.' }); return; }
       if (!isValidMockOtp(event.target.elements.otp.value)) {
         renderLogin({ step: 'otp', phone: maskVietnamesePhone(loginPhone), error: 'Mã xác thực không đúng. Vui lòng thử lại.' });
         return;

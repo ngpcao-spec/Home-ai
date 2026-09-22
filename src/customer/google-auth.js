@@ -1,4 +1,5 @@
 import { createOptionalSupabaseRepositories } from '../supabase/repositories/index.js';
+import { sendPhoneOtp, verifyPhoneOtp } from '../auth/phone-auth.js';
 
 export const googleOAuthRedirectTo = 'https://ngpcao-spec.github.io/Home-ai/';
 
@@ -21,6 +22,8 @@ export function createGoogleCustomerAuth(
       enabled: false,
       async resume() { return null; },
       async signIn() { throw new Error('Supabase is not configured'); },
+      async sendPhoneOtp() { throw new Error('Supabase is not configured'); },
+      async verifyPhoneOtp() { throw new Error('Supabase is not configured'); },
       async signOut() {},
     });
   }
@@ -28,7 +31,7 @@ export function createGoogleCustomerAuth(
   const ensureCustomerProfile = async (user) => {
     const existing = await repositories.profiles.getById(user.id);
     if (existing) {
-      if (existing.role !== 'customer') throw new Error('Google account is not a customer');
+      if (existing.role !== 'customer') throw new Error('Account is not a customer');
       return existing;
     }
     return repositories.profiles.saveCurrent({
@@ -66,6 +69,8 @@ export function createGoogleCustomerAuth(
       if (error) throw error;
       return data;
     },
+    async sendPhoneOtp(phone) { return sendPhoneOtp(repositories.client, phone); },
+    async verifyPhoneOtp(phone, token) { return verifyPhoneOtp(repositories.client, phone, token); },
     async signOut() {
       const { error } = await repositories.client.auth.signOut();
       if (error) throw error;

@@ -21,12 +21,13 @@ describe('C03 Google Auth Supabase', () => {
       removeItem: (key) => values.delete(key),
     };
   };
-  it('affiche Google sans supprimer le téléphone et OTP mock', () => {
+  it('affiche Google et le téléphone, sans code de démonstration en mode Supabase', () => {
     const markup = createLoginMarkup();
     assert.match(markup, /Continuer avec Google/);
     assert.match(markup, /data-google-login/);
     assert.match(markup, /data-login-phone-form/);
     assert.match(markup, /123456/);
+    assert.doesNotMatch(createLoginMarkup({ realOtp: true }), /OTP thử nghiệm/);
   });
 
   it('démarre OAuth Google avec le redirect GitHub Pages exact', async () => {

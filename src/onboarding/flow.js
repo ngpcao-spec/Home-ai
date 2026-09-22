@@ -67,22 +67,23 @@ export function createOnboardingMarkup(index) {
   </section>`;
 }
 
-export function createLoginMarkup({ step = 'phone', phone = '', error = '', resendMessage = '' } = {}) {
+export function createLoginMarkup({ step = 'phone', phone = '', error = '', resendMessage = '', cooldown = 0, busy = false, realOtp = false } = {}) {
   const content = step === 'otp'
     ? `<p class="login-instruction">Nhập mã xác thực</p>
       <p class="masked-phone">Mã gồm 6 chữ số đã được tạo cho <strong>${phone}</strong></p>
       <form data-login-otp-form>
         <label class="sr-only" for="otp-code">Mã xác thực gồm 6 chữ số</label>
-        <input id="otp-code" name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="••••••" required>
-        <button type="submit">Xác nhận</button>
+        <input id="otp-code" name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="••••••" required autofocus ${busy ? 'disabled' : ''}>
+        <button type="submit" ${busy ? 'disabled' : ''}>Xác nhận</button>
       </form>
-      <button class="resend-otp" type="button" data-resend-otp>Gửi lại mã</button>
+      <button class="resend-otp" type="button" data-resend-otp ${cooldown || busy ? 'disabled' : ''}>${cooldown ? `Gửi lại mã (${cooldown}s)` : 'Gửi lại mã'}</button>
+      <button class="login-back" type="button" data-change-phone ${busy ? 'disabled' : ''}>Đổi số điện thoại</button>
       ${resendMessage ? `<p class="login-success" role="status">${resendMessage}</p>` : ''}`
     : `<h1 id="login-title">Chào mừng bạn</h1>
       <p class="login-instruction">Nhập số điện thoại để tiếp tục</p>
       <form data-login-phone-form>
         <label class="phone-field"><span>+84</span><input name="phone" type="tel" inputmode="tel" autocomplete="tel-national" value="${escapeHtml(phone)}" placeholder="09•• ••• •••" aria-label="Số điện thoại" required></label>
-        <button type="submit">Tiếp tục</button>
+        <button type="submit" ${busy ? 'disabled' : ''}>Tiếp tục</button>
       </form>
       <div class="login-divider"><span>hoặc</span></div>
       <button class="google-login" type="button" data-google-login><strong>G</strong>Continuer avec Google</button>`;
@@ -92,6 +93,6 @@ export function createLoginMarkup({ step = 'phone', phone = '', error = '', rese
     ${step === 'otp' ? '<h1 id="login-title">Nhập mã xác thực</h1>' : ''}
     ${content}
     ${error ? `<p class="login-error" role="alert">${error}</p>` : ''}
-    <small>Điện thoại dùng OTP thử nghiệm 123456 · Google dùng đăng nhập Supabase an toàn.</small>
+    ${realOtp ? '' : '<small>Điện thoại dùng OTP thử nghiệm 123456 · Google dùng đăng nhập Supabase an toàn.</small>'}
   </section>`;
 }

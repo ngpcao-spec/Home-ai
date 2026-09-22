@@ -1,4 +1,5 @@
 import { createOptionalSupabaseRepositories } from '../supabase/repositories/index.js';
+import { sendPhoneOtp, verifyPhoneOtp } from '../auth/phone-auth.js';
 
 export const providerGoogleOAuthRedirectTo = 'https://ngpcao-spec.github.io/Home-ai/provider.html';
 
@@ -39,6 +40,8 @@ export function createProviderGoogleAuth(
       if (error) throw error;
       return data;
     },
+    async sendPhoneOtp(phone) { return sendPhoneOtp(repositories.client, phone); },
+    async verifyPhoneOtp(phone, token) { return verifyPhoneOtp(repositories.client, phone, token); },
     async signOut() {
       const { error } = await repositories.client.auth.signOut();
       if (error) throw error;

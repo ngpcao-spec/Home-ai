@@ -1,18 +1,10 @@
+import { normalizeVietnamPhone } from '../auth/phone-auth.js';
+
 export const customerSessionStorageKey = 'customerSession';
 export const googleOAuthAttemptStorageKey = 'googleOAuthAttempt';
 export const mockOtpCode = '123456';
 
-const vietnameseMobilePattern = /^(3[2-9]|5[2689]|7[06-9]|8[1-689]|9[0-9])[0-9]{7}$/;
-
-export function normalizeVietnamesePhone(value) {
-  const digits = String(value ?? '').replace(/\D/g, '');
-  const national = digits.startsWith('84')
-    ? digits.slice(2)
-    : digits.startsWith('0')
-      ? digits.slice(1)
-      : digits;
-  return vietnameseMobilePattern.test(national) ? `+84${national}` : null;
-}
+export const normalizeVietnamesePhone = normalizeVietnamPhone;
 
 export function maskVietnamesePhone(phone) {
   const normalized = normalizeVietnamesePhone(phone);

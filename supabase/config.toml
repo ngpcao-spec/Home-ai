@@ -19,3 +19,7 @@ verify_jwt = false
 # x-home-ai-push-secret before reading the durable outbox.
 [functions.send-provider-push]
 verify_jwt = false
+
+# Invoked by Supabase Auth; Standard Webhooks signature is mandatory in handler.
+[functions.send-auth-sms]
+verify_jwt = false

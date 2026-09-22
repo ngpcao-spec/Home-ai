@@ -6,6 +6,7 @@ import { createProgressiveProviderAppRepository } from './provider-repository.js
 import { prepareProviderNavigation, renderProviderNavigation, updateProviderNavigationLocation } from './provider-navigation.js';
 import { mountProviderMapResizeGesture } from './provider-map-resize.js';
 import { createProviderGoogleAuth } from './provider-auth.js';
+import { createPhoneOtpCooldown, normalizeVietnamPhone, phoneOtpErrorMessage } from '../auth/phone-auth.js';
 import { createProviderLocationHeartbeat } from './provider-location-heartbeat.js';
 import { classifyGeolocationError, getLocationPermissionState, mountLocationPermissionGate, requestCurrentPosition } from '../location/location-permission.js';
 import { createIncomingOfferLayer, createProviderDispatchController, createProviderOfferAlert, renderIncomingOffer, updateDispatchCountdown } from './provider-dispatch.js';
@@ -110,8 +111,11 @@ function renderProviderNav(activeView) {
   return `<nav aria-label="Điều hướng Provider"><button data-provider-view="home" class="${activeView==='home'?'active':''}">⌂<span>Trang chủ</span></button><button data-provider-view="activities" class="${activeView==='activities'?'active':''}">▣<span>Hoạt động</span></button><button data-provider-view="missions" class="${activeView==='missions'?'active':''}">▤<span>Nhiệm vụ</span></button><button data-provider-view="income" class="${activeView==='income'?'active':''}">◎<span>Thu nhập</span></button><button data-provider-view="profile" class="${activeView==='profile'?'active':''}">○<span>Hồ sơ</span></button></nav>`;
 }
 
-export function renderProviderLogin({ error = '', provisioning = false } = {}) {
-  return `<main class="provider-auth"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><h1>${provisioning ? 'Chào mừng bạn đến với HOME AI' : 'Đăng nhập đối tác'}</h1><p>${provisioning ? 'Hãy hoàn tất hồ sơ để bắt đầu nhận nhiệm vụ.' : 'Sử dụng tài khoản Google của bạn để tiếp tục.'}</p>${provisioning ? '<button data-start-provider-onboarding>Bắt đầu</button>' : '<button data-provider-google-login><strong>G</strong> Tiếp tục với Google</button>'}<p class="app-message" role="status">${esc(error)}</p></main>`;
+export function renderProviderLogin({ error = '', provisioning = false, step = 'phone', phone = '', cooldown = 0, busy = false } = {}) {
+  const form = step === 'otp'
+    ? `<p>Mã xác nhận đã được gửi tới ${esc(phone)}</p><form data-provider-otp-form><label for="provider-otp">Mã xác nhận gồm 6 chữ số</label><input id="provider-otp" name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" required autofocus ${busy?'disabled':''}><button type="submit" ${busy?'disabled':''}>Xác nhận</button></form><button type="button" data-provider-resend ${cooldown||busy?'disabled':''}>${cooldown?`Gửi lại mã (${cooldown}s)`:'Gửi lại mã'}</button><button type="button" data-provider-change-phone ${busy?'disabled':''}>Đổi số điện thoại</button>`
+    : `<p>Nhập số điện thoại để tiếp tục.</p><form data-provider-phone-form><label for="provider-phone">Số điện thoại</label><div class="provider-phone-field"><span>+84</span><input id="provider-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel-national" placeholder="0912345678" value="${esc(phone)}" required></div><button type="submit" ${busy?'disabled':''}>Tiếp tục</button></form><p>hoặc</p><button type="button" data-provider-google-login>Tiếp tục với Google</button>`;
+  return `<main class="provider-auth"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><h1>${provisioning ? 'Chào mừng bạn đến với HOME AI' : 'Đăng nhập đối tác'}</h1>${provisioning ? '<p>Hãy hoàn tất hồ sơ để bắt đầu nhận nhiệm vụ.</p><button data-start-provider-onboarding>Bắt đầu</button>' : form}<p class="app-message" role="status">${esc(error)}</p></main>`;
 }
 
 export function renderProviderStartupError(safeStage = 'STARTUP') {
@@ -153,7 +157,37 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   ensureDispatchStyles(root?.ownerDocument);
   let session;
   try{session=await auth.getSession();}catch(error){if(!error.safeStage)error.safeStage='AUTH_SESSION';throw error;}
-  if(auth.enabled&&!session?.user){root.innerHTML=renderProviderLogin();root.addEventListener('click',async e=>{if(!e.target.closest('[data-provider-google-login]'))return;try{await auth.signIn();}catch{root.innerHTML=renderProviderLogin({error:'Không thể đăng nhập bằng Google. Vui lòng thử lại.'});}});return{getState:()=>null};}
+  if(auth.enabled&&!session?.user){
+    let step='phone';let phone='';let busy=false;let timer=null;let stopped=false;
+    const cooldown=createPhoneOtpCooldown();
+    const stopTimer=()=>{if(timer!==null){globalThis.clearInterval(timer);timer=null;}};
+    const updateResend=()=>{const button=root.querySelector?.('[data-provider-resend]');if(!button){stopTimer();return;}const seconds=cooldown.secondsRemaining();button.disabled=busy||seconds>0;button.textContent=seconds?`Gửi lại mã (${seconds}s)`:'Gửi lại mã';if(!seconds)stopTimer();};
+    const draw=(error='')=>{if(!stopped)root.innerHTML=renderProviderLogin({step,phone:step==='otp'?`+84 ••• ••• ${phone.slice(-3)}`:phone.replace(/^\+84/,'0'),error,cooldown:step==='otp'?cooldown.secondsRemaining():0,busy});};
+    const cleanup=()=>{stopped=true;stopTimer();root.removeEventListener('click',click);root.removeEventListener('submit',submit);root.removeEventListener('input',input);};
+    const send=async()=>{busy=true;draw();try{await auth.sendPhoneOtp(phone);cooldown.markSent();step='otp';busy=false;draw();stopTimer();timer=globalThis.setInterval(updateResend,1000);root.querySelector?.('[name="otp"]')?.focus();}catch(error){busy=false;draw(phoneOtpErrorMessage(error,'send'));}finally{busy=false;updateResend();}};
+    const click=async event=>{
+      if(busy)return;
+      if(event.target.closest?.('[data-provider-google-login]')){busy=true;try{await auth.signIn();}catch{busy=false;draw('Không thể đăng nhập bằng Google. Vui lòng thử lại.');}return;}
+      if(event.target.closest?.('[data-provider-change-phone]')){step='phone';phone='';stopTimer();draw();return;}
+      if(event.target.closest?.('[data-provider-resend]')&&!cooldown.secondsRemaining())await send();
+    };
+    const submit=async event=>{
+      if(!event.target.matches?.('[data-provider-phone-form], [data-provider-otp-form]'))return;
+      event.preventDefault();if(busy)return;
+      if(step==='phone'){
+        const normalized=normalizeVietnamPhone(event.target.elements.phone.value);
+        if(!normalized){draw('Số điện thoại không hợp lệ');return;}
+        phone=normalized;await send();return;
+      }
+      const token=event.target.elements.otp.value;busy=true;event.target.querySelectorAll('button,input').forEach(element=>{element.disabled=true;});updateResend();
+      try{await auth.verifyPhoneOtp(phone,token);const fresh=await auth.getSession();if(!fresh?.user?.id)throw new Error('INVALID_OTP');cleanup();try{await initialiseProviderApp(root,repositoryLoader,navigationLoader,auth,heartbeatFactory,locationAccess,runtimeConfig);}catch{root.innerHTML=renderProviderStartupError('PROVIDER_ACCESS');}}
+      catch(error){if(!stopped){busy=false;draw(phoneOtpErrorMessage(error));root.querySelector?.('[name="otp"]')?.focus();}}
+      finally{busy=false;updateResend();}
+    };
+    const input=event=>{if(event.target.matches?.('[data-provider-otp-form] [name="otp"]')&&/^\d{6}$/.test(event.target.value)&&!busy)event.target.form?.requestSubmit();};
+    root.addEventListener('click',click);root.addEventListener('submit',submit);root.addEventListener('input',input);draw();
+    return{getState:()=>null,stop:cleanup};
+  }
   let repository;
   try{repository=await repositoryLoader();}catch(error){root.innerHTML=renderProviderStartupError(error?.safeStage??'PROVIDER_ACCESS');return{getState:()=>null};}
   if(repository.onboardingRequired)return initialiseProviderOnboarding(root,repository,{
