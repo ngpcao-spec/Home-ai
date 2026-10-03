@@ -99,7 +99,7 @@ export function renderProviderDashboard(state, { source='mock', busy=false, mess
   const offers = state.offers ?? [];
   const assignment = state.assignment;
   const header=`<header class="provider-header"><div class="brand"><span>H</span><div><strong>HOME AI</strong><small>Đối tác kỹ thuật</small></div></div><button class="avatar" data-provider-logout aria-label="Đăng xuất">${esc(state.provider?.name?.split(' ').at(-1)?.[0] ?? 'P')}</button></header>`;
-  if(assignment)return `${header}${renderActiveProviderMission(assignment,{busy,message,navigation,navigationLoading,navigationError,diagnosing,supplementParent,billing,testMode,callsEnabled:source==='supabase'})}${renderProviderNav('home')}`;
+  if(assignment)return `${header}${renderActiveProviderMission(assignment,{busy,message,navigation,navigationLoading,navigationError,diagnosing,supplementParent,billing,testMode,callsEnabled:source==='supabase'})}${renderProviderNav('missions')}`;
   return `${header}
   <main><section class="welcome"><div><p>Xin chào,</p><h1>${esc(state.provider?.name ?? 'Kỹ thuật viên')}</h1>${state.provider?.kycStatus==='verified'?'<span class="verified">✓ Đã xác minh</span>':''}</div><span class="source">${source==='supabase'?'Đã kết nối':'Chế độ demo'}</span></section>
   <section class="status-card"><div><p>Trạng thái hoạt động</p><strong>${state.status?.online?'Đang trực tuyến':'Đang ngoại tuyến'}</strong></div><button class="switch ${state.status?.online?'on':''}" data-toggle-online aria-label="Đang trực tuyến" aria-pressed="${Boolean(state.status?.online)}" ${busy?'disabled':''}><span></span></button></section>

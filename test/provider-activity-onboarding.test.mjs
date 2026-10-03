@@ -68,6 +68,7 @@ describe('Provider activity onboarding', () => {
       root.querySelector('[data-provider-view="activities"]').click();
       await tick(); await tick();
       assert.match(root.textContent, /Hoạt động của tôi/);
+      assert.equal(root.querySelector('[data-provider-view="activities"]').classList.contains('active'), true);
       root.querySelector('[data-add-activity]').click(); await tick();
       assert.equal(root.querySelectorAll('[data-activity-mode]').length, 2);
       root.querySelector('[data-activity-mode="profession"]').click(); await tick();

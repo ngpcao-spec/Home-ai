@@ -101,6 +101,7 @@ describe('Provider history and income', () => {
     const app=await initialiseProviderApp(root,async()=>repository,async()=>null,{enabled:false,getSession:async()=>null},callbacks=>{heartbeatCallbacks=callbacks;return{sync(){},stop(){}};},{getState:async()=>'granted',request:async()=>({latitude:12,longitude:109})});
     try{
       await listeners.click({target:{closest:selector=>selector==='[data-provider-view]'?{dataset:{providerView:'missions'}}:null}});
+      assert.match(html, /data-provider-view="missions" class="active"/);
       const stableRenders=renders;
       await heartbeatCallbacks.onState(structuredClone(state));
       await heartbeatCallbacks.onError(new Error('GPS unavailable'));
