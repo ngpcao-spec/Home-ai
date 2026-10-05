@@ -231,3 +231,25 @@ it('restarts watchPosition when a travelling Provider returns to foreground', ()
   assert.deepEqual(cleared, [1]);
   heartbeat.stop();
 });
+
+it('pauses on iPhone pagehide and resumes GPS publication on pageshow', async () => {
+  const callbacks=[];const cleared=[];const writes=[];
+  const heartbeat=createProviderLocationHeartbeat({
+    repository:{source:'supabase',updateLocation:async position=>{writes.push(position);return{};}},
+    getState:()=>({status:{online:true,available:false},assignment:{id:'m1',status:'travelling'}}),
+    geolocation:{watchPosition(success){callbacks.push(success);return callbacks.length;},clearWatch(id){cleared.push(id);}},
+  });
+  heartbeat.sync();
+  await callbacks[0]({coords:{latitude:12.245,longitude:109.19},timestamp:1000});
+  heartbeat.pause();
+  heartbeat.sync();
+  await callbacks[0]({coords:{latitude:12.246,longitude:109.191},timestamp:7000});
+  await callbacks[1]({coords:{latitude:12.246,longitude:109.191},timestamp:7000});
+  assert.equal(callbacks.length,2,'pageshow starts a fresh watch');
+  assert.deepEqual(cleared,[1]);
+  assert.deepEqual(writes,[
+    {latitude:12.245,longitude:109.19},
+    {latitude:12.246,longitude:109.191},
+  ],'the stale pre-pagehide callback is ignored and the resumed watch publishes');
+  heartbeat.stop();
+});

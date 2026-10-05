@@ -347,7 +347,8 @@ export async function initialiseProviderApp(root, repositoryLoader=createProgres
   const countdownTimer=globalThis.setInterval?.(()=>{const remaining=updateDispatchCountdown(offerLayer?.host??root);if(remaining===0&&priorityOfferId){const expiredId=priorityOfferId;priorityOfferId=null;offerAlert.stop(expiredId);void draw();}},1000);
   const syncHeartbeat=()=>{heartbeat.sync();dispatch.setActive(!page?.hidden);syncOfferLayer();};
   page?.addEventListener?.('visibilitychange',syncHeartbeat);
-  globalThis.addEventListener?.('pagehide',()=>{unmountMapResize?.();heartbeat.stop();dispatch.stop();pushManager.stop();globalThis.clearInterval?.(countdownTimer);chatManager?.dispose();callManager?.dispose();},{once:true});
+  globalThis.addEventListener?.('pagehide',()=>{unmountMapResize?.();heartbeat.pause?.();dispatch.stop();pushManager.stop();globalThis.clearInterval?.(countdownTimer);chatManager?.dispose();callManager?.dispose();},{once:true});
+  globalThis.addEventListener?.('pageshow',()=>heartbeat.sync());
   heartbeat.sync();
   if(repository.source==='supabase'){
     const showPushPrompt=next=>{if(pushPromptHost)pushPromptHost.innerHTML=renderProviderPushPrompt(next);};

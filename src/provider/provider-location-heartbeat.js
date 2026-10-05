@@ -197,12 +197,15 @@ export function createProviderLocationHeartbeat({
     if (mode === 'tracking') startTracking();
     else if (mode === 'idle') void refresh();
   };
-  const stop = () => {
-    stopped = true;
+  const pause = () => {
     clearTimer();
     clearWatch();
+  };
+  const stop = () => {
+    stopped = true;
+    pause();
     onDiagnostic({ stage: 'provider', outcome: 'watch-stopped' });
   };
 
-  return Object.freeze({ refresh, sync, stop });
+  return Object.freeze({ refresh, sync, pause, stop });
 }
